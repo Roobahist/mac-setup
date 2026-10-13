@@ -126,6 +126,13 @@ final class TaskPickerStateTests: XCTestCase {
         XCTAssertEqual(state.hierarchyPrefix(for: try! Catalog.task("aerospace-profile")), "│   └── ")
     }
 
+    func testCompletedChildGroupsHaveSpacersWithContinuingGuides() throws {
+        let state = TaskPickerState()
+        XCTAssertEqual(state.hierarchySpacer(after: try Catalog.task("aerospace-access"), before: try Catalog.task("sketchybar")), "│")
+        XCTAssertEqual(state.hierarchySpacer(after: try Catalog.task("wallpaper-access"), before: try Catalog.task("dotfiles-linked")), "")
+        XCTAssertNil(state.hierarchySpacer(after: try Catalog.task("fonts"), before: try Catalog.task("aerospace")))
+    }
+
     func testFilteredChildrenRemainVisibleWithTheirParentReferences() {
         var state = TaskPickerState()
         for letter in "sketchybar-profile" { state.appendSearch(letter) }

@@ -50,7 +50,8 @@ Run `mac-setup` or `mac-setup setup` in a terminal to open the full-screen picke
 - **Q** or **Ctrl+C**: cancel without making changes.
 
 Children are grouped beneath their primary parent using continuous `│`, `├──`
-and `└──` tree connectors. Root tasks stand out, and guided/update labels occupy a
+and `└──` tree connectors. Checkboxes stay in a fixed left column, and a spacer
+separates completed child groups while continuing any open tree lines. Root tasks stand out, and guided/update labels occupy a
 quiet column on the right. Shared prerequisites and their readiness appear only
 in the focused task's detail panel, keeping the checklist uncluttered. Filters
 show matching tasks once, without orphaned branches to hidden parents.

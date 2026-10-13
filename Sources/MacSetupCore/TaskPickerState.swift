@@ -98,6 +98,13 @@ public struct TaskPickerState {
         return guides + (isLast(task) ? "└── " : "├── ")
     }
 
+    public func hierarchySpacer(after task: SetupTask, before next: SetupTask) -> String? {
+        let currentPrefix = hierarchyPrefix(for: task)
+        let nextPrefix = hierarchyPrefix(for: next)
+        guard currentPrefix.count > nextPrefix.count else { return nil }
+        return nextPrefix.isEmpty ? "" : String(nextPrefix.dropLast(4)) + "│"
+    }
+
     public var focusedTask: SetupTask? {
         let visible = visibleTasks
         return visible.indices.contains(cursorIndex) ? visible[cursorIndex] : nil

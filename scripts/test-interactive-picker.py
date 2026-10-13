@@ -72,8 +72,13 @@ try:
             rb"\x1b\[1;46;30m[^\r\n]*Interface and terminal fonts", active_screen(b)
         )), timeout=4.0
     )
-    assert "├── [x] Interface and terminal fonts".encode() in active_screen(bytes(captured))
+    assert "[x] ├── Interface and terminal fonts".encode() in active_screen(bytes(captured))
     read_until(lambda b: "│   └──".encode() in active_screen(b))
+    read_until(lambda b: b"Inventory checked" in active_screen(b))
+    plain = re.sub(rb"\x1b\[[0-9;?]*[A-Za-z]", b"", active_screen(bytes(captured)))
+    checkbox_columns = [line.index("[x]") for line in plain.decode("utf-8", "replace").splitlines() if "[x]" in line]
+    assert checkbox_columns and len(set(checkbox_columns)) == 1, "Child checkboxes moved out of the shared column"
+    assert re.search(rb"\r?\n +" + "│".encode() + rb"\r?\n", plain), "Child group spacer is missing"
     assert b"[parents:" not in active_screen(bytes(captured))
     assert time.monotonic() - start < 4.0, "Cursor movement is blocked by status checks"
 

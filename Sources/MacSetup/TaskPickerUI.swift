@@ -326,11 +326,23 @@ struct TaskPickerUI {
             let visible = state.visibleTasks
             let extraParentLines = max(0, (state.focusedTask?.dependencies.count ?? 0) - 1)
             let available = max(3, height - 14 - extraParentLines)
-            let start = max(0, min(max(0, visible.count - available), state.cursorIndex - available / 2))
+            var rows: [(index: Int?, guide: String)] = []
+            for (index, task) in visible.enumerated() {
+                rows.append((index, ""))
+                if index + 1 < visible.count, let spacer = state.hierarchySpacer(after: task, before: visible[index + 1]) {
+                    rows.append((nil, spacer))
+                }
+            }
+            let focusedRow = rows.firstIndex { $0.index == state.cursorIndex } ?? 0
+            let start = max(0, min(max(0, rows.count - available), focusedRow - available / 2))
             if visible.isEmpty {
                 lines.append(tint("  No matching tasks. Press Esc to clear the filter.", "33"))
             }
-            for index in start..<min(visible.count, start + available) {
+            for row in rows[start..<min(rows.count, start + available)] {
+                guard let index = row.index else {
+                    lines.append(tint("       " + row.guide, "2;36"))
+                    continue
+                }
                 let task = visible[index]
                 let focused = index == state.cursorIndex
                 let checked = state.selected.contains(task.id)
@@ -338,15 +350,16 @@ struct TaskPickerUI {
                 let prefix = focused ? " ❯ " : "   "
                 let marker = checked ? "[x]" : "[ ]"
                 let tree = state.hierarchyPrefix(for: task)
-                let body = clip(prefix + tree + marker + " " + task.title, to: width - type.count - 5)
+                let body = clip(prefix + marker + " " + tree + task.title, to: width - type.count - 5)
                 let padding = String(repeating: " ", count: max(2, width - 3 - body.count - type.count))
                 if focused {
                     lines.append(tint(body + padding + type, "1;46;30"))
                 } else {
-                    let guide = tint(prefix + tree, "2;36")
-                    let label = String(body.dropFirst((prefix + tree).count))
+                    let checkbox = tint(prefix + marker + " ", checked ? "0" : "2")
+                    let guide = tint(tree, "2;36")
+                    let label = String(body.dropFirst((prefix + marker + " " + tree).count))
                     let style = !checked ? "2" : (tree.isEmpty ? "1" : "0")
-                    lines.append(guide + tint(label, style) + padding + tint(type, state.updates.contains(task.id) ? "33" : "2"))
+                    lines.append(checkbox + guide + tint(label, style) + padding + tint(type, state.updates.contains(task.id) ? "33" : "2"))
                 }
             }
 
