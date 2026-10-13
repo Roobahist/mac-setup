@@ -136,7 +136,7 @@ public struct TaskPickerState {
     public mutating func toggleVisible() {
         let ids = Set(visibleTasks.map(\.id))
         guard !ids.isEmpty else { return }
-        if ids.isSubset(of: selected) {
+        if !ids.isDisjoint(with: selected) && ids.intersection(selected).count >= (ids.count + 1) / 2 {
             for id in tasks.map(\.id) where ids.contains(id) && selected.contains(id) {
                 toggle(id)
             }
