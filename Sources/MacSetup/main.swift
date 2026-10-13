@@ -191,7 +191,11 @@ do {
         print("Public dotfiles checkout: \(engine.dotfiles.source.checkout.path)")
         if action == "status" {
             print("Checkout: \(engine.dotfiles.status().rawValue)")
-            for name in engine.dotfiles.source.folders {
+            let configurable = Set(Catalog.tasks.flatMap { task -> [String] in
+                if case let .profile(directories) = task.action { return directories }
+                return []
+            })
+            for name in engine.dotfiles.source.folders where configurable.contains(name) {
                 let connected = engine.dotfiles.source.isLinked(name, config: engine.paths.config)
                 print("  \(name): \(connected ? "linked" : "not linked")")
             }
