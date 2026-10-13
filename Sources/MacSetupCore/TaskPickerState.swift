@@ -2,7 +2,7 @@ import Foundation
 
 /// Selection policy shared by the terminal UI and scripted presets.
 public enum SetupPreset: String, CaseIterable {
-    case complete, minimal, productivity, developer
+    case minimal, productivity, developer, complete
 
     public var title: String { rawValue.capitalized }
 
@@ -25,9 +25,9 @@ public enum SetupPreset: String, CaseIterable {
         case .productivity:
             ids = Set(tasks.filter {
                 ["Window management", "Apps", "Appearance", "Finder"].contains($0.category)
-            }.map(\.id)).subtracting(["wallpaper-watcher", "dock-special-items"])
+            }.map(\.id)).subtracting(["wallpaper-watcher", "dock-special-items"]).union(["dotfiles-linked"])
         case .developer:
-            ids = ["homebrew", "fonts", "alacritty", "alacritty-profile",
+            ids = ["homebrew", "fonts", "dotfiles-linked", "alacritty", "alacritty-profile",
                    "atuin", "atuin-profile", "atuin-shell", "git-ignore"]
         }
         return ids.intersection(Set(tasks.map(\.id)))
