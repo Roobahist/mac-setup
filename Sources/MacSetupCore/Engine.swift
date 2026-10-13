@@ -38,7 +38,7 @@ public final class Engine {
                     }
                     return .blocked
                 }
-                if try !profileMatches(name) { return .ready }
+                if dotfiles.status() == .done || (try !profileMatches(name)) { return .ready }
             }
             return .done
         case let .preferences(preferences, _):
@@ -75,13 +75,14 @@ public final class Engine {
             lines.append("App installations can request administrator approval. Installed packages are not automatically uninstalled by restore.")
         case .linkedDotfiles:
             lines.append("Clone public dot-files into \(dotfiles.source.checkout.path) if it is not there already.")
-            lines.append("Link its six managed folders into \(paths.config.path). Existing local directories are backed up.")
+            lines.append("Only profiles selected later are linked into \(paths.config.path). Existing local folders are backed up.")
             lines.append("Links pointing to a different repository are never changed automatically.")
         case let .profile(directories):
             for name in directories {
                 lines.append("Merge bundled files into \(paths.config.appendingPathComponent(name).path). Existing unrelated files are preserved.")
             }
-            lines.append("Existing directories are backed up. Linked dotfiles are preserved, and other symlinks are refused.")
+            lines.append("Selected profiles use links when dot-files is checked out, otherwise bundled snapshots.")
+            lines.append("Existing directories are backed up. Unrelated symlinks are never overwritten.")
         case let .preferences(preferences, restart):
             lines += preferences.map { "\($0.domain) / \($0.key) → \($0.value)" }
             if let restart { lines.append("Restart \(restart) after saving preferences. Finish active Finder file operations first.") }
@@ -130,13 +131,20 @@ public final class Engine {
                 try dotfiles.install(transaction: id)
                 guard dotfiles.status() == .done else { throw SetupError("Dotfiles installation could not be verified.") }
             case let .profile(directories):
-                for name in directories where dotfiles.isSymlink(paths.config.appendingPathComponent(name)) {
-                    throw SetupError("\(name) uses a configuration symlink. Update its checkout directly instead of overwriting it.")
+                for name in directories where dotfiles.isSymlink(paths.config.appendingPathComponent(name)) &&
+                    !dotfiles.source.isLinked(name, config: paths.config) {
+                    throw SetupError("\(name) uses an unrelated configuration symlink. Resolve it manually.")
                 }
                 if directories.contains("aerospace"), Journal.exists(paths.home.appendingPathComponent(".aerospace.toml")) {
                     throw SetupError("~/.aerospace.toml exists. AeroSpace refuses ambiguous config locations. Move that file aside yourself, then retry.")
                 }
-                for name in directories { try installProfile(name, transaction: id) }
+                for name in directories {
+                    if dotfiles.status() == .done {
+                        try dotfiles.link(name, transaction: id)
+                    } else {
+                        try installProfile(name, transaction: id)
+                    }
+                }
                 guard try state(task) == .done else { throw SetupError("Profile verification failed.") }
                 if directories.contains("aerospace"), let tool = executable("aerospace") {
                     let running = try runner.run(tool, ["list-workspaces", "--all"])

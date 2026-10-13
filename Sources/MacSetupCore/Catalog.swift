@@ -40,7 +40,7 @@ public enum Catalog {
             "Finish the shell PATH instructions printed by the installer, then return here. No remote installation script is executed by mac-setup."
         ])),
         SetupTask("dotfiles-linked", "Tools", "Link public dotfiles",
-                  "Clone the portable dot-files repository and link its configurations into ~/.config. Existing folders are backed up. Requires Git.",
+                  "Clone the public dot-files repository. Only selected application profiles are linked later. Requires Git.",
                   action: .linkedDotfiles),
         SetupTask("fonts", "Tools", "Interface and terminal fonts", "Install Hack Nerd Font and JetBrains Mono.", dependencies: ["homebrew"], action: .install(packages: ["font-hack-nerd-font", "font-jetbrains-mono"], cask: true, app: nil)),
         SetupTask("aerospace", "Window management", "AeroSpace", "Install the tiling window manager.", dependencies: ["homebrew"], action: .install(packages: ["nikitabobko/tap/aerospace"], cask: true, app: "AeroSpace")),
