@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Select one salient, readable SketchyBar accent from image bytes.
 
-The CLI supplies wallpaper bytes on stdin. No image data is uploaded.
+The privacy-approved watcher reads the Unsplash file and invokes this program
+with ``-`` so neither Python nor ImageMagick needs access to Unsplash's
+protected app container.
 """
 
 from __future__ import annotations
 
-import shutil
 import colorsys
 import math
 import re
@@ -16,7 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-MAGICK = shutil.which("magick") or "magick"
+MAGICK = "/opt/homebrew/bin/magick"
 @dataclass(frozen=True)
 class Swatch:
     fraction: float

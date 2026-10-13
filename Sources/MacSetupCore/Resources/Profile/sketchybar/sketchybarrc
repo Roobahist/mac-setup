@@ -115,7 +115,7 @@ workspace_icon() {
 workspace_font() {
   case "$1" in
     chatgpt)
-      echo "SF Pro:Bold:14.5"
+      echo "$FONT_FA_BRANDS"
       ;;
 
     1|2|3|4|5|6|7|8)
