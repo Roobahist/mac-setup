@@ -49,7 +49,8 @@ Run `mac-setup` or `mac-setup setup` in a terminal to open the full-screen picke
 - **Enter**: review the selection, then Enter again to begin. **B** returns to editing.
 - **Q** or **Ctrl+C**: cancel without making changes.
 
-Deselecting a prerequisite also deselects tasks that require it. A selected task is
+Each checkbox changes only that task. Custom selections preserve your exact
+choices, including across category and search changes. A selected task is
 an instruction to check and, if needed, configure that component; deselecting does
 **not** uninstall an already installed application.
 

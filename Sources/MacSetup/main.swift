@@ -130,10 +130,12 @@ func selectedIDs(_ options: Options, engine: Engine) throws -> [String] {
 }
 
 func setup(_ ids: [String], engine: Engine, options: Options) throws {
-    let tasks = try Catalog.ordered(ids)
+    let exactSelection = options.command == "setup" && options.ids.isEmpty && !options.all && options.preset == nil
+    let chosen = Set(ids)
+    let tasks = try Catalog.ordered(ids, includingDependencies: !exactSelection)
     if tasks.isEmpty { print("No tasks selected."); return }
     if options.dryRun || options.command == "plan" {
-        print("Preview only. Prerequisites are included; no files, settings, apps or permissions will change.")
+        print(exactSelection ? "Preview only. Only the reviewed tasks are included; nothing will change." : "Preview only. Prerequisites are included; no files, settings, apps or permissions will change.")
         for task in tasks { try showPreview(task, engine: engine) }
         return
     }
@@ -152,6 +154,17 @@ func setup(_ ids: [String], engine: Engine, options: Options) throws {
             if state == .done || state == .confirmed {
                 print("\n\(state.rawValue): \(task.title)")
                 continue
+            }
+            if exactSelection {
+                let missing = try task.dependencies.filter { dependency in
+                    guard !chosen.contains(dependency) else { return false }
+                    let state = try engine.state(Catalog.task(dependency))
+                    return state != .done && state != .confirmed
+                }
+                if !missing.isEmpty {
+                    print("\nPending: \(task.title). Required tasks were left unchecked and are not ready: \(missing.joined(separator: ", ")). Select them or complete them separately.")
+                    blocked.insert(task.id); continue
+                }
             }
             try showPreview(task, engine: engine)
             if task.guided {

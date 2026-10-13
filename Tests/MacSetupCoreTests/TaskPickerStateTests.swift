@@ -10,23 +10,43 @@ final class TaskPickerStateTests: XCTestCase {
         XCTAssertFalse(state.selected.contains("dock-special-items"))
     }
 
-    func testSelectingDependentTaskIncludesPrerequisites() {
+    func testSelectingOneTaskDoesNotSelectOtherTasks() {
         var state = TaskPickerState(preset: .minimal)
+        let before = state.selected
         state.toggle("sketchybar-start")
-        for id in ["homebrew", "fonts", "aerospace", "aerospace-profile",
-                   "aerospace-access", "sketchybar", "sketchybar-profile", "sketchybar-start"] {
-            XCTAssertTrue(state.selected.contains(id), id)
+        XCTAssertEqual(state.selected, before.union(["sketchybar-start"]))
+        XCTAssertNil(state.preset)
+    }
+
+    func testRemovingEachTaskChangesOnlyThatTask() {
+        for task in Catalog.tasks {
+            var state = TaskPickerState()
+            let before = state.selected
+            state.toggle(task.id)
+            XCTAssertEqual(state.selected, before.subtracting([task.id]), task.id)
+            XCTAssertNil(state.preset)
+            state.toggle(task.id)
+            XCTAssertEqual(state.selected, before, task.id)
         }
     }
 
-    func testRemovingPrerequisiteRemovesSelectedDependents() {
+    func testBulkToggleDoesNotAffectTasksOutsideTheVisibleCategory() {
         var state = TaskPickerState()
-        state.toggle("aerospace")
-        XCTAssertFalse(state.selected.contains("aerospace"))
-        XCTAssertFalse(state.selected.contains("sketchybar-profile"))
-        XCTAssertFalse(state.selected.contains("sketchybar-start"))
-        XCTAssertFalse(state.selected.contains("aerospace-access"))
-        XCTAssertTrue(state.selected.contains("raycast"))
+        state.cycleCategory() // Tools
+        let before = state.selected
+        let visible = Set(state.visibleTasks.map(\.id))
+        state.toggleVisible()
+        XCTAssertEqual(state.selected, before.subtracting(visible))
+        state.toggleVisible()
+        XCTAssertEqual(state.selected, before)
+    }
+
+    func testCustomExecutionOrdersOnlyTheSelectedTasks() throws {
+        let ids = ["sketchybar-start", "sketchybar-profile"]
+        let ordered = try Catalog.ordered(ids, includingDependencies: false).map(\.id)
+        XCTAssertEqual(ordered, ["sketchybar-profile", "sketchybar-start"])
+        XCTAssertEqual(Set(ordered), Set(ids))
+        XCTAssertTrue(try Catalog.ordered(ids).count > ids.count)
     }
 
     func testCategoryFilterAndSearchDoNotDiscardSelections() {

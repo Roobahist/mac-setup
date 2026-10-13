@@ -115,34 +115,16 @@ public struct TaskPickerState {
 
     public mutating func toggle(_ id: String) {
         guard tasks.contains(where: { $0.id == id }) else { return }
-        if selected.contains(id) {
-            var removed: Set<String> = [id]
-            var changed = true
-            while changed {
-                changed = false
-                for task in tasks where !removed.contains(task.id) &&
-                    task.dependencies.contains(where: removed.contains) {
-                    removed.insert(task.id)
-                    changed = true
-                }
-            }
-            selected.subtract(removed)
-        } else {
-            selected.formUnion(Self.withDependencies([id], in: tasks))
-        }
+        if selected.contains(id) { selected.remove(id) }
+        else { selected.insert(id) }
         preset = nil
     }
 
     public mutating func toggleVisible() {
         let ids = Set(visibleTasks.map(\.id))
         guard !ids.isEmpty else { return }
-        if !ids.isDisjoint(with: selected) && ids.intersection(selected).count >= (ids.count + 1) / 2 {
-            for id in tasks.map(\.id) where ids.contains(id) && selected.contains(id) {
-                toggle(id)
-            }
-        } else {
-            selected.formUnion(Self.withDependencies(ids, in: tasks))
-        }
+        if ids.isSubset(of: selected) { selected.subtract(ids) }
+        else { selected.formUnion(ids) }
         preset = nil
     }
 

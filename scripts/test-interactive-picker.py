@@ -51,6 +51,14 @@ def active_screen(data: bytes) -> bytes:
 
 try:
     read_until(lambda b: b"MAC SETUP" in b and b"Homebrew" in b)
+    initial = re.search(rb"(\d+)/(\d+) selected", active_screen(bytes(captured)))
+    assert initial, "Initial selection count is missing"
+    selected, total = map(int, initial.groups())
+    os.write(master, b" ")  # Unchecking Homebrew must not cascade to dependent tasks.
+    expected = f"{selected - 1}/{total} selected".encode()
+    read_until(lambda b: expected in active_screen(b) and b"Profile: Custom" in active_screen(b))
+    os.write(master, b" ")
+    read_until(lambda b: f"{selected}/{total} selected".encode() in active_screen(b))
     start = time.monotonic()
     os.write(master, b"\x1b[B")  # CSI cursor down
     read_until(

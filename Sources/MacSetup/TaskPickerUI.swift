@@ -274,14 +274,15 @@ struct TaskPickerUI {
                 if count > 0 { lines.append("    [x] \(category): \(count)") }
             }
             lines.append("")
+            lines.append("  Only these checked tasks will run; unchecked tasks stay unchecked.")
             lines.append("  Each task still shows a preview and asks before making changes.")
             lines.append("  Existing settings are journaled for recovery; apps are not uninstalled.")
             lines.append(tint("  Enter: start setup   Esc / B: edit selection   Q: cancel", "1;36"))
         } else if helpVisible {
             lines.append("  HELP")
             for line in [
-                "  Pick any combination of tasks. Dependencies are selected automatically.",
-                "  Turning a prerequisite off also deselects tasks that require it.",
+                "  Each checkbox changes only the task you choose.",
+                "  Unchecked prerequisites must already be ready to run dependent tasks.",
                 "  1-4 choose a preset. Space toggles the focused task.",
                 "  Tab and Shift+Tab switch categories. / starts a text filter.",
                 "  A toggles all visible tasks. Esc clears a filter.",
