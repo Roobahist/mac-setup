@@ -28,6 +28,10 @@ final class FakeRunner: CommandRunning {
             preferences[domain, default: [:]][key] = value
             return CommandResult(status: 0)
         }
+        if executable.hasSuffix("/git"), args.first == "-C", args.count >= 5,
+           args[2] == "remote", args[3] == "get-url", args[4] == "origin" {
+            return CommandResult(status: 0, output: Data("https://github.com/Roobahist/dot-files.git".utf8))
+        }
         if executable == "/usr/bin/git" {
             let operation = args[2], key = args[3]
             switch operation {
@@ -68,19 +72,42 @@ final class EngineTests: XCTestCase {
         return url
     }
 
-    func testProfileDetachesSymlinkWithoutEditingPersonalRepoAndRestoresIt() throws {
+    func testProfilePreservesExistingSymlinkAndRefusesToOverwrite() throws {
         let original = try write("private/aerospace.toml", "personal original\n")
         let extra = try write("private/local-note.txt", "keep this\n")
         try FileManager.default.createDirectory(at: paths.config, withIntermediateDirectories: true)
         let target = paths.config.appendingPathComponent("aerospace")
         try FileManager.default.createSymbolicLink(at: target, withDestinationURL: original.deletingLastPathComponent())
-        let id = try engine.apply(Catalog.task("aerospace-profile"))
+        XCTAssertEqual(try engine.state(Catalog.task("aerospace-profile")), .blocked)
+        XCTAssertThrowsError(try engine.apply(Catalog.task("aerospace-profile")))
         XCTAssertEqual(try String(contentsOf: original), "personal original\n")
         XCTAssertEqual(try String(contentsOf: extra), "keep this\n")
-        XCTAssertEqual(try String(contentsOf: target.appendingPathComponent("local-note.txt")), "keep this\n")
+        XCTAssertEqual(try FileManager.default.destinationOfSymbolicLink(atPath: target.path),
+                       original.deletingLastPathComponent().path)
+    }
+
+    func testLinkedDotfilesPreservesAndRestoresOldConfiguration() throws {
+        let source = DotfilesSource(home: home, folders: ["aerospace", "alacritty"])
+        let checkout = source.checkout
+        try FileManager.default.createDirectory(at: checkout.appendingPathComponent(".git"),
+                                                withIntermediateDirectories: true)
+        _ = try write("dot-files/aerospace/aerospace.toml", "portable settings")
+        _ = try write("dot-files/alacritty/alacritty.toml", "portable settings")
+        let old = try write(".config/aerospace/personal.toml", "old settings")
+        engine = try Engine(paths: paths, runner: runner, dotfilesSource: source)
+        XCTAssertEqual(try engine.state(Catalog.task("dotfiles-linked")), .ready)
+
+        let transaction = try engine.apply(Catalog.task("dotfiles-linked"))
+        XCTAssertTrue(source.isLinked("aerospace", config: paths.config))
+        XCTAssertTrue(source.isLinked("alacritty", config: paths.config))
+        XCTAssertEqual(try engine.state(Catalog.task("dotfiles-linked")), .done)
         XCTAssertEqual(try engine.state(Catalog.task("aerospace-profile")), .done)
-        try engine.journal.restore(id)
-        XCTAssertEqual(try FileManager.default.destinationOfSymbolicLink(atPath: target.path), original.deletingLastPathComponent().path)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: old.path))
+
+        try engine.journal.restore(transaction)
+        XCTAssertEqual(try String(contentsOf: old), "old settings")
+        XCTAssertFalse(source.isLinked("aerospace", config: paths.config))
+        XCTAssertFalse(source.isLinked("alacritty", config: paths.config))
     }
 
     func testRestoreRefusesLaterEditsBeforeChangingOtherFiles() throws {
