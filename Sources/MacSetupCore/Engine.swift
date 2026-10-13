@@ -7,10 +7,13 @@ public final class Engine {
     public let paths: Paths
     public let runner: CommandRunning
     public let journal: Journal
+    public let dotfiles: LinkedDotfiles
 
-    public init(paths: Paths = Paths(), runner: CommandRunning = ProcessRunner()) throws {
+    public init(paths: Paths = Paths(), runner: CommandRunning = ProcessRunner(), dotfilesSource: DotfilesSource? = nil) throws {
         self.paths = paths; self.runner = runner
-        journal = try Journal(paths: paths, runner: runner)
+        let record = try Journal(paths: paths, runner: runner)
+        journal = record
+        dotfiles = LinkedDotfiles(paths: paths, runner: runner, journal: record, source: dotfilesSource)
     }
 
     public func state(_ task: SetupTask) throws -> TaskState {
@@ -22,9 +25,22 @@ public final class Engine {
                 let result = try runner.run(brew, ["list", cask ? "--cask" : "--formula", "--versions", package])
                 return result.status == 0 && !result.text.isEmpty
             } ? .done : .ready
+        case .linkedDotfiles:
+            return dotfiles.status()
         case let .profile(directories):
             if directories.contains("aerospace"), Journal.exists(paths.home.appendingPathComponent(".aerospace.toml")) { return .blocked }
-            return try directories.allSatisfy { try profileMatches($0) } ? .done : .ready
+            for name in directories {
+                let target = paths.config.appendingPathComponent(name)
+                if dotfiles.isSymlink(target) {
+                    if dotfiles.source.isLinked(name, config: paths.config),
+                       Journal.exists(dotfiles.source.checkout.appendingPathComponent(name)) {
+                        continue
+                    }
+                    return .blocked
+                }
+                if try !profileMatches(name) { return .ready }
+            }
+            return .done
         case let .preferences(preferences, _):
             return try preferences.allSatisfy { equalPlist(try journal.preference($0.domain, $0.key), $0.value) } ? .done : .ready
         case .vorssaint:
@@ -57,11 +73,15 @@ public final class Engine {
         case let .install(packages, cask, _):
             lines.append("Homebrew installs: " + packages.joined(separator: ", ") + (cask ? " (casks)" : " (formulae)"))
             lines.append("App installations can request administrator approval. Installed packages are not automatically uninstalled by restore.")
+        case .linkedDotfiles:
+            lines.append("Clone public dot-files into \(dotfiles.source.checkout.path) if it is not there already.")
+            lines.append("Link its six managed folders into \(paths.config.path). Existing local directories are backed up.")
+            lines.append("Links pointing to a different repository are never changed automatically.")
         case let .profile(directories):
             for name in directories {
                 lines.append("Merge bundled files into \(paths.config.appendingPathComponent(name).path). Existing unrelated files are preserved.")
             }
-            lines.append("Existing folder contents or symlinks are backed up. Linked personal repositories are detached, not edited.")
+            lines.append("Existing directories are backed up. Linked dotfiles are preserved, and other symlinks are refused.")
         case let .preferences(preferences, restart):
             lines += preferences.map { "\($0.domain) / \($0.key) → \($0.value)" }
             if let restart { lines.append("Restart \(restart) after saving preferences. Finish active Finder file operations first.") }
@@ -106,7 +126,13 @@ public final class Engine {
                     }
                 }
                 guard try state(task) == .done else { throw SetupError("Installation could not be verified.") }
+            case .linkedDotfiles:
+                try dotfiles.install(transaction: id)
+                guard dotfiles.status() == .done else { throw SetupError("Dotfiles installation could not be verified.") }
             case let .profile(directories):
+                for name in directories where dotfiles.isSymlink(paths.config.appendingPathComponent(name)) {
+                    throw SetupError("\(name) uses a configuration symlink. Update its checkout directly instead of overwriting it.")
+                }
                 if directories.contains("aerospace"), Journal.exists(paths.home.appendingPathComponent(".aerospace.toml")) {
                     throw SetupError("~/.aerospace.toml exists. AeroSpace refuses ambiguous config locations. Move that file aside yourself, then retry.")
                 }
