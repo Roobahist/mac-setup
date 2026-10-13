@@ -218,7 +218,7 @@ do {
         guard isatty(STDIN_FILENO) != 0 else { print(help); exit(0) }
         print("mac-setup: choose your configuration. Changes are previewed before applying.")
         options.command = "setup"
-        try setup(selectedIDs(options), engine: engine, options: options)
+        try setup(selectedIDs(options, engine: engine), engine: engine, options: options)
     }
 } catch {
     fputs("mac-setup: \(error)\n", stderr)
