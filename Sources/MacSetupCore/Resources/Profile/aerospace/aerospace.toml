@@ -1,11 +1,5 @@
 config-version = 2
 
-# Keep these known application windows tiled.
-on-window-detected = [
-    { if = 'test %{app-bundle-id} = com.apple.ScreenContinuity', run = 'layout tiling' },
-    { if = 'test %{app-bundle-id} = com.apple.systempreferences', run = 'layout tiling' },
-]
-
 persistent-workspaces = [
     "chatgpt",
     "1",
@@ -180,6 +174,15 @@ cmd-alt-h = []
 # ============================================================
 # APP ASSIGNMENTS
 # ============================================================
+
+# Keep known system dialogs tiled.
+[[on-window-detected]]
+if = 'test %{app-bundle-id} = com.apple.ScreenContinuity'
+run = 'layout tiling'
+
+[[on-window-detected]]
+if = 'test %{app-bundle-id} = com.apple.systempreferences'
+run = 'layout tiling'
 
 [[on-window-detected]]
 if = 'test %{app-bundle-id} = ru.keepcoder.Telegram'
