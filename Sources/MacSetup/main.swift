@@ -3,20 +3,23 @@ import Darwin
 import MacSetupCore
 
 let help = """
-mac-setup 0.1.0 — a guided setup for your Mac
+mac-setup 0.2.0 | interactive setup for your Mac
 
 Usage:
-  mac-setup                     Open the interactive task menu
+  mac-setup                     Open the interactive keyboard-driven checklist
   mac-setup list                List task IDs
   mac-setup status              Inspect the current setup (read-only)
   mac-setup plan [task IDs]      Preview tasks and prerequisites (read-only)
   mac-setup setup [task IDs]     Apply selected tasks with individual prompts
-  mac-setup setup --all          Walk through the complete checklist
+  mac-setup setup --all          Walk through all tasks (including unfinished)
+  mac-setup setup --preset minimal    Run a curated selection
+  mac-setup profiles             Show available selection presets
   mac-setup update              Reapply previously installed bundled profiles
   mac-setup backups             List recovery records
   mac-setup restore [backup ID]  Restore one record (latest by default)
 
 Options:
+  --preset NAME                 complete, minimal, productivity, developer
   --dry-run                     Preview instead of making changes
   --yes                         Approve automatic tasks; guided tasks stay pending
   --image PATH                  Choose an image for wallpaper-colors
@@ -32,6 +35,7 @@ struct Options {
     var command = "menu"
     var ids: [String] = []
     var all = false
+    var preset: SetupPreset?
     var dryRun = false
     var yes = false
     var force = false
@@ -42,12 +46,17 @@ struct Options {
         if args.contains("--help") || args.first == "help" { command = "help"; return }
         if args.contains("--version") { command = "version"; return }
         if let first = args.first, !first.hasPrefix("--") { command = args.removeFirst() }
-        let commands = ["menu", "list", "status", "plan", "setup", "update", "backups", "restore"]
+        let commands = ["menu", "list", "status", "plan", "setup", "update", "backups", "restore", "profiles"]
         guard commands.contains(command) else { throw SetupError("Unknown command '\(command)'. Run mac-setup --help.") }
         while !args.isEmpty {
             let value = args.removeFirst()
             switch value {
             case "--all": all = true
+            case "--preset":
+                guard !args.isEmpty, let parsed = SetupPreset(rawValue: args.removeFirst()) else {
+                    throw SetupError("--preset requires complete, minimal, productivity, or developer.")
+                }
+                preset = parsed
             case "--dry-run": dryRun = true
             case "--yes": yes = true
             case "--force": force = true
@@ -62,8 +71,14 @@ struct Options {
         if force && command != "restore" { throw SetupError("--force is only valid with restore.") }
         if all && !["setup", "plan"].contains(command) { throw SetupError("--all is only valid with setup or plan.") }
         if all && !ids.isEmpty { throw SetupError("Use --all or task IDs, not both.") }
+        if preset != nil && (all || !ids.isEmpty) {
+            throw SetupError("Use --preset on its own, not with --all or task IDs.")
+        }
+        if preset != nil && !["menu", "setup", "plan"].contains(command) {
+            throw SetupError("--preset applies only to setup or plan.")
+        }
         if image != nil && !["setup", "plan"].contains(command) { throw SetupError("--image is only valid with setup or plan.") }
-        if ["status", "list", "backups", "menu"].contains(command) && !ids.isEmpty { throw SetupError("\(command) takes no task IDs.") }
+        if ["status", "list", "backups", "menu", "profiles"].contains(command) && !ids.isEmpty { throw SetupError("\(command) takes no task IDs.") }
         if command == "restore" && ids.count > 1 { throw SetupError("Restore one backup at a time, newest first.") }
         if command == "update" && !ids.isEmpty { throw SetupError("update takes no IDs; use setup for selected profiles.") }
     }
@@ -88,21 +103,15 @@ func showPreview(_ task: SetupTask, engine: Engine) throws {
     for line in try engine.preview(task) { print("  " + line) }
 }
 
-func selectedIDs(_ options: Options) throws -> [String] {
-    if options.all || (options.command == "plan" && options.ids.isEmpty) { return Catalog.tasks.map(\.id) }
-    if !options.ids.isEmpty { return options.ids }
-    guard isatty(STDIN_FILENO) != 0 else { throw SetupError("Select task IDs or --all. Use plan for a read-only preview.") }
-    showList()
-    print("\nChoose task numbers or IDs separated by spaces (or 'all'; Enter cancels): ", terminator: "")
-    guard let line = readLine(), !line.trimmingCharacters(in: .whitespaces).isEmpty else { return [] }
-    if line.trimmingCharacters(in: .whitespaces) == "all" { return Catalog.tasks.map(\.id) }
-    return try line.split(whereSeparator: { $0.isWhitespace || $0 == "," }).map { value in
-        if let number = Int(value) {
-            guard Catalog.tasks.indices.contains(number - 1) else { throw SetupError("Invalid task number: \(number)") }
-            return Catalog.tasks[number - 1].id
-        }
-        return String(value)
+func selectedIDs(_ options: Options, engine: Engine) throws -> [String] {
+    if options.all { return Catalog.tasks.map(\.id) }
+    if let preset = options.preset {
+        return TaskPickerState(preset: preset).orderedSelection
     }
+    if !options.ids.isEmpty { return options.ids }
+    if options.command == "plan" { return TaskPickerState().orderedSelection }
+    var picker = TaskPickerUI(engine: engine)
+    return try picker.run() ?? []
 }
 
 func setup(_ ids: [String], engine: Engine, options: Options) throws {
@@ -162,11 +171,16 @@ func setup(_ ids: [String], engine: Engine, options: Options) throws {
 do {
     var options = try Options(Array(CommandLine.arguments.dropFirst()))
     if options.command == "help" { print(help); exit(0) }
-    if options.command == "version" { print("0.1.0"); exit(0) }
+    if options.command == "version" { print("0.2.0"); exit(0) }
     guard getuid() != 0 else { throw SetupError("Run mac-setup as your normal user, not with sudo. Individual installers request privileges themselves.") }
     let engine = try Engine()
     switch options.command {
     case "list": showList()
+    case "profiles":
+        for preset in SetupPreset.allCases {
+            let count = TaskPickerState(preset: preset).selectedCount
+            print("  \(preset.rawValue): \(count) tasks. \(preset.summary)")
+        }
     case "status":
         print("mac-setup — current state (read-only)")
         var failures = 0
@@ -199,10 +213,10 @@ do {
         let ids = engine.updateTasks()
         print("Update uses the profiles bundled with this version of mac-setup. Install a newer CLI release to obtain newer profiles.")
         try setup(ids, engine: engine, options: options)
-    case "plan", "setup": try setup(selectedIDs(options), engine: engine, options: options)
+    case "plan", "setup": try setup(selectedIDs(options, engine: engine), engine: engine, options: options)
     default:
         guard isatty(STDIN_FILENO) != 0 else { print(help); exit(0) }
-        print("mac-setup — make this Mac feel familiar\nSelect only the changes you want. Your current configuration is backed up first.")
+        print("mac-setup: choose your configuration. Changes are previewed before applying.")
         options.command = "setup"
         try setup(selectedIDs(options), engine: engine, options: options)
     }
