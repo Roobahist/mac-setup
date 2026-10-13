@@ -211,6 +211,7 @@ struct TaskPickerUI {
             case .escape: state.clearSearch()
             case .enter: reviewMode = true
             case .interrupt: return nil
+            case .idle: continue
             case let .character(character):
                 switch character {
                 case "q": return nil
