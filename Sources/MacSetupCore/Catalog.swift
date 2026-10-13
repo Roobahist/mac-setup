@@ -8,6 +8,8 @@ public struct Preference {
 }
 
 public enum TaskAction {
+    case homebrew
+    case finderIcons
     case install(packages: [String], cask: Bool, app: String?)
     case profile([String])
     case linkedDotfiles
@@ -41,20 +43,21 @@ public struct SetupTask {
 
 public enum Catalog {
     public static let tasks: [SetupTask] = [
-        SetupTask("homebrew", "Tools", "Homebrew", "Install the package manager if needed.", action: .guide(url: "https://brew.sh", app: nil, instructions: [
-            "Follow Homebrew's official installation instructions in Terminal. It may request your administrator password and Command Line Tools.",
-            "Finish the shell PATH instructions printed by the installer, then return here. No remote installation script is executed by mac-setup."
-        ])),
+        SetupTask("homebrew", "Tools", "Homebrew", "Install Homebrew with its official installer when missing, then configure zsh. Administrator authentication and Command Line Tools approval may be requested.", action: .homebrew),
         SetupTask("dotfiles-linked", "Tools", "Link public dotfiles",
                   "Clone the public dot-files repository. Only selected application profiles are linked later. Requires Git.",
                   action: .linkedDotfiles),
         SetupTask("fonts", "Tools", "Interface and terminal fonts", "Install Hack Nerd Font and JetBrains Mono.", dependencies: ["homebrew"], action: .install(packages: ["font-hack-nerd-font", "font-jetbrains-mono"], cask: true, app: nil)),
         SetupTask("aerospace", "Window management", "AeroSpace", "Install the tiling window manager.", dependencies: ["homebrew"], action: .install(packages: ["nikitabobko/tap/aerospace"], cask: true, app: "AeroSpace")),
         SetupTask("aerospace-profile", "Window management", "AeroSpace configuration", "Apply workspace names, key bindings, app rules and SketchyBar integration. Replaces the AeroSpace config folder after backup.", dependencies: ["aerospace"], action: .profile(["aerospace"])),
-        SetupTask("aerospace-access", "Window management", "AeroSpace access and launch", "Grant Accessibility, then verify that AeroSpace can list workspaces.", dependencies: ["aerospace-profile"], action: .guide(url: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility", app: "AeroSpace", instructions: [
+        SetupTask("mission-control", "Window management", "Mission Control workspace settings", "Keep Space order fixed and enable separate Spaces per display. Log out and back in for the display setting to take effect.", dependencies: ["aerospace-profile"], action: .preferences([
+            Preference("com.apple.dock", "mru-spaces", false),
+            Preference("com.apple.spaces", "spans-displays", false)
+        ], restart: "Dock")),
+        SetupTask("aerospace-access", "Window management", "AeroSpace access and launch", "Grant Accessibility, then verify that AeroSpace can list workspaces.", dependencies: ["aerospace-profile", "mission-control"], action: .guide(url: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility", app: "AeroSpace", instructions: [
             "In Privacy & Security > Accessibility, add AeroSpace.app if it is missing and enable it.",
             "Launch AeroSpace. Resolve any config errors in its own UI. The profile uses config-version 2 and requires a version supporting it.",
-            "In Desktop & Dock > Mission Control, turn off automatic Space rearrangement and keep Displays have separate Spaces enabled. macOS may require logout for the latter."
+            "The mission-control task applies Space order and separate-display preferences automatically. Log out and back in before testing if those preferences changed."
         ])),
         SetupTask("sketchybar", "Window management", "SketchyBar", "Install the custom menu bar.", dependencies: ["homebrew"], action: .install(packages: ["felixkratz/formulae/sketchybar"], cask: false, app: nil)),
         SetupTask("sketchybar-profile", "Window management", "SketchyBar configuration", "Apply the workspace bar, clock, fonts and colors. Replaces the SketchyBar config folder after backup.", dependencies: ["sketchybar", "aerospace-profile", "fonts"], action: .profile(["sketchybar"])),
@@ -93,14 +96,16 @@ public enum Catalog {
         SetupTask("dock-minimal", "Appearance", "Clear pinned Dock items", "Remove pinned app and folder tiles after backup. Running apps, Finder and Trash can still appear.", action: .preferences([
             Preference("com.apple.dock", "persistent-apps", [String]()), Preference("com.apple.dock", "persistent-others", [String]()), Preference("com.apple.dock", "show-recents", false)
         ], restart: "Dock")),
-        SetupTask("desktop-clean", "Appearance", "Hide desktop files", "Hide Finder's desktop icons without deleting or moving files. Desktop widgets are a separate guided step.", action: .preferences([Preference("com.apple.finder", "CreateDesktop", false)], restart: "Finder")),
+        SetupTask("desktop-clean", "Appearance", "Hide desktop files", "Hide Finder's desktop icons without deleting or moving files. Desktop widgets are a separate task.", action: .preferences([Preference("com.apple.finder", "CreateDesktop", false)], restart: "Finder")),
         SetupTask("finder-list", "Finder", "Default to list view", "Set the preferred Finder view to list. Existing folder view overrides may remain.", action: .preferences([Preference("com.apple.finder", "FXPreferredViewStyle", "Nlsv")], restart: "Finder")),
         SetupTask("finder-tabs", "Finder", "Prefer windows over tabs", "Disable Finder's folder-tab preference and set the system tab preference to Never. Explicit tab commands remain available.", action: .preferences([
             Preference("com.apple.finder", "FinderWindowTabs", false), Preference("NSGlobalDomain", "AppleWindowTabbingMode", "manual")
         ], restart: "Finder")),
-        SetupTask("finder-icons", "Finder", "Larger list-view icons", "Use Finder's supported View Options UI.", action: .guide(url: nil, app: "Finder", instructions: [
-            "Open your Home folder, choose View > as List, then View > Show View Options (Command+J).",
-            "Choose the larger icon size and your preferred text size. Click Use as Defaults if available. Existing folders may retain individual view settings."
+        SetupTask("finder-icons", "Finder", "Finder list-view settings", "Match the reference: list view, no groups, Date Modified sorting, large icons, text 13, selected columns, relative dates and previews. Existing folder overrides may remain.", dependencies: ["finder-list"], action: .finderIcons),
+        SetupTask("finder-view-check", "Finder", "Folder list-view behavior", "Check the folder-specific Always open and Browse in list view options from the reference.", dependencies: ["finder-icons"], action: .guide(url: nil, app: "Finder", instructions: [
+            "Open Macintosh HD (or your startup disk) and press Command+J. Enable Always open in list view and Browse in list view.",
+            "Check Group By: None; Sort By: Date Modified; large icons; text size 13; only Date Modified, Size and Kind columns besides Name; relative dates and icon previews enabled; Calculate all sizes disabled. Click Use as Defaults.",
+            "Existing folders can retain their own view metadata. Repeat the two top checkbox choices for folders that override the default. mac-setup does not rewrite every folder's .DS_Store file."
         ])),
         SetupTask("finder-sidebar", "Finder", "Clean up Finder sidebar", "Keep Home and Macintosh HD; remove unused favorites such as Desktop.", action: .guide(url: nil, app: "Finder", instructions: [
             "In Finder > Settings > Sidebar, enable your Home folder and Hard disks; disable unused entries such as Desktop.",
@@ -111,23 +116,22 @@ public enum Catalog {
             "In Displays, select each display and choose Larger Text or a lower effective resolution that looks comfortable.",
             "Use a mode offered by this Mac. Do not copy a numeric resolution from a different monitor."
         ])),
-        SetupTask("menu-bar", "Appearance", "Hide the system menu bar", "Use Always auto-hide so SketchyBar can occupy the top edge.", action: .guide(url: "x-apple.systempreferences:com.apple.ControlCenter-Settings.extension", app: nil, instructions: [
-            "Find Menu Bar settings (or Control Center / Desktop & Dock on older macOS) and set Automatically hide and show the menu bar to Always.",
-            "A long reveal delay has not been established as a reliable setting here. That part remains unimplemented; this task only covers auto-hide."
-        ])),
-        SetupTask("trackpad", "Appearance", "Two-finger secondary click", "Make clicking with two fingers perform a right click.", action: .guide(url: "x-apple.systempreferences:com.apple.preference.trackpad", app: nil, instructions: [
-            "In Trackpad > Point & Click, set Secondary click to Click with Two Fingers.",
-            "Test the gesture on a file in Finder. This profile does not change tap-to-click."
-        ])),
+        SetupTask("menu-bar", "Appearance", "Hide the system menu bar", "Set menu-bar auto-hide to Always. Log out and back in if the visible menu bar has not refreshed.", action: .preferences([
+            Preference("NSGlobalDomain", "_HIHideMenuBar", true),
+            Preference("NSGlobalDomain", "AppleMenuBarVisibleInFullscreen", false)
+        ], restart: nil)),
+        SetupTask("trackpad", "Appearance", "Two-finger secondary click", "Enable two-finger right-click and disable corner secondary clicks for built-in and Bluetooth trackpads. Tap-to-click is preserved; a logout may be needed.", action: .preferences([
+            Preference("com.apple.AppleMultitouchTrackpad", "TrackpadRightClick", true),
+            Preference("com.apple.AppleMultitouchTrackpad", "TrackpadCornerSecondaryClick", 0),
+            Preference("com.apple.driver.AppleBluetoothMultitouch.trackpad", "TrackpadRightClick", true),
+            Preference("com.apple.driver.AppleBluetoothMultitouch.trackpad", "TrackpadCornerSecondaryClick", 0)
+        ], restart: nil)),
         SetupTask("appearance-details", "Appearance", "Default icon colors and Liquid Glass", "Use the default icon appearance and the most transparent available glass style.", action: .guide(url: "x-apple.systempreferences:com.apple.Appearance-Settings.extension", app: nil, instructions: [
             "Keep dark system appearance but choose the default icon style rather than tinted or clear icons, where macOS exposes that choice.",
-            "Choose the clear Liquid Glass style if available. Check Accessibility > Display for Reduce Transparency if glass appears opaque.",
+            "Match the transparent Control Center reference: choose Clear Liquid Glass (or the most transparent available setting) and keep Reduce Transparency off in Accessibility > Display. The material depends on macOS and the wallpaper; network names and slider values from the reference are not copied.",
             "Older macOS releases may not offer these controls. Record this task as skipped on unsupported systems."
         ])),
-        SetupTask("desktop-widgets", "Appearance", "Hide desktop widgets", "Finish the clean desktop by turning off desktop widgets.", action: .guide(url: "x-apple.systempreferences:com.apple.Desktop-Settings.extension", app: nil, instructions: [
-            "In Desktop & Dock, turn off Show Widgets on Desktop, and disable showing items on the desktop if that control is present.",
-            "Files remain accessible in the Desktop folder."
-        ])),
+        SetupTask("desktop-widgets", "Appearance", "Hide desktop widgets", "Disable desktop widgets while preserving Stage Manager widget settings. Log out if widgets have not refreshed.", action: desktopWidgetAction(macOSMajorVersion: ProcessInfo.processInfo.operatingSystemVersion.majorVersion)),
         SetupTask("wallpaper-tools", "Appearance", "Wallpaper color dependencies", "Install Python and ImageMagick for local accent extraction.", dependencies: ["homebrew"], action: .install(packages: ["python", "imagemagick"], cask: false, app: nil)),
         SetupTask("wallpaper-colors", "Appearance", "Match SketchyBar accent to wallpaper", "Extract an accent locally from the current wallpaper and update SketchyBar. Run again after a wallpaper change.", dependencies: ["wallpaper-tools", "sketchybar-profile"], action: .accent),
         SetupTask("wallpaper-watcher", "Appearance", "Automatic wallpaper color updates", "Use the existing WallpaperAccentWatcher.app and its user-level login service. No replacement watcher is installed.", dependencies: ["wallpaper-tools", "sketchybar-start"], action: .wallpaperWatcher),
@@ -139,6 +143,13 @@ public enum Catalog {
             "Do not run another wallpaper watcher alongside WallpaperAccentWatcher. Permissions are never granted automatically."
         ]))
     ]
+
+    public static func desktopWidgetAction(macOSMajorVersion: Int) -> TaskAction {
+        if macOSMajorVersion >= 14 {
+            return .preferences([Preference("com.apple.WindowManager", "StandardHideWidgets", true)], restart: nil)
+        }
+        return .guide(url: nil, app: nil, instructions: ["Desktop widgets require macOS 14 or newer; this setting is unavailable on this Mac."])
+    }
 
     public static func task(_ id: String) throws -> SetupTask {
         guard let task = tasks.first(where: { $0.id == id }) else { throw SetupError("Unknown task '\(id)'. Run mac-setup list.") }

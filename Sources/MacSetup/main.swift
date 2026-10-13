@@ -184,16 +184,14 @@ func setup(_ ids: [String], engine: Engine, options: Options) throws {
             if task.guided {
                 if options.yes { print("  Guided task stays pending in --yes mode."); blocked.insert(task.id); continue }
                 if ask("Open the app or settings now?") { try engine.openGuide(task) }
-                if task.id == "homebrew" {
-                    if try ask("Check whether the prerequisite is ready?") && engine.state(task) == .done {
-                        print("Verified: \(task.title)"); continue
-                    }
-                    print("Still pending."); blocked.insert(task.id)
-                } else if ask("Have you completed and tested these steps?") {
+                if ask("Have you completed and tested these steps?") {
                     try engine.confirm(task); print("Recorded as user confirmed; not automatically verified.")
                 } else { blocked.insert(task.id) }
             } else {
                 if options.yes || ask("Apply this task?") {
+                    if task.id == "homebrew" && isatty(STDIN_FILENO) == 0 {
+                        throw SetupError("Homebrew installation needs an interactive terminal for authentication. Run mac-setup setup homebrew in Terminal.")
+                    }
                     let id = try engine.apply(task, image: options.image)
                     print("Applied. Recovery record: \(id)")
                 } else { blocked.insert(task.id) }

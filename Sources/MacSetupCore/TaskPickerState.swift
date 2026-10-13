@@ -59,12 +59,53 @@ public struct TaskPickerState {
 
     public var category: String { categories[categoryIndex] }
 
+    /// Show each task once beneath its first prerequisite. Other prerequisites
+    /// remain explicit in the row, since dependencies form a graph rather than a tree.
     public var visibleTasks: [SetupTask] {
-        tasks.filter { task in
+        let visible = tasks.filter { task in
             (categoryIndex == 0 || task.category == category) &&
             (query.isEmpty || [task.id, task.title, task.summary, task.category]
                 .contains { $0.localizedCaseInsensitiveContains(query) })
         }
+        let visibleIDs = Set(visible.map(\.id))
+        var result: [SetupTask] = []
+        var visited = Set<String>()
+        func append(_ task: SetupTask) {
+            guard visited.insert(task.id).inserted else { return }
+            result.append(task)
+            for child in visible where child.dependencies.first == task.id { append(child) }
+        }
+        for task in visible where task.dependencies.first.map({ !visibleIDs.contains($0) }) ?? true { append(task) }
+        // Defensive fallback for an invalid cycle: keep every task accessible.
+        for task in visible { append(task) }
+        return result
+    }
+
+    public func hierarchyPrefix(for task: SetupTask) -> String {
+        let visible = visibleTasks
+        let byID = Dictionary(uniqueKeysWithValues: visible.map { ($0.id, $0) })
+        var path = [task]
+        var visited: Set<String> = [task.id]
+        while let parent = path.last?.dependencies.first, let ancestor = byID[parent], visited.insert(parent).inserted {
+            path.append(ancestor)
+        }
+        path.reverse()
+        guard path.count > 1 else { return "" }
+        func isLast(_ node: SetupTask) -> Bool {
+            visible.last(where: { $0.dependencies.first == node.dependencies.first })?.id == node.id
+        }
+        let guides = path.dropFirst().dropLast().map { isLast($0) ? "    " : "│   " }.joined()
+        return guides + (isLast(task) ? "└── " : "├── ")
+    }
+
+    public func hierarchySpacer(after task: SetupTask, before next: SetupTask) -> String? {
+        let currentPrefix = hierarchyPrefix(for: task)
+        let nextPrefix = hierarchyPrefix(for: next)
+        let opensGroup = currentPrefix.isEmpty && !nextPrefix.isEmpty
+        let endsLeafSibling = !currentPrefix.isEmpty && currentPrefix.count == nextPrefix.count &&
+            !visibleTasks.contains { $0.dependencies.first == task.id }
+        guard currentPrefix.count > nextPrefix.count || opensGroup || endsLeafSibling else { return nil }
+        return nextPrefix.isEmpty ? "" : String(nextPrefix.dropLast(4)) + "│"
     }
 
     public var focusedTask: SetupTask? {

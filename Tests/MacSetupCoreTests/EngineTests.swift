@@ -9,9 +9,19 @@ final class FakeRunner: CommandRunning {
     var jobs = Set<String>()
     var disabledJobs = Set<String>()
     var managedPackages = Set<String>()
+    var homebrewInstalled = false
 
     func run(_ executable: String, _ args: [String], interactive: Bool, input: Data?) throws -> CommandResult {
         calls.append([executable] + args)
+        if executable == "/usr/bin/curl" {
+            try Data("#!/bin/bash\nexit 0\n".utf8).write(to: URL(fileURLWithPath: args.last!))
+            return CommandResult(status: 0)
+        }
+        if executable == "/bin/bash" && args.first?.hasSuffix("install.sh") == true {
+            XCTAssertTrue(interactive)
+            homebrewInstalled = true
+            return CommandResult(status: 0)
+        }
         if executable == "/fake/brew" {
             if args.first == "list" {
                 return CommandResult(status: managedPackages.contains(args.last!) ? 0 : 1,
@@ -243,10 +253,10 @@ final class EngineTests: XCTestCase {
     }
 
     func testGuidedTasksAreNotAutomaticallyApplied() throws {
-        XCTAssertThrowsError(try engine.apply(Catalog.task("trackpad")))
+        XCTAssertThrowsError(try engine.apply(Catalog.task("finder-sidebar")))
         XCTAssertTrue(engine.journal.transactions.isEmpty)
-        try engine.confirm(Catalog.task("trackpad"))
-        XCTAssertEqual(try engine.state(Catalog.task("trackpad")), .confirmed)
+        try engine.confirm(Catalog.task("finder-sidebar"))
+        XCTAssertEqual(try engine.state(Catalog.task("finder-sidebar")), .confirmed)
     }
 
     func testDependenciesAreOrderedAndUnknownTasksRejected() throws {
@@ -361,6 +371,75 @@ final class EngineTests: XCTestCase {
         engine = try Engine(paths: paths, runner: runner, tools: { $0 == "brew" ? "/fake/brew" : nil })
         XCTAssertThrowsError(try engine.upgrade(Catalog.task("raycast")))
         XCTAssertFalse(runner.calls.contains { $0.contains("update") || $0.contains("upgrade") })
+    }
+
+    func testHomebrewInstallsAndShellInitializationCanBeRestored() throws {
+        engine = try Engine(paths: paths, runner: runner, tools: { [runner] name in name == "brew" && runner!.homebrewInstalled ? "/fake/brew" : nil })
+        let profile = try write(".zprofile", "# existing config\n")
+        let id = try engine.apply(Catalog.task("homebrew"))
+        XCTAssertTrue(runner.homebrewInstalled)
+        XCTAssertEqual(try engine.state(Catalog.task("homebrew")), .done)
+        let text = try String(contentsOf: profile)
+        XCTAssertTrue(text.contains("eval \"$('" + "/fake/brew' shellenv)\""))
+        XCTAssertEqual(try ProcessRunner().run("/bin/bash", ["-n", profile.path]).status, 0)
+        try engine.journal.restore(id)
+        XCTAssertEqual(try String(contentsOf: profile), "# existing config\n")
+        XCTAssertTrue(runner.homebrewInstalled)
+    }
+
+    func testExistingHomebrewIsNotDownloadedAgain() throws {
+        engine = try Engine(paths: paths, runner: runner, tools: { $0 == "brew" ? "/fake/brew" : nil })
+        _ = try engine.apply(Catalog.task("homebrew"))
+        _ = try engine.apply(Catalog.task("homebrew"))
+        XCTAssertFalse(runner.calls.contains { $0[0] == "/usr/bin/curl" || $0[0] == "/bin/bash" })
+        let profile = try String(contentsOf: home.appendingPathComponent(".zprofile"))
+        XCTAssertEqual(profile.components(separatedBy: "# >>> mac-setup: Homebrew >>>").count, 2)
+    }
+
+    func testFinderIconsPreserveLegacyAndModernViewOptionsAndRestore() throws {
+        let original: [String: Any] = ["ListViewSettings": ["iconSize": 16, "textSize": 14], "ExtendedListViewSettingsV2": ["iconSize": 16, "sortColumn": "name", "columns": ["keep"]], "IconViewSettings": ["iconSize": 64]]
+        runner.preferences["com.apple.finder"] = ["StandardViewSettings": original]
+        let id = try engine.apply(Catalog.task("finder-icons"))
+        XCTAssertEqual(try engine.state(Catalog.task("finder-icons")), .done)
+        let views = runner.preferences["com.apple.finder"]!["StandardViewSettings"] as! [String: Any]
+        XCTAssertTrue(equalPlist(views["IconViewSettings"], original["IconViewSettings"]))
+        XCTAssertEqual((views["ExtendedListViewSettingsV2"] as! [String: Any])["sortColumn"] as? String, "dateModified")
+        try engine.journal.restore(id)
+        XCTAssertTrue(equalPlist(runner.preferences["com.apple.finder"]!["StandardViewSettings"], original))
+    }
+
+    func testAutomatedSettingsVerifyAndRestoreOnlyTheirOwnKeys() throws {
+        for id in ["menu-bar", "trackpad", "desktop-widgets", "mission-control"] {
+            let task = try Catalog.task(id)
+            guard !task.guided else { continue }
+            runner.preferences["com.apple.WindowManager"] = ["StageManagerHideWidgets": false]
+            runner.preferences["com.apple.AppleMultitouchTrackpad"] = ["Clicking": true]
+            let record = try engine.apply(task)
+            XCTAssertEqual(try engine.state(task), .done)
+            XCTAssertEqual(runner.preferences["com.apple.WindowManager"]?["StageManagerHideWidgets"] as? Bool, false)
+            XCTAssertEqual(runner.preferences["com.apple.AppleMultitouchTrackpad"]?["Clicking"] as? Bool, true)
+            try engine.journal.restore(record)
+        }
+        if case .guide = Catalog.desktopWidgetAction(macOSMajorVersion: 13) {} else { XCTFail("Unsupported desktop widgets must remain guided") }
+    }
+
+    func testReferenceFinderDefaultsMatchBothColumnLayouts() {
+        let original: [String: Any] = ["ListViewSettings": ["columns": ["name": ["width": 320], "comments": ["width": 240, "visible": true]]], "ExtendedListViewSettingsV2": ["columns": [["identifier": "name", "width": 320], ["identifier": "dateModified", "width": 180], ["identifier": "comments", "visible": true]]]]
+        let result = Engine.finderListDefaults(original)
+        for key in ["ListViewSettings", "ExtendedListViewSettingsV2"] {
+            let list = result[key] as! [String: Any]
+            XCTAssertTrue(equalPlist(list["textSize"], 13))
+            XCTAssertTrue(equalPlist(list["iconSize"], 32))
+            XCTAssertTrue(equalPlist(list["calculateAllSizes"], false))
+            XCTAssertTrue(equalPlist(list["useRelativeDates"], true))
+            XCTAssertTrue(equalPlist(list["showIconPreview"], true))
+        }
+        let legacy = (result["ListViewSettings"] as! [String: Any])["columns"] as! [String: [String: Any]]
+        XCTAssertEqual(legacy["name"]?["width"] as? Int, 320)
+        XCTAssertEqual(Set(legacy.filter { equalPlist($0.value["visible"], true) }.keys), ["name", "dateModified", "size", "kind"])
+        let modern = (result["ExtendedListViewSettingsV2"] as! [String: Any])["columns"] as! [[String: Any]]
+        XCTAssertEqual(Set(modern.filter { equalPlist($0["visible"], true) }.compactMap { $0["identifier"] as? String }), ["name", "dateModified", "size", "kind"])
+        XCTAssertTrue(equalPlist(result, Engine.finderListDefaults(result)))
     }
 
 }
