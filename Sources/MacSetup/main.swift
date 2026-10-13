@@ -14,6 +14,8 @@ Usage:
   mac-setup setup --all          Walk through all tasks (including unfinished)
   mac-setup setup --preset minimal    Run a curated selection
   mac-setup profiles             Show available selection presets
+  mac-setup dotfiles status      Inspect local public dotfiles checkout
+  mac-setup dotfiles update      Pull new dotfiles using Git fast-forward
   mac-setup update              Reapply previously installed bundled profiles
   mac-setup backups             List recovery records
   mac-setup restore [backup ID]  Restore one record (latest by default)
@@ -46,7 +48,7 @@ struct Options {
         if args.contains("--help") || args.first == "help" { command = "help"; return }
         if args.contains("--version") { command = "version"; return }
         if let first = args.first, !first.hasPrefix("--") { command = args.removeFirst() }
-        let commands = ["menu", "list", "status", "plan", "setup", "update", "backups", "restore", "profiles"]
+        let commands = ["menu", "list", "status", "plan", "setup", "update", "backups", "restore", "profiles", "dotfiles"]
         guard commands.contains(command) else { throw SetupError("Unknown command '\(command)'. Run mac-setup --help.") }
         while !args.isEmpty {
             let value = args.removeFirst()
@@ -81,6 +83,9 @@ struct Options {
         if ["status", "list", "backups", "menu", "profiles"].contains(command) && !ids.isEmpty { throw SetupError("\(command) takes no task IDs.") }
         if command == "restore" && ids.count > 1 { throw SetupError("Restore one backup at a time, newest first.") }
         if command == "update" && !ids.isEmpty { throw SetupError("update takes no IDs; use setup for selected profiles.") }
+        if command == "dotfiles" && (ids.count > 1 || (ids.first != nil && !["status", "update"].contains(ids[0]))) {
+            throw SetupError("Use mac-setup dotfiles status or mac-setup dotfiles update.")
+        }
     }
 }
 
@@ -180,6 +185,25 @@ do {
         for preset in SetupPreset.allCases {
             let count = TaskPickerState(preset: preset).selectedCount
             print("  \(preset.rawValue): \(count) tasks. \(preset.summary)")
+        }
+    case "dotfiles":
+        let action = options.ids.first ?? "status"
+        print("Public dotfiles checkout: \(engine.dotfiles.source.checkout.path)")
+        if action == "status" {
+            print("Checkout: \(engine.dotfiles.status().rawValue)")
+            for name in engine.dotfiles.source.folders {
+                let connected = engine.dotfiles.source.isLinked(name, config: engine.paths.config)
+                print("  \(name): \(connected ? "linked" : "not linked")")
+            }
+        } else {
+            guard options.yes || (isatty(STDIN_FILENO) != 0 &&
+                ask("Pull the public dot-files checkout (fast-forward only)?")) else {
+                print("Cancelled."); break
+            }
+            let lock = try SetupLock(paths: engine.paths)
+            defer { withExtendedLifetime(lock) {} }
+            try engine.dotfiles.update()
+            print("Dotfiles updated. Linked application configurations use the new files.")
         }
     case "status":
         print("mac-setup — current state (read-only)")
