@@ -107,7 +107,7 @@ If you manage your own Mac with symlinks from a local dot-files checkout, use th
 
 The public profile has no personal snippets, shelf contents, Atuin database,
 authentication session, device bookmarks or private Git history. Karabiner uses
-recipient-relative paths; disabled personal grading macros are removed. A full
+$HOME-relative paths; one generic key-sequence example is disabled by default. A full
 personal Vorssaint transfer can use its native export/import, but exports must be
 reviewed before sharing. Stored settings alone cannot capture its unpersisted defaults.
 

@@ -21,7 +21,9 @@ for path in root.rglob("*"):
 
 karabiner = json.loads((root / "karabiner/karabiner.json").read_text())
 for profile in karabiner["profiles"]:
-    assert all(not rule["description"].startswith("Grading:") for rule in profile["complex_modifications"]["rules"])
+    rules = profile["complex_modifications"]["rules"]
+    assert sum(rule.get("enabled") is False for rule in rules) == 1
+    assert any(rule.get("enabled") is False and rule["description"].startswith("Example (disabled)") for rule in rules)
 
 vorssaint = plistlib.loads((root / "vorssaint/preferences.plist").read_bytes())
 for forbidden in ["shelfItems", "textSnippets", "commandBarUsage", "commandBarQueryHabitKey", "notchDownloadsFolderBookmark", "appVolumes", "NSOSPLastRootDirectory"]:

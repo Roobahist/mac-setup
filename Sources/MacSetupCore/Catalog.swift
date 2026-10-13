@@ -64,7 +64,7 @@ public enum Catalog {
             "Enable launch at login in Raycast Settings if desired."
         ])),
         SetupTask("karabiner", "Apps", "Karabiner-Elements", "Install the keyboard remapping tool.", dependencies: ["homebrew"], action: .install(packages: ["karabiner-elements"], cask: true, app: "Karabiner-Elements")),
-        SetupTask("karabiner-profile", "Apps", "Karabiner configuration", "Apply portable application shortcuts. Replaces the Karabiner config folder after backup; personal grading macros are excluded.", dependencies: ["karabiner"], action: .profile(["karabiner"])),
+        SetupTask("karabiner-profile", "Apps", "Karabiner configuration", "Apply portable application shortcuts. Replaces the Karabiner config folder after backup; one optional generic key-sequence example is disabled.", dependencies: ["karabiner"], action: .profile(["karabiner"])),
         SetupTask("karabiner-access", "Apps", "Karabiner permissions", "Use Karabiner's own setup assistant for its helper permissions and driver approval.", dependencies: ["karabiner-profile"], action: .guide(url: "https://karabiner-elements.pqrs.org/docs/getting-started/installation/", app: "Karabiner-Elements", instructions: [
             "Follow every permission and driver-approval step shown by Karabiner-Elements. The exact helper names and panes depend on its version.",
             "Do not grant permissions to mac-setup as a substitute for Karabiner's helpers.",
