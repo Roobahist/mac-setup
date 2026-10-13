@@ -344,4 +344,12 @@ final class EngineTests: XCTestCase {
         try engine.journal.restore(id)
         XCTAssertTrue(equalPlist(runner.preferences["com.apple.finder"]?["StandardViewSettings"], original))
     }
+
+    func testWatcherPermissionGuideRevealsTheExecutableWithoutGrantingAccess() throws {
+        try engine.openGuide(Catalog.task("wallpaper-access"))
+        XCTAssertTrue(runner.calls.contains(["/usr/bin/open", "-R", paths.state.appendingPathComponent("watcher-runtime/mac-setup").path]))
+        XCTAssertTrue(runner.calls.contains(["/usr/bin/open", "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"]))
+        XCTAssertFalse(runner.calls.contains { $0[0] == "/usr/bin/defaults" || $0[0].contains("tcc") })
+        XCTAssertFalse(Journal.exists(paths.state))
+    }
 }
