@@ -38,7 +38,8 @@ public final class Engine {
                     }
                     return .blocked
                 }
-                if dotfiles.status() == .done || (try !profileMatches(name)) { return .ready }
+                if dotfiles.status() == .done { return .ready }
+                if try !profileMatches(name) { return .ready }
             }
             return .done
         case let .preferences(preferences, _):
