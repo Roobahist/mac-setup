@@ -72,6 +72,9 @@ try:
     read_until(lambda b: b"REVIEW SELECTION" not in active_screen(b)
                and b"Select features" in active_screen(b))
     os.write(master, b"q")
+    # Continue draining the pseudo-terminal while the picker exits; otherwise a
+    # final screen write can fill the PTY buffer and block the child process.
+    read_until(lambda b: b"No tasks selected." in b, timeout=8.0)
     try:
         exit_code = process.wait(timeout=5)
     except subprocess.TimeoutExpired as exc:
