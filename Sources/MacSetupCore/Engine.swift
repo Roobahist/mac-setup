@@ -8,9 +8,11 @@ public final class Engine {
     public let runner: CommandRunning
     public let journal: Journal
     public let dotfiles: LinkedDotfiles
+    private var brewRefreshed = false
+    private let tools: (String) -> String?
 
-    public init(paths: Paths = Paths(), runner: CommandRunning = ProcessRunner(), dotfilesSource: DotfilesSource? = nil) throws {
-        self.paths = paths; self.runner = runner
+    public init(paths: Paths = Paths(), runner: CommandRunning = ProcessRunner(), dotfilesSource: DotfilesSource? = nil, tools: @escaping (String) -> String? = executable) throws {
+        self.paths = paths; self.runner = runner; self.tools = tools
         let record = try Journal(paths: paths, runner: runner)
         journal = record
         dotfiles = LinkedDotfiles(paths: paths, runner: runner, journal: record, source: dotfilesSource)
@@ -20,7 +22,7 @@ public final class Engine {
         switch task.action {
         case let .install(packages, cask, app):
             if let app, appPath(app, home: paths.home) != nil { return .done }
-            guard let brew = executable("brew") else { return .blocked }
+            guard let brew = tools("brew") else { return .blocked }
             return try packages.allSatisfy { package in
                 let result = try runner.run(brew, ["list", cask ? "--cask" : "--formula", "--versions", package])
                 return result.status == 0 && !result.text.isEmpty
@@ -65,7 +67,7 @@ public final class Engine {
             return try journal.launchAgentLoaded(WallpaperWatcher.label) ? .done : .ready
         case .accent: return .ready // A new wallpaper needs a new extraction.
         case .guide:
-            if task.id == "homebrew" { return executable("brew") != nil ? .done : .guided }
+            if task.id == "homebrew" { return tools("brew") != nil ? .done : .guided }
             let recorded = journal.transactions.contains { $0.task == task.id && $0.complete && $0.changes.isEmpty }
             return recorded ? .confirmed : .guided
         }
@@ -119,7 +121,7 @@ public final class Engine {
         do {
             switch task.action {
             case let .install(packages, cask, app):
-                guard let brew = executable("brew") else { throw SetupError("Install Homebrew using its guided task first.") }
+                guard let brew = tools("brew") else { throw SetupError("Install Homebrew using its guided task first.") }
                 if task.id == "vorssaint" {
                     #if arch(x86_64)
                     throw SetupError("Vorssaint requires Apple silicon.")
@@ -178,6 +180,37 @@ public final class Engine {
         } catch {
             throw SetupError("\(error)\nRecovery record: \(id). Run mac-setup restore \(id) to undo recorded changes; installed apps remain installed.")
         }
+    }
+
+    public func upgradePreview(_ task: SetupTask) throws -> [String] {
+        guard task.updatable else { throw SetupError("\(task.title) does not support package updates.") }
+        if task.id == "homebrew" { return ["Update Homebrew: brew update", "Refresh Homebrew itself and package metadata. Installed packages are not all upgraded."] }
+        guard case let .install(packages, cask, _) = task.action else { throw SetupError("Not a package task.") }
+        return ["Update \(task.title): brew upgrade \(cask ? "--cask" : "--formula") \(packages.joined(separator: " "))", "Only these packages are requested. Homebrew can update their required dependencies. Package updates cannot be rolled back by mac-setup restore."]
+    }
+
+    @discardableResult
+    public func upgrade(_ task: SetupTask) throws -> String {
+        _ = try upgradePreview(task)
+        guard let brew = tools("brew") else { throw SetupError("Install Homebrew before updating packages.") }
+        if case let .install(packages, cask, _) = task.action {
+            for package in packages {
+                let result = try runner.run(brew, ["list", cask ? "--cask" : "--formula", "--versions", package])
+                guard result.status == 0 && !result.text.isEmpty else {
+                    throw SetupError("\(package) is not managed by Homebrew. Use the app's own updater or select its installation separately.")
+                }
+            }
+        }
+        let id = try journal.begin("upgrade:" + task.id)
+        if !brewRefreshed || task.id == "homebrew" {
+            try runner.checked(brew, ["update"], interactive: true)
+            brewRefreshed = true
+        }
+        if case let .install(packages, cask, _) = task.action {
+            try runner.checked(brew, ["upgrade", cask ? "--cask" : "--formula"] + packages, interactive: true)
+        }
+        try journal.finish(id)
+        return id
     }
 
     public func confirm(_ task: SetupTask) throws {

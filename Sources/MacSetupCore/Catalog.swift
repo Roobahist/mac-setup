@@ -31,6 +31,11 @@ public struct SetupTask {
     public init(_ id: String, _ category: String, _ title: String, _ summary: String, dependencies: [String] = [], action: TaskAction) {
         self.id = id; self.category = category; self.title = title; self.summary = summary; self.dependencies = dependencies; self.action = action
     }
+    public var updatable: Bool {
+        if id == "homebrew" { return true }
+        if case .install = action { return true }
+        return false
+    }
     public var guided: Bool { if case .guide = action { return true }; return false }
 }
 
@@ -140,13 +145,14 @@ public enum Catalog {
         return task
     }
 
-    public static func ordered(_ ids: [String]) throws -> [SetupTask] {
+    public static func ordered(_ ids: [String], includingDependencies: Bool = true) throws -> [SetupTask] {
+        let requested = Set(ids)
         var result: [SetupTask] = []; var visiting = Set<String>(); var visited = Set<String>()
         func visit(_ id: String) throws {
             if visited.contains(id) { return }
             guard visiting.insert(id).inserted else { throw SetupError("Task dependency cycle: \(id)") }
             let item = try task(id)
-            for dependency in item.dependencies { try visit(dependency) }
+            for dependency in item.dependencies where includingDependencies || requested.contains(dependency) { try visit(dependency) }
             visiting.remove(id); visited.insert(id); result.append(item)
         }
         for id in ids { try visit(id) }

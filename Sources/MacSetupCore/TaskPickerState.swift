@@ -37,6 +37,9 @@ public enum SetupPreset: String, CaseIterable {
 public struct TaskPickerState {
     public let tasks: [SetupTask]
     public private(set) var selected: Set<String>
+    public private(set) var updates = Set<String>()
+    public var available = Set<String>()
+    public var unknown = Set<String>()
     public private(set) var categoryIndex = 0
     public private(set) var cursorIndex = 0
     public private(set) var query = ""
@@ -105,6 +108,7 @@ public struct TaskPickerState {
     public mutating func choose(_ preset: SetupPreset) {
         self.preset = preset
         selected = Self.withDependencies(preset.ids(in: tasks), in: tasks)
+        updates.removeAll()
         cursorIndex = 0
     }
 
@@ -116,43 +120,58 @@ public struct TaskPickerState {
     public mutating func toggle(_ id: String) {
         guard tasks.contains(where: { $0.id == id }) else { return }
         if selected.contains(id) {
-            var removed: Set<String> = [id]
-            var changed = true
-            while changed {
-                changed = false
-                for task in tasks where !removed.contains(task.id) &&
-                    task.dependencies.contains(where: removed.contains) {
-                    removed.insert(task.id)
-                    changed = true
-                }
-            }
-            selected.subtract(removed)
+            selected.remove(id)
+            removeUnsatisfiedChildren()
         } else {
-            selected.formUnion(Self.withDependencies([id], in: tasks))
+            selected.formUnion(Self.withDependencies([id], in: tasks, available: available.union(unknown)))
         }
+        updates.formIntersection(selected)
         preset = nil
     }
 
     public mutating func toggleVisible() {
         let ids = Set(visibleTasks.map(\.id))
         guard !ids.isEmpty else { return }
-        if !ids.isDisjoint(with: selected) && ids.intersection(selected).count >= (ids.count + 1) / 2 {
-            for id in tasks.map(\.id) where ids.contains(id) && selected.contains(id) {
-                toggle(id)
-            }
+        if ids.isSubset(of: selected) {
+            selected.subtract(ids)
+            removeUnsatisfiedChildren()
         } else {
-            selected.formUnion(Self.withDependencies(ids, in: tasks))
+            selected.formUnion(Self.withDependencies(ids, in: tasks, available: available.union(unknown)))
+        }
+        updates.formIntersection(selected)
+        preset = nil
+    }
+
+    public mutating func toggleUpdate(_ id: String) {
+        guard available.contains(id), tasks.first(where: { $0.id == id })?.updatable == true else { return }
+        if updates.contains(id) { updates.remove(id) }
+        else {
+            selected.formUnion(Self.withDependencies([id], in: tasks, available: available.union(unknown)))
+            updates.insert(id)
         }
         preset = nil
     }
 
-    private static func withDependencies(_ ids: Set<String>, in tasks: [SetupTask]) -> Set<String> {
+    private mutating func removeUnsatisfiedChildren() {
+        var changed = true
+        while changed {
+            changed = false
+            for task in tasks where selected.contains(task.id) {
+                if task.dependencies.contains(where: { !selected.contains($0) && !available.contains($0) && !unknown.contains($0) }) {
+                    selected.remove(task.id)
+                    changed = true
+                }
+            }
+        }
+    }
+
+    private static func withDependencies(_ ids: Set<String>, in tasks: [SetupTask], available: Set<String> = []) -> Set<String> {
         let byID = Dictionary(uniqueKeysWithValues: tasks.map { ($0.id, $0) })
         var result = ids
         var pending = Array(ids)
         while let next = pending.popLast() {
             guard let task = byID[next] else { continue }
-            for dependency in task.dependencies where result.insert(dependency).inserted {
+            for dependency in task.dependencies where !available.contains(dependency) && result.insert(dependency).inserted {
                 pending.append(dependency)
             }
         }

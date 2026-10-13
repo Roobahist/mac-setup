@@ -8,9 +8,17 @@ final class FakeRunner: CommandRunning {
     var failWrites = false
     var jobs = Set<String>()
     var disabledJobs = Set<String>()
+    var managedPackages = Set<String>()
 
     func run(_ executable: String, _ args: [String], interactive: Bool, input: Data?) throws -> CommandResult {
         calls.append([executable] + args)
+        if executable == "/fake/brew" {
+            if args.first == "list" {
+                return CommandResult(status: managedPackages.contains(args.last!) ? 0 : 1,
+                                     output: Data((managedPackages.contains(args.last!) ? "1.0" : "").utf8))
+            }
+            return CommandResult(status: 0)
+        }
         if executable == "/bin/launchctl" {
             let label = args[1].components(separatedBy: "/").last!
             switch args[0] {
@@ -332,4 +340,27 @@ final class EngineTests: XCTestCase {
         XCTAssertTrue(runner.calls.contains(["/usr/bin/open", "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"]))
         XCTAssertFalse(runner.calls.contains { $0[0].contains("tcc") || $0[0] == "/bin/launchctl" })
     }
+    func testHomebrewUpdateDoesNotUpgradeAllPackages() throws {
+        engine = try Engine(paths: paths, runner: runner, tools: { $0 == "brew" ? "/fake/brew" : nil })
+        _ = try engine.upgrade(Catalog.task("homebrew"))
+        XCTAssertTrue(runner.calls.contains(["/fake/brew", "update"]))
+        XCTAssertFalse(runner.calls.contains { $0.contains("upgrade") })
+    }
+
+    func testPackageUpdatesTargetOnlySelectedManagedPackages() throws {
+        engine = try Engine(paths: paths, runner: runner, tools: { $0 == "brew" ? "/fake/brew" : nil })
+        runner.managedPackages = ["atuin", "alacritty"]
+        _ = try engine.upgrade(Catalog.task("atuin"))
+        _ = try engine.upgrade(Catalog.task("alacritty"))
+        XCTAssertEqual(runner.calls.filter { $0 == ["/fake/brew", "update"] }.count, 1)
+        XCTAssertTrue(runner.calls.contains(["/fake/brew", "upgrade", "--formula", "atuin"]))
+        XCTAssertTrue(runner.calls.contains(["/fake/brew", "upgrade", "--cask", "alacritty"]))
+    }
+
+    func testUnmanagedAppsAreNotTakenOverForUpdates() throws {
+        engine = try Engine(paths: paths, runner: runner, tools: { $0 == "brew" ? "/fake/brew" : nil })
+        XCTAssertThrowsError(try engine.upgrade(Catalog.task("raycast")))
+        XCTAssertFalse(runner.calls.contains { $0.contains("update") || $0.contains("upgrade") })
+    }
+
 }
