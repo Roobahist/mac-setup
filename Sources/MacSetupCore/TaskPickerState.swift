@@ -59,12 +59,39 @@ public struct TaskPickerState {
 
     public var category: String { categories[categoryIndex] }
 
+    /// Show each task once beneath its first prerequisite. Other prerequisites
+    /// remain explicit in the row, since dependencies form a graph rather than a tree.
     public var visibleTasks: [SetupTask] {
-        tasks.filter { task in
+        let visible = tasks.filter { task in
             (categoryIndex == 0 || task.category == category) &&
             (query.isEmpty || [task.id, task.title, task.summary, task.category]
                 .contains { $0.localizedCaseInsensitiveContains(query) })
         }
+        let visibleIDs = Set(visible.map(\.id))
+        var result: [SetupTask] = []
+        var visited = Set<String>()
+        func append(_ task: SetupTask) {
+            guard visited.insert(task.id).inserted else { return }
+            result.append(task)
+            for child in visible where child.dependencies.first == task.id { append(child) }
+        }
+        for task in visible where task.dependencies.first.map({ !visibleIDs.contains($0) }) ?? true { append(task) }
+        // Defensive fallback for an invalid cycle: keep every task accessible.
+        for task in visible { append(task) }
+        return result
+    }
+
+    public func hierarchyPrefix(for task: SetupTask) -> String {
+        guard !task.dependencies.isEmpty else { return "" }
+        let byID = Dictionary(uniqueKeysWithValues: visibleTasks.map { ($0.id, $0) })
+        var depth = 0
+        var parent = task.dependencies.first
+        var visited: Set<String> = [task.id]
+        while let id = parent, let ancestor = byID[id], visited.insert(id).inserted {
+            depth += 1
+            parent = ancestor.dependencies.first
+        }
+        return String(repeating: "  ", count: depth) + "↳ "
     }
 
     public var focusedTask: SetupTask? {

@@ -49,6 +49,11 @@ Run `mac-setup` or `mac-setup setup` in a terminal to open the full-screen picke
 - **Enter**: review the selection, then Enter again to begin. **B** returns to editing.
 - **Q** or **Ctrl+C**: cancel without making changes.
 
+Children are grouped beneath their primary parent with indentation and branch
+arrows. Each child row lists all parent task IDs, including shared dependencies;
+the focused task shows which parents are installed or ready. Parent references stay
+visible even when category or search filters hide the parent itself.
+
 The picker first inspects installed packages and completed setup tasks in the
 background. Navigation stays responsive while selection changes wait for that scan.
 Unchecking an installed parent leaves its children selected. Unchecking a missing

@@ -110,6 +110,28 @@ final class TaskPickerStateTests: XCTestCase {
         XCTAssertTrue(state.updates.isEmpty)
     }
 
+    func testHierarchyGroupsChildrenWithoutDuplicatingSharedDependencies() {
+        let state = TaskPickerState()
+        let ids = state.visibleTasks.map(\.id)
+        XCTAssertEqual(Set(ids).count, Catalog.tasks.count)
+        XCTAssertEqual(ids.count, Catalog.tasks.count)
+        XCTAssertEqual(ids.first, "homebrew")
+        XCTAssertEqual(ids[1], "fonts")
+        XCTAssertLessThan(ids.firstIndex(of: "aerospace")!, ids.firstIndex(of: "aerospace-profile")!)
+        XCTAssertLessThan(ids.firstIndex(of: "aerospace-profile")!, ids.firstIndex(of: "aerospace-access")!)
+        XCTAssertEqual(state.hierarchyPrefix(for: try! Catalog.task("homebrew")), "")
+        XCTAssertEqual(state.hierarchyPrefix(for: try! Catalog.task("aerospace-profile")), "    ↳ ")
+    }
+
+    func testFilteredChildrenRemainVisibleWithTheirParentReferences() {
+        var state = TaskPickerState()
+        for letter in "sketchybar-profile" { state.appendSearch(letter) }
+        XCTAssertEqual(state.visibleTasks.map(\.id), ["sketchybar-profile"])
+        let task = state.visibleTasks[0]
+        XCTAssertEqual(task.dependencies, ["sketchybar", "aerospace-profile", "fonts"])
+        XCTAssertEqual(state.hierarchyPrefix(for: task), "↳ ")
+    }
+
     func testCategoryFilterAndSearchDoNotDiscardSelections() {
         var state = TaskPickerState(preset: .developer)
         let original = state.selected
@@ -130,7 +152,7 @@ final class TaskPickerStateTests: XCTestCase {
         XCTAssertNil(state.focusedTask)
         state.clearSearch()
         state.move(-1)
-        XCTAssertEqual(state.focusedTask?.id, "wallpaper-access")
+        XCTAssertEqual(state.focusedTask?.id, state.visibleTasks.last?.id)
     }
 
     func testMinimalAndDeveloperPresetsAreDistinct() {

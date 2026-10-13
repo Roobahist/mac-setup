@@ -306,6 +306,7 @@ struct TaskPickerUI {
         } else if helpVisible {
             lines.append("  HELP")
             for line in [
+                "  Indented arrows show children; parent IDs show every dependency.",
                 "  Installed parents can stay unchecked while their children are selected.",
                 "  Unchecking a missing parent also unchecks children that need it.",
                 "  U toggles updates for an installed Homebrew or package task.",
@@ -323,7 +324,8 @@ struct TaskPickerUI {
             }
 
             let visible = state.visibleTasks
-            let available = max(3, height - 14)
+            let extraParentLines = max(0, (state.focusedTask?.dependencies.count ?? 0) - 1)
+            let available = max(3, height - 14 - extraParentLines)
             let start = max(0, min(max(0, visible.count - available), state.cursorIndex - available / 2))
             if visible.isEmpty {
                 lines.append(tint("  No matching tasks. Press Esc to clear the filter.", "33"))
@@ -335,8 +337,9 @@ struct TaskPickerUI {
                 let type = state.updates.contains(task.id) ? "UPDATE " : (task.guided ? "GUIDED " : "AUTO   ")
                 let prefix = focused ? " ❯ " : "   "
                 let marker = checked ? "[x]" : "[ ]"
-                let title = clip(prefix + marker + "  " + task.title +
-                                 "  " + type, to: width - 2)
+                let parents = task.dependencies.isEmpty ? "" : "  [parents: " + task.dependencies.joined(separator: ", ") + "]"
+                let title = clip(prefix + marker + "  " + state.hierarchyPrefix(for: task) + task.title +
+                                 "  " + type + parents, to: width - 2)
                 lines.append(focused ? tint(title, "1;46;30") : (checked ? title : tint(title, "2")))
             }
 
@@ -346,7 +349,11 @@ struct TaskPickerUI {
                              tint("   [\(taskStatus(task))]", "2"))
                 lines.append("  " + clip(task.summary, to: width - 4))
                 if !task.dependencies.isEmpty {
-                    lines.append(tint("  Needs: " + task.dependencies.map { state.available.contains($0) ? "\($0) (installed/ready)" : $0 }.joined(separator: ", "), "2"))
+                    for (index, parent) in task.dependencies.enumerated() {
+                        let label = state.tasks.first { $0.id == parent }?.title ?? parent
+                        let readiness = state.available.contains(parent) ? "installed/ready" : (state.unknown.contains(parent) ? "status unknown" : "not ready")
+                        lines.append(tint((index == 0 ? "  Parents: " : "           ") + label + " [" + parent + "] — " + readiness, "2"))
+                    }
                 }
             } else {
                 lines.append(tint("  Choose a task or switch categories.", "2"))

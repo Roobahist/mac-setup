@@ -69,9 +69,11 @@ try:
     os.write(master, b"\x1b[B")  # CSI cursor down
     read_until(
         lambda b: bool(re.search(
-            rb"\x1b\[1;46;30m[^\r\n]*Link public dotfiles", active_screen(b)
+            rb"\x1b\[1;46;30m[^\r\n]*Interface and terminal fonts", active_screen(b)
         )), timeout=4.0
     )
+    assert "↳ Interface and terminal fonts".encode() in active_screen(bytes(captured))
+    assert b"[parents: homebrew]" in active_screen(bytes(captured))
     assert time.monotonic() - start < 4.0, "Cursor movement is blocked by status checks"
 
     os.write(master, b"\x1bOA")  # SS3 cursor up
