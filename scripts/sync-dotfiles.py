@@ -52,7 +52,7 @@ def build_profile(repository, destination):
 
 
 def snapshot(directory):
-    return {path.relative_to(directory).as_posix(): path.read_bytes()
+    return {path.relative_to(directory).as_posix(): (path.read_bytes(), bool(path.stat().st_mode & 0o111))
             for path in directory.rglob("*") if path.is_file()}
 
 
