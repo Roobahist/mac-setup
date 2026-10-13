@@ -2,10 +2,11 @@ import XCTest
 @testable import MacSetupCore
 
 final class TaskPickerStateTests: XCTestCase {
-    func testCompletePresetExcludesUnimplementedItems() {
+    func testCompletePresetIncludesWatcherPermissionsAndExcludesRemovedDockTask() {
         let state = TaskPickerState()
         XCTAssertTrue(state.selected.contains("sketchybar-start"))
-        XCTAssertFalse(state.selected.contains("wallpaper-watcher"))
+        XCTAssertTrue(state.selected.contains("wallpaper-watcher"))
+        XCTAssertTrue(state.selected.contains("wallpaper-access"))
         XCTAssertFalse(state.selected.contains("dock-special-items"))
     }
 
@@ -48,7 +49,7 @@ final class TaskPickerStateTests: XCTestCase {
         XCTAssertNil(state.focusedTask)
         state.clearSearch()
         state.move(-1)
-        XCTAssertEqual(state.focusedTask?.id, "dock-special-items")
+        XCTAssertEqual(state.focusedTask?.id, "wallpaper-access")
     }
 
     func testMinimalAndDeveloperPresetsAreDistinct() {

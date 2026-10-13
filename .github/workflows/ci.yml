@@ -14,20 +14,20 @@ jobs:
         with:
           python-version: '3.12'
       - name: Test with isolated homes and fake system commands
-        run: swift test
+        run: swift test --build-system native
       - name: Smoke-test CLI commands
         run: |
-          swift run mac-setup --version
-          swift run mac-setup profiles
-          swift run mac-setup plan --preset minimal > /dev/null
-          swift run mac-setup dotfiles status
+          swift run --build-system native mac-setup --version
+          swift run --build-system native mac-setup profiles
+          swift run --build-system native mac-setup plan --preset minimal > /dev/null
+          swift run --build-system native mac-setup dotfiles status
       - name: Test keyboard-driven terminal navigation
-        run: python3 scripts/test-interactive-picker.py "$(swift build --show-bin-path)/mac-setup"
+        run: python3 scripts/test-interactive-picker.py "$(swift build --build-system native --show-bin-path)/mac-setup"
       - name: Validate public profile
         run: python3 scripts/check-profile.py
       - name: Validate shell scripts
         run: |
-          bash -n scripts/package.sh scripts/install.sh
+          bash -n scripts/package.sh scripts/install.sh scripts/build.sh install.sh mac-setup
           find Sources/MacSetupCore/Resources/Profile -name '*.sh' -exec bash -n {} \;
       - name: Build a downloadable preview
         run: bash scripts/package.sh arm64 preview

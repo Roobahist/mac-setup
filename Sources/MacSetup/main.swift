@@ -19,12 +19,18 @@ Usage:
   mac-setup update              Reapply previously installed bundled profiles
   mac-setup backups             List recovery records
   mac-setup restore [backup ID]  Restore one record (latest by default)
+  mac-setup watch               Run your existing accent watcher in the foreground
+  mac-setup watcher-status      Inspect its startup service and logs
+  mac-setup watcher-stop        Stop it until login or reload
+  mac-setup watcher-disable     Disable it across logins
+  mac-setup watcher-enable      Enable the installed watcher
 
 Options:
   --preset NAME                 complete, minimal, productivity, developer
   --dry-run                     Preview instead of making changes
   --yes                         Approve automatic tasks; guided tasks stay pending
   --image PATH                  Choose an image for wallpaper-colors
+  --once                        With watch: refresh once, then exit
   --force                       With restore only: discard edits made after setup
   --help                        Show help
   --version                     Show version
@@ -42,13 +48,14 @@ struct Options {
     var yes = false
     var force = false
     var image: URL?
+    var once = false
 
     init(_ arguments: [String]) throws {
         var args = arguments
         if args.contains("--help") || args.first == "help" { command = "help"; return }
         if args.contains("--version") { command = "version"; return }
         if let first = args.first, !first.hasPrefix("--") { command = args.removeFirst() }
-        let commands = ["menu", "list", "status", "plan", "setup", "update", "backups", "restore", "profiles", "dotfiles"]
+        let commands = ["menu", "list", "status", "plan", "setup", "update", "backups", "restore", "profiles", "dotfiles", "watch", "watcher-status", "watcher-stop", "watcher-disable", "watcher-enable"]
         guard commands.contains(command) else { throw SetupError("Unknown command '\(command)'. Run mac-setup --help.") }
         while !args.isEmpty {
             let value = args.removeFirst()
@@ -62,6 +69,7 @@ struct Options {
             case "--dry-run": dryRun = true
             case "--yes": yes = true
             case "--force": force = true
+            case "--once": once = true
             case "--image":
                 guard !args.isEmpty, !args[0].hasPrefix("--") else { throw SetupError("--image requires an image path.") }
                 image = URL(fileURLWithPath: (args.removeFirst() as NSString).expandingTildeInPath)
@@ -79,8 +87,10 @@ struct Options {
         if preset != nil && !["menu", "setup", "plan"].contains(command) {
             throw SetupError("--preset applies only to setup or plan.")
         }
-        if image != nil && !["setup", "plan"].contains(command) { throw SetupError("--image is only valid with setup or plan.") }
-        if ["status", "list", "backups", "menu", "profiles"].contains(command) && !ids.isEmpty { throw SetupError("\(command) takes no task IDs.") }
+        if image != nil && !["setup", "plan", "watch"].contains(command) { throw SetupError("--image is only valid with setup, plan or watch.") }
+        if ["status", "list", "backups", "menu", "profiles", "watch", "watcher-status", "watcher-stop", "watcher-disable", "watcher-enable"].contains(command) && !ids.isEmpty { throw SetupError("\(command) takes no task IDs.") }
+        if once && command != "watch" { throw SetupError("--once is only valid with watch.") }
+        if command == "watch" && (dryRun || yes) { throw SetupError("Use plan wallpaper-watcher to preview; watch runs directly.") }
         if command == "restore" && ids.count > 1 { throw SetupError("Restore one backup at a time, newest first.") }
         if command == "update" && !ids.isEmpty { throw SetupError("update takes no IDs; use setup for selected profiles.") }
         if command == "dotfiles" && (ids.count > 1 || (ids.first != nil && !["status", "update"].contains(ids[0]))) {
@@ -152,9 +162,6 @@ func setup(_ ids: [String], engine: Engine, options: Options) throws {
                         print("Verified: \(task.title)"); continue
                     }
                     print("Still pending."); blocked.insert(task.id)
-                } else if task.id == "wallpaper-watcher" || task.id == "dock-special-items" {
-                    print("This task contains unimplemented items and remains pending.")
-                    blocked.insert(task.id)
                 } else if ask("Have you completed and tested these steps?") {
                     try engine.confirm(task); print("Recorded as user confirmed; not automatically verified.")
                 } else { blocked.insert(task.id) }
@@ -180,6 +187,33 @@ do {
     guard getuid() != 0 else { throw SetupError("Run mac-setup as your normal user, not with sudo. Individual installers request privileges themselves.") }
     let engine = try Engine()
     switch options.command {
+    case "watch":
+        try WallpaperWatcher.run(engine: engine, image: options.image, once: options.once)
+    case "watcher-status":
+        print(try engine.journal.launchAgentLoaded(WallpaperWatcher.label) ? "Startup watcher: registered" : "Startup watcher: not registered")
+        print("Registration does not verify wallpaper access. Change wallpapers to test the visible result.")
+        for name in ["wallpaper-accent-watcher.log", "wallpaper-accent-watcher.stdout.log", "wallpaper-accent-watcher.stderr.log"] {
+            let file = URL(fileURLWithPath: "/tmp").appendingPathComponent(name)
+            print("\n\(file.path)")
+            if let text = try? String(contentsOf: file, encoding: .utf8) {
+                print(text.components(separatedBy: "\n").suffix(12).joined(separator: "\n"))
+            } else { print("No log yet.") }
+        }
+    case "watcher-stop":
+        if options.dryRun { print("Would unload \(WallpaperWatcher.label). The startup plist would remain."); break }
+        guard options.yes || (isatty(STDIN_FILENO) != 0 && ask("Stop the startup wallpaper watcher?")) else { print("Cancelled."); break }
+        let lock = try SetupLock(paths: engine.paths)
+        defer { withExtendedLifetime(lock) {} }
+        try engine.journal.stopLaunchAgent(WallpaperWatcher.label)
+        print("Stopped. The startup plist remains; setup wallpaper-watcher can register it again. Restore its backup to remove this installation.")
+    case "watcher-disable", "watcher-enable":
+        let enabled = options.command == "watcher-enable"
+        if options.dryRun { print("Would \(enabled ? "enable" : "disable") \(WallpaperWatcher.label) for this user across logins."); break }
+        guard options.yes || (isatty(STDIN_FILENO) != 0 && ask("\(enabled ? "Enable" : "Disable") the startup wallpaper watcher?")) else { print("Cancelled."); break }
+        let lock = try SetupLock(paths: engine.paths)
+        defer { withExtendedLifetime(lock) {} }
+        try WallpaperWatcher.setEnabled(enabled, engine: engine)
+        print(enabled ? "Enabled. Change wallpapers and inspect watcher-status to test." : "Disabled across logins. Run watcher-enable to resume, or restore the installation backup to uninstall.")
     case "list": showList()
     case "profiles":
         for preset in SetupPreset.allCases {

@@ -8,6 +8,7 @@ protected app container.
 
 from __future__ import annotations
 
+import shutil
 import colorsys
 import math
 import re
@@ -17,7 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-MAGICK = "/opt/homebrew/bin/magick"
+MAGICK = shutil.which("magick") or "magick"
 @dataclass(frozen=True)
 class Swatch:
     fraction: float

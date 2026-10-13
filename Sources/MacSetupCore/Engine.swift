@@ -60,6 +60,9 @@ public final class Engine {
         case .service:
             guard executable("sketchybar") != nil else { return .blocked }
             return try journal.serviceStarted() ? .done : .ready
+        case .wallpaperWatcher:
+            guard WallpaperWatcher.executable(paths: paths) != nil else { return .blocked }
+            return try journal.launchAgentLoaded(WallpaperWatcher.label) ? .done : .ready
         case .accent: return .ready // A new wallpaper needs a new extraction.
         case .guide:
             if task.id == "homebrew" { return executable("brew") != nil ? .done : .guided }
@@ -97,6 +100,10 @@ public final class Engine {
         case .service: lines.append("Start or restart the SketchyBar user service. Never run Homebrew as root.")
         case .accent:
             lines.append("Read the current wallpaper locally and write a validated accent into the local cache, without editing tracked dotfiles. No background watcher is installed.")
+        case .wallpaperWatcher:
+            lines.append("Use the existing WallpaperAccentWatcher.app in ~/Applications or /Applications. Preserve its two-second checks and debounce behavior; no replacement runtime is installed.")
+            lines.append("An already registered app and its launch configuration are left unchanged. Otherwise, register it at login after backing up its existing plist.")
+            lines.append("Use watcher-status to check logs, watcher-disable to disable it across logins, and watcher-enable to resume. Restore only undoes changes recorded by mac-setup.")
         case let .guide(url, app, instructions):
             if let app { lines.append("Open \(app).") }
             if let url { lines.append("Open: \(url)") }
@@ -163,6 +170,7 @@ public final class Engine {
             case .atuinShell: try applyAtuinShell(transaction: id)
             case .service: try journal.startService(transaction: id)
             case .accent: try applyAccent(transaction: id, image: image)
+            case .wallpaperWatcher: try installWallpaperWatcher(transaction: id, image: image)
             case .guide: break
             }
             try journal.finish(id)
@@ -179,6 +187,9 @@ public final class Engine {
 
     public func openGuide(_ task: SetupTask) throws {
         guard case let .guide(url, app, _) = task.action else { return }
+        if task.id == "wallpaper-access", let executable = WallpaperWatcher.executable(paths: paths) {
+            try runner.checked("/usr/bin/open", ["-R", executable.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().path])
+        }
         if let app { try runner.checked("/usr/bin/open", ["-a", app]) }
         if let url {
             let result = try runner.run("/usr/bin/open", [url])
@@ -342,5 +353,25 @@ public final class Engine {
                 try runner.checked(sketchybar, ["--trigger", "aerospace_workspace_change", "FOCUSED_WORKSPACE=" + focused.text])
             }
         }
+    }
+    private func installWallpaperWatcher(transaction: String, image: URL?) throws {
+        guard WallpaperWatcher.executable(paths: paths) != nil else {
+            throw SetupError("Install your existing WallpaperAccentWatcher.app in ~/Applications or /Applications first. mac-setup does not install a replacement watcher.")
+        }
+        guard !(try journal.launchAgentLoaded(WallpaperWatcher.replacementLabel)) else {
+            throw SetupError("Stop the mac-setup replacement watcher before using WallpaperAccentWatcher.")
+        }
+        if try journal.launchAgentLoaded(WallpaperWatcher.label) { return }
+        let extractor = paths.config.appendingPathComponent("unsplash/get_wallpaper_accent.py")
+        if !Journal.exists(extractor) {
+            try journal.write(extractor, data: Data(contentsOf: paths.profile.appendingPathComponent("unsplash/get_wallpaper_accent.py")), transaction: transaction)
+        }
+        let plist = paths.home.appendingPathComponent("Library/LaunchAgents/" + WallpaperWatcher.label + ".plist")
+        try journal.suspendLaunchAgent(WallpaperWatcher.label, plist: plist, transaction: transaction)
+        if !Journal.exists(plist) || image != nil {
+            try journal.write(plist, data: WallpaperWatcher.launchPlist(paths: paths, image: image), transaction: transaction)
+        }
+        try WallpaperWatcher.setEnabled(true, engine: self)
+        guard try journal.launchAgentLoaded(WallpaperWatcher.label) else { throw SetupError("WallpaperAccentWatcher registration could not be verified.") }
     }
 }

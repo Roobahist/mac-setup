@@ -8,7 +8,7 @@ public enum SetupPreset: String, CaseIterable {
 
     public var summary: String {
         switch self {
-        case .complete: return "Everything supported, excluding unfinished tasks"
+        case .complete: return "All setup tasks, including permissions and checks"
         case .minimal: return "Homebrew, fonts, dark mode, and Git ignores"
         case .productivity: return "Windows, applications, and macOS appearance"
         case .developer: return "Terminal, shell history, fonts, and Git"
@@ -19,13 +19,13 @@ public enum SetupPreset: String, CaseIterable {
         let ids: Set<String>
         switch self {
         case .complete:
-            ids = Set(tasks.map(\.id)).subtracting(["wallpaper-watcher", "dock-special-items"])
+            ids = Set(tasks.map(\.id))
         case .minimal:
             ids = ["homebrew", "fonts", "dark-mode", "git-ignore"]
         case .productivity:
             ids = Set(tasks.filter {
                 ["Window management", "Apps", "Appearance", "Finder"].contains($0.category)
-            }.map(\.id)).subtracting(["wallpaper-watcher", "dock-special-items"]).union(["dotfiles-linked"])
+            }.map(\.id)).union(["dotfiles-linked"])
         case .developer:
             ids = ["homebrew", "fonts", "dotfiles-linked", "alacritty", "alacritty-profile",
                    "atuin", "atuin-profile", "atuin-shell", "git-ignore"]

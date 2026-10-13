@@ -3,7 +3,7 @@ import CryptoKit
 import Darwin
 import CoreFoundation
 
-public enum ChangeKind: String, Codable { case path, preference, git, service }
+public enum ChangeKind: String, Codable { case path, preference, git, service, launchAgent }
 
 public struct SavedChange: Codable {
     public let kind: ChangeKind
@@ -156,6 +156,27 @@ public final class Journal {
         guard equalPlist(try preference(domain, key), value) else { throw SetupError("Preference verification failed: \(domain) \(key)") }
     }
 
+    public func launchAgentLoaded(_ label: String) throws -> Bool {
+        try runner.run("/bin/launchctl", ["print", "gui/\(getuid())/\(label)"]).status == 0
+    }
+
+    public func suspendLaunchAgent(_ label: String, plist: URL, transaction: String) throws {
+        let old = try launchAgentLoaded(label)
+        try add(SavedChange(kind: .launchAgent, target: label, key: plist.path, backup: nil,
+            before: try plistData(old), after: try plistData(true), restored: false), to: transaction)
+        if old { try stopLaunchAgent(label) }
+    }
+
+    public func stopLaunchAgent(_ label: String) throws {
+        if try launchAgentLoaded(label) {
+            try runner.checked("/bin/launchctl", ["bootout", "gui/\(getuid())/\(label)"])
+        }
+    }
+
+    public func loadLaunchAgent(_ plist: URL) throws {
+        try runner.checked("/bin/launchctl", ["bootstrap", "gui/\(getuid())", plist.path])
+    }
+
     public func gitValues(_ key: String) throws -> [String] {
         let result = try runner.run("/usr/bin/git", ["config", "--global", "--get-all", key])
         if result.status == 1 { return [] }
@@ -205,6 +226,9 @@ public final class Journal {
             }
             if change.kind == .path { try refuseSymlinkParents(URL(fileURLWithPath: change.target)) }
         }
+        for change in transactions[index].changes where change.kind == .launchAgent && !change.restored {
+            try stopLaunchAgent(change.target)
+        }
         for changeIndex in transactions[index].changes.indices.reversed() {
             let change = transactions[index].changes[changeIndex]
             if change.restored { continue }
@@ -227,6 +251,8 @@ public final class Journal {
                 guard let brew = executable("brew") else { throw SetupError("Homebrew is required to restore the service state.") }
                 let wasStarted = try plistValue(change.before!) as? Bool ?? false
                 try runner.checked(brew, ["services", wasStarted ? "start" : "stop", "sketchybar"], interactive: true)
+            case .launchAgent:
+                if try plistValue(change.before!) as? Bool == true { try loadLaunchAgent(URL(fileURLWithPath: change.key!)) }
             }
             transactions[index].changes[changeIndex].restored = true
             try save()
@@ -239,6 +265,7 @@ public final class Journal {
         case .preference: return try preference(change.target, change.key!).map(plistData)
         case .git: return try plistData(gitValues(change.key!))
         case .service: return try plistData(serviceStarted())
+        case .launchAgent: return try plistData(launchAgentLoaded(change.target))
         }
     }
 

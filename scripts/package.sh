@@ -7,10 +7,8 @@ VERSION="${2:-0.1.0}"
 case "$ARCH" in arm64|x86_64) ;; *) echo "Unsupported architecture: $ARCH" >&2; exit 1 ;; esac
 if [[ ! "$VERSION" =~ ^[a-zA-Z0-9._-]+$ ]]; then echo "Invalid version" >&2; exit 1; fi
 
-BUILD_DIR="${MAC_SETUP_BUILD_DIR:-.build}"
-SWIFT_OPTIONS=(--disable-sandbox --scratch-path "$BUILD_DIR" --cache-path "$BUILD_DIR/cache" --config-path "$BUILD_DIR/config" --security-path "$BUILD_DIR/security")
-swift build -c release --arch "$ARCH" "${SWIFT_OPTIONS[@]}"
-BIN_DIR="$(swift build -c release --arch "$ARCH" "${SWIFT_OPTIONS[@]}" --show-bin-path)"
+bash scripts/build.sh -c release --arch "$ARCH"
+BIN_DIR="$(bash scripts/build.sh -c release --arch "$ARCH" --show-bin-path)"
 PACKAGE="mac-setup-$VERSION-macos-$ARCH"
 DEST="dist/$PACKAGE"
 mkdir -p "$DEST"

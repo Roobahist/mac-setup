@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+BUILD_DIR="${MAC_SETUP_BUILD_DIR:-.build/native}"
+case "$BUILD_DIR" in /*) BIN="$BUILD_DIR/release/mac-setup" ;; *) BIN="$ROOT/$BUILD_DIR/release/mac-setup" ;; esac
+if [[ ! -x "$BIN" ]]; then
+  bash "$ROOT/scripts/build.sh" -c release
+fi
+exec "$BIN" "$@"
