@@ -135,12 +135,15 @@ private final class TaskStatusLookup {
         return "Checking…"
     }
 
-    /// Wait for an in-flight check before the setup engine starts mutating state.
-    /// Queued checks skip their work once closed.
-    func finish() {
+    func cancel() {
         lock.lock()
         closed = true
         lock.unlock()
+    }
+
+    /// Wait only when execution might mutate state. Cancel never blocks quitting.
+    func finishBeforeApplying() {
+        cancel()
         worker.sync {}
     }
 }
@@ -165,7 +168,7 @@ struct TaskPickerUI {
         guard let terminal = RawTerminal() else {
             throw SetupError("Interactive selection requires a terminal. Use setup --preset complete, --all, or task IDs in scripts.")
         }
-        defer { statusLookup.finish() }
+        defer { statusLookup.cancel() }
         var needsRedraw = true
         var lastRevision = -1
         while true {
@@ -196,7 +199,9 @@ struct TaskPickerUI {
             }
             if reviewMode {
                 switch key {
-                case .enter: return state.orderedSelection
+                case .enter:
+                    statusLookup.finishBeforeApplying()
+                    return state.orderedSelection
                 case .escape: reviewMode = false
                 case .interrupt: return nil
                 case let .character(character):

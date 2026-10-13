@@ -75,7 +75,8 @@ try:
     try:
         exit_code = process.wait(timeout=5)
     except subprocess.TimeoutExpired as exc:
-        raise AssertionError("Q did not exit the interactive picker") from exc
+        screen = active_screen(bytes(captured)).decode("utf-8", "replace")
+        raise AssertionError("Q did not exit the interactive picker; last screen: " + repr(screen[-700:])) from exc
     assert exit_code == 0, f"Picker exited with {exit_code}"
     print("Interactive terminal smoke test passed (CSI, SS3, review and cancel)")
 finally:
