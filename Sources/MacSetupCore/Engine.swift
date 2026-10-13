@@ -96,7 +96,7 @@ public final class Engine {
         case .atuinShell: lines.append("Append the managed zsh block to \(shellRC().path). An existing Atuin initialization is preserved.")
         case .service: lines.append("Start or restart the SketchyBar user service. Never run Homebrew as root.")
         case .accent:
-            lines.append("Read the current wallpaper locally; run Python + ImageMagick; save the accent in SketchyBar's colors.sh. No background watcher is installed.")
+            lines.append("Read the current wallpaper locally and write a validated accent into the local cache, without editing tracked dotfiles. No background watcher is installed.")
         case let .guide(url, app, instructions):
             if let app { lines.append("Open \(app).") }
             if let url { lines.append("Open: \(url)") }
@@ -330,12 +330,12 @@ public final class Engine {
         let result = try runner.checked(python, [paths.profile.appendingPathComponent("unsplash/get_wallpaper_accent.py").path, "-"], input: bytes)
         let color = result.text
         guard color.range(of: "^#[0-9A-Fa-f]{6}$", options: .regularExpression) != nil else { throw SetupError("Accent extractor returned an invalid color.") }
-        let target = paths.config.appendingPathComponent("sketchybar/plugins/colors.sh")
-        let old = try String(contentsOf: target, encoding: .utf8)
-        let expression = try NSRegularExpression(pattern: "(?m)^export HIGHLIGHT_COLOR=.*$")
-        guard expression.numberOfMatches(in: old, range: NSRange(old.startIndex..., in: old)) == 1 else { throw SetupError("Cannot locate a unique HIGHLIGHT_COLOR in SketchyBar config.") }
-        let updated = expression.stringByReplacingMatches(in: old, range: NSRange(old.startIndex..., in: old), withTemplate: "export HIGHLIGHT_COLOR=0xff" + color.dropFirst())
-        try journal.write(target, data: Data(updated.utf8), transaction: transaction)
+        let envCache = ProcessInfo.processInfo.environment["XDG_CACHE_HOME"]
+        let cacheRoot = envCache.flatMap { $0.hasPrefix("/") ? URL(fileURLWithPath: $0) : nil }
+            ?? paths.home.appendingPathComponent(".cache")
+        let target = cacheRoot.appendingPathComponent("sketchybar/highlight-color")
+        let value = "0xff" + String(color.dropFirst()) + "\n"
+        try journal.write(target, data: Data(value.utf8), transaction: transaction)
         if let sketchybar = executable("sketchybar"), let aerospace = executable("aerospace") {
             let focused = try runner.run(aerospace, ["list-workspaces", "--focused"])
             if focused.status == 0 && !focused.text.isEmpty {
