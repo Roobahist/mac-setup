@@ -31,6 +31,11 @@ public struct SetupTask {
     public init(_ id: String, _ category: String, _ title: String, _ summary: String, dependencies: [String] = [], action: TaskAction) {
         self.id = id; self.category = category; self.title = title; self.summary = summary; self.dependencies = dependencies; self.action = action
     }
+    public var updatable: Bool {
+        if id == "homebrew" { return true }
+        if case .install = action { return true }
+        return false
+    }
     public var guided: Bool { if case .guide = action { return true }; return false }
 }
 

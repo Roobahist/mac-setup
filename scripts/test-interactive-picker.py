@@ -51,10 +51,16 @@ def active_screen(data: bytes) -> bytes:
 
 try:
     read_until(lambda b: b"MAC SETUP" in b and b"Homebrew" in b)
+    read_until(lambda b: b"Inventory checked" in active_screen(b), timeout=120.0)
     initial = re.search(rb"(\d+)/(\d+) selected", active_screen(bytes(captured)))
     assert initial, "Initial selection count is missing"
     selected, total = map(int, initial.groups())
-    os.write(master, b" ")  # Unchecking Homebrew must not cascade to dependent tasks.
+    os.write(master, b"u")
+    read_until(lambda b: bool(re.search(rb"Homebrew[^\r\n]*UPDATE", active_screen(b))))
+    assert f"{selected}/{total} selected".encode() in active_screen(bytes(captured))
+    os.write(master, b"u")
+    read_until(lambda b: not re.search(rb"Homebrew[^\r\n]*UPDATE", active_screen(b)))
+    os.write(master, b" ")  # CI has Homebrew installed: unchecking it must keep children selected.
     expected = f"{selected - 1}/{total} selected".encode()
     read_until(lambda b: expected in active_screen(b) and b"Profile: Custom" in active_screen(b))
     os.write(master, b" ")

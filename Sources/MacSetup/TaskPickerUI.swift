@@ -135,6 +135,15 @@ private final class TaskStatusLookup {
         return "Checking…"
     }
 
+    func inspectAll(engine: Engine) {
+        for task in Catalog.tasks { _ = status(for: task, engine: engine) }
+    }
+
+    var snapshot: [String: String] {
+        lock.lock(); defer { lock.unlock() }
+        return values
+    }
+
     func cancel() {
         lock.lock()
         closed = true
@@ -164,14 +173,20 @@ struct TaskPickerUI {
             && ProcessInfo.processInfo.environment["TERM"] != "dumb"
     }
 
-    mutating func run() throws -> [String]? {
+    mutating func run() throws -> (ids: [String], updates: Set<String>)? {
         guard let terminal = RawTerminal() else {
             throw SetupError("Interactive selection requires a terminal. Use setup --preset complete, --all, or task IDs in scripts.")
         }
         defer { statusLookup.cancel() }
+        statusLookup.inspectAll(engine: engine)
         var needsRedraw = true
         var lastRevision = -1
         while true {
+            let inventory = statusLookup.snapshot
+            state.available = Set(inventory.filter {
+                [TaskState.done.rawValue, TaskState.confirmed.rawValue].contains($0.value)
+            }.keys)
+            state.unknown = Set(inventory.filter { $0.value == "Status unavailable" }.keys)
             let revision = statusLookup.revision
             if needsRedraw || revision != lastRevision {
                 terminal.write(render(size: terminal.dimensions))
@@ -181,6 +196,13 @@ struct TaskPickerUI {
             let key = terminal.nextKey()
             if case .idle = key { continue }
             needsRedraw = true
+            if !searchMode && !helpVisible && inventory.count < state.tasks.count {
+                switch key {
+                case .space, .enter: continue
+                case .character(let character) where character == "a" || character == "u": continue
+                default: break
+                }
+            }
             if searchMode {
                 switch key {
                 case .enter: searchMode = false
@@ -201,7 +223,7 @@ struct TaskPickerUI {
                 switch key {
                 case .enter:
                     statusLookup.finishBeforeApplying()
-                    return state.orderedSelection
+                    return (state.orderedSelection, state.updates)
                 case .escape: reviewMode = false
                 case .interrupt: return nil
                 case let .character(character):
@@ -229,6 +251,8 @@ struct TaskPickerUI {
                 case "k": state.move(-1)
                 case "/": searchMode = true
                 case "a": state.toggleVisible()
+                case "u":
+                    if let task = state.focusedTask, inventory[task.id] == TaskState.done.rawValue { state.toggleUpdate(task.id) }
                 case "?": helpVisible = true
                 case "1": state.choose(.minimal)
                 case "2": state.choose(.productivity)
@@ -263,7 +287,7 @@ struct TaskPickerUI {
         lines.append(tint("  \(state.selectedCount)/\(state.tasks.count) selected", "1") +
                      tint("     Profile: \(profile)     Category: \(category)", "2"))
         lines.append(tint("  1 Minimal  2 Productivity  3 Developer  4 Complete", "36"))
-        lines.append(tint("  ↑↓ Move  Space Toggle  Tab Category  / Search  A All  Enter Continue  Q Quit", "2"))
+        lines.append(tint("  ↑↓ Move  Space Toggle  U Update  Tab Category  / Search  A All  Enter Continue  Q Quit", "2"))
         lines.append("  " + String(repeating: "─", count: max(5, min(85, width - 4))))
 
         if reviewMode {
@@ -274,15 +298,17 @@ struct TaskPickerUI {
                 if count > 0 { lines.append("    [x] \(category): \(count)") }
             }
             lines.append("")
-            lines.append("  Only these checked tasks will run; unchecked tasks stay unchecked.")
+            lines.append("  Only checked tasks will run; installed unchecked parents satisfy dependencies.")
+            lines.append("  \(state.updates.count) installed task(s) marked for update.")
             lines.append("  Each task still shows a preview and asks before making changes.")
             lines.append("  Existing settings are journaled for recovery; apps are not uninstalled.")
             lines.append(tint("  Enter: start setup   Esc / B: edit selection   Q: cancel", "1;36"))
         } else if helpVisible {
             lines.append("  HELP")
             for line in [
-                "  Each checkbox changes only the task you choose.",
-                "  Unchecked prerequisites must already be ready to run dependent tasks.",
+                "  Installed parents can stay unchecked while their children are selected.",
+                "  Unchecking a missing parent also unchecks children that need it.",
+                "  U toggles updates for an installed Homebrew or package task.",
                 "  1-4 choose a preset. Space toggles the focused task.",
                 "  Tab and Shift+Tab switch categories. / starts a text filter.",
                 "  A toggles all visible tasks. Esc clears a filter.",
@@ -306,7 +332,7 @@ struct TaskPickerUI {
                 let task = visible[index]
                 let focused = index == state.cursorIndex
                 let checked = state.selected.contains(task.id)
-                let type = task.guided ? "GUIDED " : "AUTO   "
+                let type = state.updates.contains(task.id) ? "UPDATE " : (task.guided ? "GUIDED " : "AUTO   ")
                 let prefix = focused ? " ❯ " : "   "
                 let marker = checked ? "[x]" : "[ ]"
                 let title = clip(prefix + marker + "  " + task.title +
@@ -320,12 +346,15 @@ struct TaskPickerUI {
                              tint("   [\(taskStatus(task))]", "2"))
                 lines.append("  " + clip(task.summary, to: width - 4))
                 if !task.dependencies.isEmpty {
-                    lines.append(tint("  Needs: " + task.dependencies.joined(separator: ", "), "2"))
+                    lines.append(tint("  Needs: " + task.dependencies.map { state.available.contains($0) ? "\($0) (installed/ready)" : $0 }.joined(separator: ", "), "2"))
                 }
             } else {
                 lines.append(tint("  Choose a task or switch categories.", "2"))
             }
-            lines.append(tint("  Dependencies are included. Existing tasks are checked before applying.", "2"))
+            let inspected = statusLookup.snapshot.count
+            lines.append(tint(inspected < state.tasks.count
+                ? "  Checking installed tasks (\(inspected)/\(state.tasks.count)); selection changes unlock when finished."
+                : "  Inventory checked. Installed tasks are kept; U marks a package for update.", "2"))
         }
 
         if lines.count > height { lines = Array(lines.prefix(height)) }

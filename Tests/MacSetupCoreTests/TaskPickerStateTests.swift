@@ -12,6 +12,7 @@ final class TaskPickerStateTests: XCTestCase {
 
     func testSelectingOneTaskDoesNotSelectOtherTasks() {
         var state = TaskPickerState(preset: .minimal)
+        state.available = Set(Catalog.tasks.map(\.id))
         let before = state.selected
         state.toggle("sketchybar-start")
         XCTAssertEqual(state.selected, before.union(["sketchybar-start"]))
@@ -21,6 +22,7 @@ final class TaskPickerStateTests: XCTestCase {
     func testRemovingEachTaskChangesOnlyThatTask() {
         for task in Catalog.tasks {
             var state = TaskPickerState()
+            state.available = Set(Catalog.tasks.map(\.id))
             let before = state.selected
             state.toggle(task.id)
             XCTAssertEqual(state.selected, before.subtracting([task.id]), task.id)
@@ -32,6 +34,7 @@ final class TaskPickerStateTests: XCTestCase {
 
     func testBulkToggleDoesNotAffectTasksOutsideTheVisibleCategory() {
         var state = TaskPickerState()
+        state.available = Set(Catalog.tasks.map(\.id))
         state.cycleCategory() // Tools
         let before = state.selected
         let visible = Set(state.visibleTasks.map(\.id))
@@ -47,6 +50,64 @@ final class TaskPickerStateTests: XCTestCase {
         XCTAssertEqual(ordered, ["sketchybar-profile", "sketchybar-start"])
         XCTAssertEqual(Set(ordered), Set(ids))
         XCTAssertTrue(try Catalog.ordered(ids).count > ids.count)
+    }
+
+    func testMissingHomebrewCascadesButInstalledHomebrewDoesNot() {
+        var missing = TaskPickerState()
+        missing.toggle("homebrew")
+        XCTAssertFalse(missing.selected.contains("fonts"))
+        XCTAssertFalse(missing.selected.contains("sketchybar-start"))
+        XCTAssertTrue(missing.selected.contains("dark-mode"))
+        var installed = TaskPickerState()
+        installed.available = ["homebrew"]
+        let before = installed.selected
+        installed.toggle("homebrew")
+        XCTAssertEqual(installed.selected, before.subtracting(["homebrew"]))
+    }
+
+    func testInstalledAppKeepsItsChildrenActiveWhenHomebrewIsMissing() {
+        var state = TaskPickerState()
+        state.available = ["aerospace"]
+        state.toggle("homebrew")
+        XCTAssertFalse(state.selected.contains("aerospace"))
+        XCTAssertTrue(state.selected.contains("aerospace-profile"))
+        XCTAssertTrue(state.selected.contains("aerospace-access"))
+    }
+
+    func testSelectingChildAddsOnlyMissingParents() {
+        var state = TaskPickerState(preset: .minimal)
+        state.available = ["homebrew", "sketchybar-profile", "aerospace-access"]
+        state.toggle("homebrew")
+        state.toggle("sketchybar-start")
+        XCTAssertTrue(state.selected.contains("sketchybar-start"))
+        XCTAssertFalse(state.selected.contains("homebrew"))
+        XCTAssertFalse(state.selected.contains("sketchybar-profile"))
+        var missing = TaskPickerState(preset: .minimal)
+        missing.toggle("homebrew")
+        missing.toggle("sketchybar-start")
+        XCTAssertTrue(missing.selected.contains("homebrew"))
+        XCTAssertTrue(missing.selected.contains("sketchybar-profile"))
+    }
+
+    func testFailedInspectionDoesNotGuessThatAParentIsMissing() {
+        var state = TaskPickerState()
+        state.unknown = ["homebrew"]
+        let before = state.selected
+        state.toggle("homebrew")
+        XCTAssertEqual(state.selected, before.subtracting(["homebrew"]))
+        XCTAssertFalse(state.available.contains("homebrew"))
+    }
+
+    func testUpdateMarkerIsExplicitAndRemovedWithSelection() {
+        var state = TaskPickerState()
+        state.available = ["homebrew"]
+        XCTAssertTrue(state.updates.isEmpty)
+        state.toggleUpdate("homebrew")
+        XCTAssertEqual(state.updates, ["homebrew"])
+        state.toggle("homebrew")
+        XCTAssertTrue(state.updates.isEmpty)
+        state.toggleUpdate("dark-mode")
+        XCTAssertTrue(state.updates.isEmpty)
     }
 
     func testCategoryFilterAndSearchDoNotDiscardSelections() {

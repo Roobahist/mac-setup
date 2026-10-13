@@ -49,6 +49,7 @@ struct Options {
     var force = false
     var image: URL?
     var once = false
+    var upgrades = Set<String>()
 
     init(_ arguments: [String]) throws {
         var args = arguments
@@ -118,7 +119,7 @@ func showPreview(_ task: SetupTask, engine: Engine) throws {
     for line in try engine.preview(task) { print("  " + line) }
 }
 
-func selectedIDs(_ options: Options, engine: Engine) throws -> [String] {
+func selectedIDs(_ options: inout Options, engine: Engine) throws -> [String] {
     if options.all { return Catalog.tasks.map(\.id) }
     if let preset = options.preset {
         return TaskPickerState(preset: preset).orderedSelection
@@ -126,7 +127,9 @@ func selectedIDs(_ options: Options, engine: Engine) throws -> [String] {
     if !options.ids.isEmpty { return options.ids }
     if options.command == "plan" { return TaskPickerState().orderedSelection }
     var picker = TaskPickerUI(engine: engine)
-    return try picker.run() ?? []
+    guard let selection = try picker.run() else { return [] }
+    options.upgrades = selection.updates
+    return selection.ids
 }
 
 func setup(_ ids: [String], engine: Engine, options: Options) throws {
@@ -136,7 +139,10 @@ func setup(_ ids: [String], engine: Engine, options: Options) throws {
     if tasks.isEmpty { print("No tasks selected."); return }
     if options.dryRun || options.command == "plan" {
         print(exactSelection ? "Preview only. Only the reviewed tasks are included; nothing will change." : "Preview only. Prerequisites are included; no files, settings, apps or permissions will change.")
-        for task in tasks { try showPreview(task, engine: engine) }
+        for task in tasks {
+            if options.upgrades.contains(task.id) { print(try engine.upgradePreview(task).joined(separator: "\n")) }
+            else { try showPreview(task, engine: engine) }
+        }
         return
     }
     guard options.yes || isatty(STDIN_FILENO) != 0 else { throw SetupError("Use an interactive terminal or --yes for automatic tasks.") }
@@ -151,6 +157,14 @@ func setup(_ ids: [String], engine: Engine, options: Options) throws {
         }
         do {
             let state = try engine.state(task)
+            if options.upgrades.contains(task.id) {
+                print(try engine.upgradePreview(task).joined(separator: "\n"))
+                if options.yes || ask("Update this installed task?") {
+                    let id = try engine.upgrade(task)
+                    print("Updated. Recovery record: \(id). Package versions are not restored by backups.")
+                } else { blocked.insert(task.id) }
+                continue
+            }
             if state == .done || state == .confirmed {
                 print("\n\(state.rawValue): \(task.title)")
                 continue
@@ -288,12 +302,12 @@ do {
         let ids = engine.updateTasks()
         print("Update uses the profiles bundled with this version of mac-setup. Install a newer CLI release to obtain newer profiles.")
         try setup(ids, engine: engine, options: options)
-    case "plan", "setup": try setup(selectedIDs(options, engine: engine), engine: engine, options: options)
+    case "plan", "setup": try setup(selectedIDs(&options, engine: engine), engine: engine, options: options)
     default:
         guard isatty(STDIN_FILENO) != 0 else { print(help); exit(0) }
         print("mac-setup: choose your configuration. Changes are previewed before applying.")
         options.command = "setup"
-        try setup(selectedIDs(options, engine: engine), engine: engine, options: options)
+        try setup(selectedIDs(&options, engine: engine), engine: engine, options: options)
     }
 } catch {
     fputs("mac-setup: \(error)\n", stderr)

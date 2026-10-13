@@ -49,10 +49,19 @@ Run `mac-setup` or `mac-setup setup` in a terminal to open the full-screen picke
 - **Enter**: review the selection, then Enter again to begin. **B** returns to editing.
 - **Q** or **Ctrl+C**: cancel without making changes.
 
-Each checkbox changes only that task. Custom selections preserve your exact
-choices, including across category and search changes. A selected task is
-an instruction to check and, if needed, configure that component; deselecting does
-**not** uninstall an already installed application.
+The picker first inspects installed packages and completed setup tasks in the
+background. Navigation stays responsive while selection changes wait for that scan.
+Unchecking an installed parent leaves its children selected. Unchecking a missing
+parent also unchecks children that require it; an installed intermediate parent
+still satisfies its own children. Selecting a child adds only missing prerequisites.
+The same rules apply to app, profile, service and permission dependencies.
+
+Checked installed packages are kept by default. Press **U** on Homebrew or an
+installed package task to mark it **UPDATE**; press U again to keep it. Updates are
+previewed and confirmed before execution. Homebrew uses `brew update`; packages use
+a targeted `brew upgrade`, which can also update required dependencies. Apps installed
+outside Homebrew are not taken over. Package updates cannot be undone by restore.
+Deselecting a task does not uninstall anything.
 
 The picker never performs installations by itself. Applying the selection uses the
 existing task previews, confirmation prompts, prerequisite checks, and local recovery
