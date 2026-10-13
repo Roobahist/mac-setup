@@ -21,6 +21,7 @@ executable = Path(sys.argv[1])
 master, slave = pty.openpty()
 fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 30, 100, 0, 0))
 env = dict(os.environ, TERM="xterm-256color")
+env.pop("NO_COLOR", None)  # This test asserts ANSI highlighting regardless of the caller.
 process = subprocess.Popen(
     [str(executable)],
     stdin=slave,

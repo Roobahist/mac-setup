@@ -305,8 +305,7 @@ struct TaskPickerUI {
                 let task = visible[index]
                 let focused = index == state.cursorIndex
                 let checked = state.selected.contains(task.id)
-                let type = ["wallpaper-watcher", "dock-special-items"].contains(task.id)
-                    ? "PENDING" : (task.guided ? "GUIDED " : "AUTO   ")
+                let type = task.guided ? "GUIDED " : "AUTO   "
                 let prefix = focused ? " ❯ " : "   "
                 let marker = checked ? "[x]" : "[ ]"
                 let title = clip(prefix + marker + "  " + task.title +

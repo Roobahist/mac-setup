@@ -6,9 +6,26 @@ final class FakeRunner: CommandRunning {
     var git: [String: [String]] = [:]
     var calls: [[String]] = []
     var failWrites = false
+    var jobs = Set<String>()
+    var disabledJobs = Set<String>()
 
     func run(_ executable: String, _ args: [String], interactive: Bool, input: Data?) throws -> CommandResult {
         calls.append([executable] + args)
+        if executable == "/bin/launchctl" {
+            let label = args[1].components(separatedBy: "/").last!
+            switch args[0] {
+            case "print": return CommandResult(status: jobs.contains(label) ? 0 : 113)
+            case "bootout": jobs.remove(label)
+            case "disable": disabledJobs.insert(label)
+            case "enable": disabledJobs.remove(label)
+            case "bootstrap":
+                let data = try Data(contentsOf: URL(fileURLWithPath: args[2]))
+                let values = try PropertyListSerialization.propertyList(from: data, format: nil) as! [String: Any]
+                jobs.insert(values["Label"] as! String)
+            default: XCTFail("Unexpected launchctl command")
+            }
+            return CommandResult(status: 0)
+        }
         if executable == "/usr/bin/defaults" {
             let operation = args[0], domain = args[1]
             if operation == "export" {
@@ -256,5 +273,63 @@ final class EngineTests: XCTestCase {
         let first = try SetupLock(paths: paths)
         XCTAssertThrowsError(try SetupLock(paths: paths))
         withExtendedLifetime(first) {}
+    }
+    func existingWatcher() throws -> URL {
+        let binary = try write("Applications/WallpaperAccentWatcher.app/Contents/MacOS/WallpaperAccentWatcher", "existing app")
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: binary.path)
+        return binary
+    }
+
+    func testExistingWallpaperAppIsRegisteredAndRestoredWithoutReplacingIt() throws {
+        let binary = try existingWatcher()
+        let id = try engine.apply(Catalog.task("wallpaper-watcher"))
+        XCTAssertEqual(try engine.state(Catalog.task("wallpaper-watcher")), .done)
+        let plist = home.appendingPathComponent("Library/LaunchAgents/" + WallpaperWatcher.label + ".plist")
+        let values = try PropertyListSerialization.propertyList(from: Data(contentsOf: plist), format: nil) as! [String: Any]
+        XCTAssertEqual(values["ProgramArguments"] as? [String], [binary.path])
+        try engine.journal.restore(id)
+        XCTAssertFalse(runner.jobs.contains(WallpaperWatcher.label))
+        XCTAssertFalse(Journal.exists(plist))
+        XCTAssertEqual(try String(contentsOf: binary), "existing app")
+        XCTAssertFalse(Journal.exists(paths.state.appendingPathComponent("watcher-runtime")))
+    }
+
+    func testRunningExistingWatcherIsPreserved() throws {
+        _ = try existingWatcher()
+        let plist = try write("Library/LaunchAgents/" + WallpaperWatcher.label + ".plist", "personal launch configuration")
+        runner.jobs.insert(WallpaperWatcher.label)
+        let id = try engine.apply(Catalog.task("wallpaper-watcher"))
+        XCTAssertEqual(try String(contentsOf: plist), "personal launch configuration")
+        XCTAssertTrue(engine.journal.transactions.first { $0.id == id }!.changes.isEmpty)
+        XCTAssertFalse(runner.calls.contains { ["bootout", "bootstrap", "enable"].contains($0.dropFirst().first ?? "") })
+    }
+
+    func testMissingAppAndCompetingWatcherAreRejected() throws {
+        // Use a dedicated home app in tests; /Applications has no watcher on this Mac.
+        XCTAssertThrowsError(try engine.apply(Catalog.task("wallpaper-watcher")))
+        _ = try existingWatcher()
+        runner.jobs.insert(WallpaperWatcher.replacementLabel)
+        XCTAssertThrowsError(try engine.apply(Catalog.task("wallpaper-watcher")))
+        XCTAssertTrue(runner.jobs.contains(WallpaperWatcher.replacementLabel))
+    }
+
+    func testWallpaperWatcherCanBeDisabledAndEnabled() throws {
+        _ = try existingWatcher()
+        _ = try engine.apply(Catalog.task("wallpaper-watcher"))
+        try WallpaperWatcher.setEnabled(false, engine: engine)
+        XCTAssertTrue(runner.disabledJobs.contains(WallpaperWatcher.label))
+        XCTAssertFalse(runner.jobs.contains(WallpaperWatcher.label))
+        try WallpaperWatcher.setEnabled(true, engine: engine)
+        XCTAssertFalse(runner.disabledJobs.contains(WallpaperWatcher.label))
+        XCTAssertTrue(runner.jobs.contains(WallpaperWatcher.label))
+    }
+
+    func testWatcherPermissionGuideRevealsTheAppAndSettings() throws {
+        let binary = try existingWatcher()
+        try engine.openGuide(Catalog.task("wallpaper-access"))
+        let app = binary.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        XCTAssertTrue(runner.calls.contains(["/usr/bin/open", "-R", app.path]))
+        XCTAssertTrue(runner.calls.contains(["/usr/bin/open", "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"]))
+        XCTAssertFalse(runner.calls.contains { $0[0].contains("tcc") || $0[0] == "/bin/launchctl" })
     }
 }

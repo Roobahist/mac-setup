@@ -17,6 +17,7 @@ public enum TaskAction {
     case atuinShell
     case service
     case accent
+    case wallpaperWatcher
     case guide(url: String?, app: String?, instructions: [String])
 }
 
@@ -124,13 +125,13 @@ public enum Catalog {
         ])),
         SetupTask("wallpaper-tools", "Appearance", "Wallpaper color dependencies", "Install Python and ImageMagick for local accent extraction.", dependencies: ["homebrew"], action: .install(packages: ["python", "imagemagick"], cask: false, app: nil)),
         SetupTask("wallpaper-colors", "Appearance", "Match SketchyBar accent to wallpaper", "Extract an accent locally from the current wallpaper and update SketchyBar. Run again after a wallpaper change.", dependencies: ["wallpaper-tools", "sketchybar-profile"], action: .accent),
-        SetupTask("wallpaper-watcher", "Appearance", "Automatic wallpaper color updates", "Configure the wallpaper-change watcher after its source is available.", action: .guide(url: nil, app: nil, instructions: [
-            "The personal setup references WallpaperAccentWatcher, but its source is not in the shared dotfiles. This automatic integration still needs that source or an agreed replacement.",
-            "For now, run mac-setup setup wallpaper-colors after changing the wallpaper. This task cannot be automatically verified."
-        ])),
-        SetupTask("dock-special-items", "Appearance", "Finder and launcher Dock items", "Review special Dock items that are not ordinary pinned apps.", action: .guide(url: "x-apple.systempreferences:com.apple.Desktop-Settings.extension", app: nil, instructions: [
-            "The dock-minimal task removes ordinary pinned launchers. Finder and Trash are system-managed items.",
-            "Removing system-managed Finder or newer launcher controls has not been implemented. Auto-hide keeps the Dock out of the way; no system files are patched."
+        SetupTask("wallpaper-watcher", "Appearance", "Automatic wallpaper color updates", "Use the existing WallpaperAccentWatcher.app and its user-level login service. No replacement watcher is installed.", dependencies: ["wallpaper-tools", "sketchybar-start"], action: .wallpaperWatcher),
+        SetupTask("wallpaper-access", "Appearance", "WallpaperAccentWatcher permissions and test", "Approve wallpaper access for WallpaperAccentWatcher itself, then verify automatic color changes.", dependencies: ["wallpaper-watcher"], action: .guide(url: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles", app: nil, instructions: [
+            "Change to another static wallpaper and check that the focused SketchyBar workspace changes color after a few seconds.",
+            "Run mac-setup watcher-status to see registration and recent logs. A running job alone does not prove wallpaper access.",
+            "Open Privacy & Security > Full Disk Access. Drag the revealed WallpaperAccentWatcher.app into the list and enable its switch if your wallpaper provider stores files in a protected container. Approve the macOS authentication prompt yourself; permission given to Terminal or mac-setup does not authorize this app.",
+            "Run mac-setup watcher-stop, then mac-setup watcher-enable after approving access. Change the wallpaper and use watcher-status to confirm an event=apply result=focused-updated-once log entry and the visible accent change. Do not confirm this task until the test succeeds.",
+            "Do not run another wallpaper watcher alongside WallpaperAccentWatcher. Permissions are never granted automatically."
         ]))
     ]
 

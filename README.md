@@ -8,7 +8,7 @@ and apply changes with confirmation and recovery records. The public configurati
 come from [dot-files](https://github.com/Roobahist/dot-files); offline snapshots are
 bundled with every release. No GitHub account is required to run downloaded builds.
 
-## Run from source
+## Install and run
 
 Requires macOS 13+ and Swift 5.9+ (Xcode or compatible Command Line Tools).
 Some installed apps have higher requirements; Vorssaint requires Apple silicon
@@ -17,10 +17,23 @@ and macOS 14+. The CLI never runs as root.
 ```sh
 git clone https://github.com/Roobahist/mac-setup.git
 cd mac-setup
-swift run mac-setup
-swift run mac-setup profiles
-swift run mac-setup plan --preset complete
+./install.sh
+# Open a new terminal after installation:
+mac-setup
+mac-setup profiles
+mac-setup plan --preset complete
 ```
+
+The one-time installer builds a release executable and installs it with its resource
+bundle into `~/.local`. It backs up `.zshrc` before adding the command directory to
+PATH; linked shell configuration files are left for you to update manually. Daily
+launches use the installed executable and do not invoke Swift or rebuild anything.
+You can also run `./mac-setup` directly from this checkout; it builds once if needed.
+After changing source code, run `./install.sh` again to rebuild and update.
+
+The build helper uses SwiftPM's native engine for compatibility with Command Line
+Tools. This avoids the missing Xcode framework search-path warnings from Swift
+6.4's default build engine. Those warnings did not indicate a failed setup.
 
 ## Interactive checklist
 
@@ -109,11 +122,10 @@ or replace the executable itself.
   wallpaper; the `--image` option accepts a local image path if the wallpaper is
   unavailable. Image bytes are never uploaded.
 
-The original full checklist is represented, but two pieces remain explicitly
-pending: automatic wallpaper-change watching (the personal watcher source is
-missing) and removal of system-managed Finder/launcher Dock controls. A reliable
-long menu-bar reveal delay is also not implemented. These tasks are not falsely
-marked complete. Finder list icon size and display modes use supported manual UIs.
+Automatic wallpaper updates use the existing WallpaperAccentWatcher.app. The
+Complete and Productivity presets include its permission/test task. Dock setup
+clears ordinary pinned items and enables auto-hide; Finder, Trash and system-managed
+launcher controls can remain. mac-setup does not patch protected system files.
 
 ## Public dotfiles source
 
@@ -217,3 +229,42 @@ behavior still need testing on a spare Mac or disposable user account before a
 stable release.
 
 MIT license. Third-party apps and fonts retain their own licenses; see NOTICE.md.
+
+## Wallpaper watcher
+
+`mac-setup setup wallpaper-watcher` uses your existing `WallpaperAccentWatcher.app`
+in `~/Applications` or `/Applications`, with LaunchAgent label
+`com.roobahist.wallpaper-watcher`. An already running watcher and its launch
+configuration are preserved. mac-setup does not install a second watcher, copy a
+CLI runtime, or change the app's polling interval.
+
+If the app is installed but not registered, setup reuses its existing LaunchAgent
+plist or creates one with the app's existing environment options. A missing accent
+extractor is installed from the bundled profile without replacing an existing
+script. Existing plist changes are backed up. The app must be installed first;
+mac-setup does not distribute your personal app binary. Your current app uses
+Apple silicon Homebrew paths for Python, AeroSpace and SketchyBar; the bundled
+Python extraction script discovers ImageMagick through PATH.
+
+The app uses the active wallpaper on the main display, including non-Unsplash
+images. On multiple monitors it supplies one shared accent. Its existing behavior
+checks every two seconds and waits for two matching observations before applying
+a changed image. `watch` runs the installed app in the foreground, and
+`watch --once` uses its one-shot environment option. Stop the startup watcher first
+to avoid running two copies. `--image` can choose an accessible local image.
+
+Run `watcher-status` to inspect registration and the app's existing logs. Change
+wallpapers to verify the visible result. If macOS blocks access, approve
+WallpaperAccentWatcher.app in Privacy & Security > Full Disk Access or choose an
+accessible local image. Permissions are never granted automatically.
+
+`watcher-stop` stops the app until login or reload. `watcher-disable` disables its
+LaunchAgent across logins; `watcher-enable` resumes it. These commands control the
+existing app. Restore undoes only the changes recorded by mac-setup; it does not
+remove your pre-existing app or a service that mac-setup did not install.
+
+The existing app persists `HIGHLIGHT_COLOR` in SketchyBar's `plugins/colors.sh` and
+triggers the focused-workspace update directly. Its behavior is preserved. Use a
+local SketchyBar configuration rather than a symlink into tracked dotfiles if you
+want generated colors to remain outside your repository. Manual
+`setup wallpaper-colors` remains backed up like any other setup task.
