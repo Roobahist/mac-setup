@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Check that public configuration stays portable and excludes private data."""
 import json
+import os
 import pathlib
 import plistlib
 import re
 import tomllib
 
-root = pathlib.Path(__file__).resolve().parents[1] / "Sources/MacSetupCore/Resources/Profile"
+root = pathlib.Path(os.environ.get("MAC_SETUP_PROFILE_ROOT", pathlib.Path(__file__).resolve().parents[1] / "Sources/MacSetupCore/Resources/Profile"))
 for path in root.rglob("*"):
     if not path.is_file():
         continue

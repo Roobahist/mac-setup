@@ -1,0 +1,32 @@
+name: Synchronize public dotfiles
+on:
+  workflow_dispatch:
+  repository_dispatch:
+    types: [dotfiles-updated]
+  schedule:
+    - cron: '27 * * * *'
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Update packaged profiles from dot-files
+        run: python3 scripts/sync-dotfiles.py
+      - name: Validate resulting profiles
+        run: python3 scripts/check-profile.py
+      - uses: peter-evans/create-pull-request@v7
+        with:
+          branch: automation/sync-dot-files
+          delete-branch: true
+          add-paths: Sources/MacSetupCore/Resources/Profile
+          title: 'Sync packaged profiles from public dot-files'
+          commit-message: 'Sync public dot-files profile snapshots'
+          body: |
+            Updates allowlisted portable profiles from Roobahist/dot-files.
+            The portable-profile validation passed. Please review the diff before merging.

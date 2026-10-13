@@ -3,8 +3,7 @@
 A guided macOS setup CLI for apps, dotfiles, and system preferences.
 
 Choose changes one by one, preview them, and keep recovery records. The public
-configuration profile is bundled with each release. No access to the author's
-private dotfiles repository or GitHub account is required.
+configuration profile is bundled with each release. No GitHub account or repository checkout is required to run downloaded builds.
 
 ## Run from source
 
@@ -60,8 +59,8 @@ Stored preference verification does not guarantee the visible behavior of an
 undocumented setting on every macOS release.
 
 `update` reapplies previously installed profiles bundled in the current executable.
-Install a newer CLI build first to obtain newer profiles. It does not pull a private
-repository, upgrade every Homebrew package, or replace the executable itself.
+Install a newer CLI build first to obtain newer profiles. It does not download an updated public profile, upgrade every Homebrew package,
+or replace the executable itself.
 
 ## Included tasks
 
@@ -87,6 +86,22 @@ pending: automatic wallpaper-change watching (the personal watcher source is
 missing) and removal of system-managed Finder/launcher Dock controls. A reliable
 long menu-bar reveal delay is also not implemented. These tasks are not falsely
 marked complete. Finder list icon size and display modes use supported manual UIs.
+
+## Public dotfiles source
+
+The portable application configurations are maintained in [dot-files](https://github.com/Roobahist/dot-files). This repository includes checked-in snapshots so a downloaded mac-setup release remains self-contained and works offline. The independent Vorssaint snapshot stays here.
+
+To refresh bundled profiles from the canonical source, run:
+
+```sh
+python3 scripts/sync-dotfiles.py
+python3 scripts/check-profile.py
+swift test
+```
+
+A GitHub Actions workflow checks for updates hourly and when notified by the public dot-files repository. It opens a reviewable PR when profiles change. To enable immediate notifications, add a fine-grained token with Actions write permission on mac-setup as `MAC_SETUP_DISPATCH_TOKEN` in dot-files repository secrets. GitHub Actions may also need permission to create pull requests. The hourly sync works without that secret.
+
+If you manage your own Mac with symlinks from a local dot-files checkout, use that repository's install and update scripts. Running mac-setup's profile installer intentionally backs up and detaches symlinks, so do not apply those profile tasks on top of a checkout you wish to keep linked.
 
 ## Your data and backups
 
