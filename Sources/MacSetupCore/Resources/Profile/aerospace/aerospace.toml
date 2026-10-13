@@ -1,16 +1,9 @@
 config-version = 2
 
+# Keep these known application windows tiled.
 on-window-detected = [
-    # These apps are intentionally tiled even though AeroSpace's native
-    # no-fullscreen-button heuristic normally classifies them as dialogs.
-    {
-        if = 'test %{app-bundle-id} = com.apple.ScreenContinuity',
-        run = 'layout tiling',
-    },
-    {
-        if = 'test %{app-bundle-id} = com.apple.systempreferences',
-        run = 'layout tiling',
-    },
+    { if = 'test %{app-bundle-id} = com.apple.ScreenContinuity', run = 'layout tiling' },
+    { if = 'test %{app-bundle-id} = com.apple.systempreferences', run = 'layout tiling' },
 ]
 
 persistent-workspaces = [
