@@ -1,6 +1,6 @@
 import Foundation
 
-/// Portable configuration checkout. The URL and path can be injected for testing.
+/// Location and allowlist for the portable configuration repository.
 public struct DotfilesSource {
     public let remoteURL: String
     public let checkout: URL
@@ -27,6 +27,7 @@ public struct DotfilesSource {
     }
 }
 
+/// Clones and updates the canonical source, and creates selected config links with journaled rollback.
 public final class LinkedDotfiles {
     public let source: DotfilesSource
     private let paths: Paths
@@ -42,70 +43,78 @@ public final class LinkedDotfiles {
 
     public func status() -> TaskState {
         if !Journal.exists(source.checkout) { return .ready }
-        guard checkoutIsDirectory(source.checkout), checkoutIsDirectory(source.checkout.appendingPathComponent(".git")) else {
-            return .blocked
-        }
-        return source.folders.allSatisfy { source.isLinked($0, config: paths.config) } ? .done : .ready
+        return checkoutIsDirectory(source.checkout) &&
+            checkoutIsDirectory(source.checkout.appendingPathComponent(".git")) ? .done : .blocked
     }
 
     public func install(transaction: String) throws {
         let destination = source.checkout
-        let git = executable("git") ?? "/usr/bin/git"
-        let cloned: URL?
         if Journal.exists(destination) {
-            guard checkoutIsDirectory(destination), checkoutIsDirectory(destination.appendingPathComponent(".git")) else {
-                throw SetupError("The dot-files checkout path already exists but is not a Git directory: \(destination.path)")
+            guard status() == .done else {
+                throw SetupError("The dot-files path exists but is not a valid Git checkout: \(destination.path)")
             }
-            cloned = nil
-        } else {
-            let staging = FileManager.default.temporaryDirectory.appendingPathComponent("mac-setup-dotfiles-" + UUID().uuidString)
-            cloned = staging
-            try runner.checked(git, ["clone", "--depth", "1", "--", source.remoteURL, staging.path], interactive: true)
+            try verifyRemote()
+            return
         }
-        defer { if let cloned { try? FileManager.default.removeItem(at: cloned) } }
-        let checkout = cloned ?? destination
-        guard checkoutIsDirectory(checkout), checkoutIsDirectory(checkout.appendingPathComponent(".git")) else {
+
+        let staging = FileManager.default.temporaryDirectory.appendingPathComponent("mac-setup-dotfiles-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: staging) }
+        try runner.checked(git(), ["clone", "--depth", "1", "--", source.remoteURL, staging.path], interactive: true)
+        guard checkoutIsDirectory(staging), checkoutIsDirectory(staging.appendingPathComponent(".git")) else {
             throw SetupError("Dotfiles clone did not create a valid checkout.")
         }
-
-        // An existing checkout must belong to the intended repository.
-        if cloned == nil {
-            let remote = try runner.checked(git, ["-C", checkout.path, "remote", "get-url", "origin"]).text
-            let acceptable = [source.remoteURL,
-                              "git@github.com:Roobahist/dot-files.git",
-                              "https://github.com/Roobahist/dot-files"]
-            guard acceptable.contains(remote) else {
-                throw SetupError("Existing checkout points to another remote. Refusing to replace it.")
-            }
+        for name in source.folders where !checkoutIsDirectory(staging.appendingPathComponent(name)) {
+            throw SetupError("Dotfiles checkout is missing configuration folder: \(name)")
         }
+        try journal.replace(destination, with: staging, transaction: transaction)
+    }
 
-        for name in source.folders {
-            guard checkoutIsDirectory(checkout.appendingPathComponent(name)) else {
-                throw SetupError("Dotfiles checkout is missing configuration folder: \(name)")
-            }
-            let target = paths.config.appendingPathComponent(name)
-            if isSymlink(target), !source.isLinked(name, config: paths.config) {
-                throw SetupError("\(target.path) is linked to another checkout. Resolve this link manually before continuing.")
-            }
+    public func link(_ name: String, transaction: String) throws {
+        guard source.folders.contains(name) else { throw SetupError("Unsupported dotfiles profile: \(name)") }
+        guard status() == .done else { throw SetupError("Clone dot-files before linking configurations.") }
+        try verifyRemote()
+        guard checkoutIsDirectory(source.checkout.appendingPathComponent(name)) else {
+            throw SetupError("Dotfiles checkout is missing configuration folder: \(name)")
+        }
+        let target = paths.config.appendingPathComponent(name)
+        if source.isLinked(name, config: paths.config) { return }
+        if isSymlink(target) {
+            throw SetupError("\(target.path) links to another location. Resolve that link manually before continuing.")
         }
 
-        if let cloned {
-            try journal.replace(destination, with: cloned, transaction: transaction)
+        let staging = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: staging) }
+        try FileManager.default.createSymbolicLink(at: staging,
+            withDestinationURL: source.checkout.appendingPathComponent(name))
+        try journal.replace(target, with: staging, transaction: transaction)
+    }
+
+    public func update() throws {
+        guard status() == .done else { throw SetupError("No valid dot-files checkout to update.") }
+        try verifyRemote()
+        let directory = source.checkout.path
+        let changes = try runner.checked(git(), ["-C", directory, "status", "--porcelain"]).text
+        guard changes.isEmpty else {
+            throw SetupError("The dot-files checkout has local changes. Commit or stash them before updating.")
         }
-        for name in source.folders where !source.isLinked(name, config: paths.config) {
-            let target = paths.config.appendingPathComponent(name)
-            let temporaryLink = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-            defer { try? FileManager.default.removeItem(at: temporaryLink) }
-            try FileManager.default.createSymbolicLink(
-                at: temporaryLink, withDestinationURL: destination.appendingPathComponent(name)
-            )
-            try journal.replace(target, with: temporaryLink, transaction: transaction)
-        }
+        try runner.checked(git(), ["-C", directory, "pull", "--ff-only"], interactive: true)
     }
 
     public func isSymlink(_ location: URL) -> Bool {
         (try? FileManager.default.attributesOfItem(atPath: location.path)[.type] as? FileAttributeType) == .typeSymbolicLink
     }
+
+    private func verifyRemote() throws {
+        let remote = try runner.checked(git(), ["-C", source.checkout.path,
+                                                "remote", "get-url", "origin"]).text
+        let accepted = [source.remoteURL, "https://github.com/Roobahist/dot-files",
+                        "git@github.com:Roobahist/dot-files.git"]
+        guard accepted.contains(remote) else {
+            throw SetupError("The dot-files checkout uses an unexpected Git remote. No changes made.")
+        }
+    }
+
+    private func git() -> String { executable("git") ?? "/usr/bin/git" }
 
     private func checkoutIsDirectory(_ location: URL) -> Bool {
         guard !isSymlink(location) else { return false }
