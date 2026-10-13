@@ -104,6 +104,7 @@ public final class Engine {
             if let app { lines.append("Open \(app).") }
             if let url { lines.append("Open: \(url)") }
             lines += instructions
+            if task.id == "wallpaper-access" { lines.append("Watcher executable: " + paths.state.appendingPathComponent("watcher-runtime/mac-setup").path) }
         }
         return lines
     }
@@ -179,6 +180,9 @@ public final class Engine {
 
     public func openGuide(_ task: SetupTask) throws {
         guard case let .guide(url, app, _) = task.action else { return }
+        if task.id == "wallpaper-access" {
+            try runner.checked("/usr/bin/open", ["-R", paths.state.appendingPathComponent("watcher-runtime/mac-setup").path])
+        }
         if let app { try runner.checked("/usr/bin/open", ["-a", app]) }
         if let url {
             let result = try runner.run("/usr/bin/open", [url])
