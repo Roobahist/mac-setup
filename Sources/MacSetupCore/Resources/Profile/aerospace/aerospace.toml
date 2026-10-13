@@ -1,6 +1,17 @@
 config-version = 2
 
-
+on-window-detected = [
+    # These apps are intentionally tiled even though AeroSpace's native
+    # no-fullscreen-button heuristic normally classifies them as dialogs.
+    {
+        if = 'test %{app-bundle-id} = com.apple.ScreenContinuity',
+        run = 'layout tiling',
+    },
+    {
+        if = 'test %{app-bundle-id} = com.apple.systempreferences',
+        run = 'layout tiling',
+    },
+]
 
 persistent-workspaces = [
     "chatgpt",
@@ -178,14 +189,6 @@ cmd-alt-h = []
 # ============================================================
 
 [[on-window-detected]]
-if = 'test %{app-bundle-id} = com.apple.ScreenContinuity'
-run = 'layout tiling'
-
-[[on-window-detected]]
-if = 'test %{app-bundle-id} = com.apple.systempreferences'
-run = 'layout tiling'
-
-[[on-window-detected]]
 if = 'test %{app-bundle-id} = ru.keepcoder.Telegram'
 run = ['move-node-to-workspace messages', 'exec-and-forget sketchybar --trigger aerospace_workspace_change']
 
@@ -225,7 +228,3 @@ run = ['move-node-to-workspace notes', 'exec-and-forget sketchybar --trigger aer
 [workspace-to-monitor-force-assignment]
 
 2 = 'secondary'
-
-# Homebrew CLI tools are available when launched outside Terminal.
-[exec.env-vars]
-PATH = "/opt/homebrew/bin:/usr/local/bin:${PATH}"
