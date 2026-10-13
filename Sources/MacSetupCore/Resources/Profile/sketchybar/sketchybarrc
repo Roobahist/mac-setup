@@ -1,0 +1,256 @@
+#!/usr/bin/env bash
+
+PLUGIN_DIR="$CONFIG_DIR/plugins"
+source "$PLUGIN_DIR/colors.sh"
+
+
+##### Bar Appearance #####
+
+# Keep the bar shadow disabled. SketchyBar 2.24.0 has a separate blur/shadow
+# rendering issue, and this bar intentionally uses a large blur radius.
+sketchybar --bar \
+  position=top \
+  height=30 \
+  blur_radius=50 \
+  shadow=off \
+  color="$BAR_COLOR" \
+  display=all \
+  topmost=off \
+  hidden=off
+
+
+##### Defaults #####
+
+default=(
+  padding_left=0
+  padding_right=0
+
+  icon.font="Hack Nerd Font Mono:Bold:17.0"
+  label.font="Hack Nerd Font Mono:Bold:14.0"
+
+  icon.color="$BASE_WHITE"
+  label.color="$BASE_WHITE"
+
+  icon.padding_left=0
+  icon.padding_right=0
+
+  label.padding_left=0
+  label.padding_right=0
+)
+
+# WallpaperAccentWatcher persists plugins/colors.sh on each new wallpaper.
+# Watching the whole config tree would rebuild the bar on that write, causing
+# visible flicker and racing the direct focused-workspace update.
+sketchybar --default "${default[@]}" --hotload false
+
+
+##### Workspace Icons #####
+
+# Font Awesome
+FA_OPENAI=""   # fa-brands fa-openai
+
+# ChatGPT
+ICON_CHATGPT="$FA_OPENAI"
+
+# Previous ChatGPT glyph:
+ICON_CHATGPT="􀴽"
+
+# Current icons
+ICON_MUSIC="􀑬"
+ICON_MESSAGES="􀌲"
+ICON_NOTES="􀈫"
+ICON_TIMER="􀐯"
+
+
+##### Workspace Fonts #####
+
+FONT_DEFAULT="Hack Nerd Font:Bold:14.5"
+
+# Font Awesome workspace fonts
+FONT_FA_BRANDS="Font Awesome 7 Brands:Regular:14.5"
+FONT_FA_SOLID="Font Awesome 7 Free Solid:Solid:14.5"
+
+# Previous number font:
+FONT_NUMBERS="Hack Nerd Font:Bold:14.5"
+
+# Current number font:
+# FONT_NUMBERS="$FONT_FA_SOLID"
+
+
+##### AeroSpace Workspaces #####
+
+sketchybar --add event aerospace_workspace_change
+
+
+# ------------------------------------------------------------
+# Workspace icon mapping
+# ------------------------------------------------------------
+
+workspace_icon() {
+  case "$1" in
+    chatgpt)  echo "$ICON_CHATGPT" ;;
+    music)    echo "$ICON_MUSIC" ;;
+    messages) echo "$ICON_MESSAGES" ;;
+    notes)    echo "$ICON_NOTES" ;;
+    timer)    echo "$ICON_TIMER" ;;
+
+    1) echo "1" ;;
+    2) echo "2" ;;
+    3) echo "3" ;;
+    4) echo "4" ;;
+    5) echo "5" ;;
+    6) echo "6" ;;
+    7) echo "7" ;;
+    8) echo "8" ;;
+
+    *) echo "$1" ;;
+  esac
+}
+
+
+# ------------------------------------------------------------
+# Workspace font mapping
+# ------------------------------------------------------------
+
+workspace_font() {
+  case "$1" in
+    chatgpt)
+      echo "SF Pro:Bold:14.5"
+      ;;
+
+    1|2|3|4|5|6|7|8)
+      echo "$FONT_NUMBERS"
+      ;;
+
+    *)
+      echo "$FONT_DEFAULT"
+      ;;
+  esac
+}
+
+
+# ------------------------------------------------------------
+# Read workspace names and order directly from AeroSpace
+# ------------------------------------------------------------
+
+# AeroSpace's CLI socket can briefly be unavailable while AeroSpace restarts.
+# The config file remains a reliable source for the persistent workspace list.
+AEROSPACE_CONFIG="$(aerospace config --config-path 2>/dev/null)"
+if [ ! -r "$AEROSPACE_CONFIG" ]; then
+  AEROSPACE_CONFIG="$HOME/.config/aerospace/aerospace.toml"
+fi
+
+workspace_ids=()
+
+while IFS= read -r workspace; do
+  [ -n "$workspace" ] && workspace_ids+=("$workspace")
+done < <(
+  awk '
+    /persistent-workspaces[[:space:]]*=[[:space:]]*\[/ {
+      inside=1
+      next
+    }
+
+    inside && /\]/ {
+      exit
+    }
+
+    inside {
+      line=$0
+      sub(/#.*/, "", line)
+
+      if (match(line, /"[^"]+"/)) {
+        value=substr(line, RSTART + 1, RLENGTH - 2)
+        print value
+      }
+    }
+  ' "$AEROSPACE_CONFIG"
+)
+
+
+# ------------------------------------------------------------
+# Create workspace items
+# ------------------------------------------------------------
+
+# macOS 27.0 (26A428) can raise SketchyBar's background window above all item
+# windows when a click lands on empty bar space. A transparent bracket spanning
+# every visible item acts as a click shield: it sits above the background but
+# below the item windows, so the background itself never receives those clicks.
+click_shield_members=()
+
+for workspace in "${workspace_ids[@]}"; do
+
+  icon="$(workspace_icon "$workspace")"
+  font="$(workspace_font "$workspace")"
+
+  sketchybar \
+    --add item "space.$workspace" left \
+    --set "space.$workspace" \
+      label="$icon" \
+      label.font="$font" \
+      label.align=center \
+      label.width=21 \
+      click_script="aerospace workspace '$workspace'"
+
+  click_shield_members+=("space.$workspace")
+
+done
+
+# A single observer updates every workspace together. Per-workspace subscribers
+# caused redundant AeroSpace queries, long event queues, and stale colors.
+printf -v WORKSPACE_ARGS ' %q' "${workspace_ids[@]}"
+
+sketchybar \
+  --add item workspace_observer left \
+  --set workspace_observer \
+    drawing=off \
+    updates=on \
+    script="/bin/bash '$PLUGIN_DIR/aerospace.sh'$WORKSPACE_ARGS" \
+  --subscribe workspace_observer aerospace_workspace_change
+
+
+##### Clock #####
+
+sketchybar \
+  --add item clock right \
+  --set clock \
+    icon.drawing=off \
+    label="$(date +'%a %b %d %H:%M')" \
+    label.drawing=on \
+    label.font="Hack Nerd Font Mono:Bold:14.0" \
+    label.align=right \
+    label.width=400 \
+    label.color="$BASE_WHITE" \
+    script="$PLUGIN_DIR/clock.sh" \
+    update_freq=1 \
+    updates=on
+
+click_shield_members+=("clock")
+
+
+##### macOS 27 Click Shield #####
+
+# Work around the macOS 27 SketchyBar z-order bug without changing the visible
+# bar. The bracket draws nothing; its window only prevents clicks in the large
+# empty area between the left workspace group and the right clock from raising
+# the blurred background window above the items.
+sketchybar \
+  --add bracket click_shield "${click_shield_members[@]}" \
+  --set click_shield \
+    background.drawing=off
+
+
+##### Initialize Workspace State #####
+
+# Initialize the workspace colors immediately rather than waiting for the
+# first workspace change. One AeroSpace query supplies the focused workspace
+# to every subscribed workspace item.
+INITIAL_FOCUSED_WORKSPACE="$(aerospace list-workspaces --focused 2>/dev/null)"
+
+if [ -n "$INITIAL_FOCUSED_WORKSPACE" ]; then
+  mkdir -p "$HOME/.cache/sketchybar"
+  printf '%s\n' "$INITIAL_FOCUSED_WORKSPACE" \
+    > "$HOME/.cache/sketchybar/focused-workspace"
+  sketchybar --trigger aerospace_workspace_change \
+    FOCUSED="$INITIAL_FOCUSED_WORKSPACE"
+fi

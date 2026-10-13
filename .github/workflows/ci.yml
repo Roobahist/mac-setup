@@ -1,0 +1,32 @@
+name: Build and test
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test with isolated homes and fake system commands
+        run: swift test
+      - name: Validate public profile
+        run: python3 scripts/check-profile.py
+      - name: Validate shell scripts
+        run: |
+          bash -n scripts/package.sh scripts/install.sh
+          find Sources/MacSetupCore/Resources/Profile -name '*.sh' -exec bash -n {} \;
+      - name: Build a downloadable preview
+        run: bash scripts/package.sh arm64 preview
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac-setup-preview-arm64
+          path: |
+            dist/*.tar.gz
+            dist/*.sha256
+          retention-days: 7

@@ -1,0 +1,231 @@
+config-version = 2
+
+
+
+persistent-workspaces = [
+    "chatgpt",
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "music",
+    "messages",
+    "notes",
+    "timer",
+]
+
+after-login-command = []
+
+after-startup-command = [
+    'layout --workspace 1 --root tiles',
+]
+
+exec-on-workspace-change = [
+    '/bin/bash',
+    '-c',
+    'mkdir -p "$HOME/.cache/sketchybar"; printf %s "$AEROSPACE_FOCUSED_WORKSPACE" > "$HOME/.cache/sketchybar/focused-workspace"; sketchybar --trigger aerospace_workspace_change PREV_WORKSPACE=$AEROSPACE_PREV_WORKSPACE FOCUSED_WORKSPACE=$AEROSPACE_FOCUSED_WORKSPACE',
+]
+
+start-at-login = true
+
+enable-normalization-flatten-containers = true
+enable-normalization-opposite-orientation-for-nested-containers = true
+
+accordion-padding = 0
+
+default-root-container-layout = 'tiles'
+default-root-container-orientation = 'auto'
+
+key-mapping.preset = 'qwerty'
+
+on-focused-monitor-changed = ['move-mouse monitor-lazy-center']
+# on-focus-changed = ['move-mouse window-lazy-center']
+
+
+[gaps]
+
+inner.horizontal = 2
+inner.vertical = 2
+
+outer.left = 2
+outer.bottom = 2
+outer.top = 32
+outer.right = 2
+
+
+[mode.main.binding]
+
+
+# ------------------------------------------------------------
+# Focus
+# Option + Arrow
+# ------------------------------------------------------------
+
+alt-left = 'focus --wrap-around left'
+alt-down = 'focus --wrap-around down'
+alt-up = 'focus --wrap-around up'
+alt-right = 'focus --wrap-around right'
+
+
+# ------------------------------------------------------------
+# Move / rearrange windows
+# Option + Control + Arrow
+# ------------------------------------------------------------
+
+alt-ctrl-left = 'move left'
+alt-ctrl-down = 'move down'
+alt-ctrl-up = 'move up'
+alt-ctrl-right = 'move right'
+
+
+# ------------------------------------------------------------
+# Workspaces
+# Option + workspace key
+# ------------------------------------------------------------
+
+alt-backtick = 'workspace chatgpt'
+
+alt-1 = 'workspace 1'
+alt-2 = 'workspace 2'
+alt-3 = 'workspace 3'
+alt-4 = 'workspace 4'
+alt-5 = 'workspace 5'
+alt-6 = 'workspace 6'
+alt-7 = 'workspace 7'
+alt-8 = 'workspace 8'
+
+alt-9 = 'workspace music'
+alt-0 = 'workspace messages'
+
+alt-minus = 'workspace notes'
+alt-equal = 'workspace timer'
+
+
+# ------------------------------------------------------------
+# Move window to workspace
+# Option + Shift + workspace key
+# ------------------------------------------------------------
+
+alt-shift-backtick = ['move-node-to-workspace chatgpt', 'exec-and-forget sketchybar --trigger aerospace_workspace_change']
+
+alt-shift-1 = ['move-node-to-workspace 1', 'exec-and-forget sketchybar --trigger aerospace_workspace_change']
+alt-shift-2 = ['move-node-to-workspace 2', 'exec-and-forget sketchybar --trigger aerospace_workspace_change']
+alt-shift-3 = ['move-node-to-workspace 3', 'exec-and-forget sketchybar --trigger aerospace_workspace_change']
+alt-shift-4 = ['move-node-to-workspace 4', 'exec-and-forget sketchybar --trigger aerospace_workspace_change']
+alt-shift-5 = ['move-node-to-workspace 5', 'exec-and-forget sketchybar --trigger aerospace_workspace_change']
+alt-shift-6 = ['move-node-to-workspace 6', 'exec-and-forget sketchybar --trigger aerospace_workspace_change']
+alt-shift-7 = ['move-node-to-workspace 7', 'exec-and-forget sketchybar --trigger aerospace_workspace_change']
+alt-shift-8 = ['move-node-to-workspace 8', 'exec-and-forget sketchybar --trigger aerospace_workspace_change']
+
+alt-shift-9 = ['move-node-to-workspace music', 'exec-and-forget sketchybar --trigger aerospace_workspace_change']
+alt-shift-0 = ['move-node-to-workspace messages', 'exec-and-forget sketchybar --trigger aerospace_workspace_change']
+
+alt-shift-minus = ['move-node-to-workspace notes', 'exec-and-forget sketchybar --trigger aerospace_workspace_change']
+alt-shift-equal = ['move-node-to-workspace timer', 'exec-and-forget sketchybar --trigger aerospace_workspace_change']
+
+
+# ------------------------------------------------------------
+# Resize
+# Option + Shift + Arrow
+# ------------------------------------------------------------
+
+alt-shift-left = 'resize width -25'
+alt-shift-right = 'resize width +25'
+
+alt-shift-down = 'resize height -25'
+alt-shift-up = 'resize height +25'
+
+alt-shift-b = 'balance-sizes'
+
+
+# ------------------------------------------------------------
+# Fullscreen
+# ------------------------------------------------------------
+
+alt-f = 'fullscreen'
+alt-shift-f = 'macos-native-fullscreen'
+
+
+# ------------------------------------------------------------
+# Workspace navigation
+# ------------------------------------------------------------
+
+alt-tab = 'workspace-back-and-forth'
+alt-shift-tab = 'move-workspace-to-monitor --wrap-around next'
+
+
+# ------------------------------------------------------------
+# Close
+# ------------------------------------------------------------
+
+alt-c = 'exec-and-forget aerospace close --quit-if-last-window'
+
+
+# ------------------------------------------------------------
+# Disable native macOS hiding
+# ------------------------------------------------------------
+
+cmd-h = []
+cmd-alt-h = []
+
+
+# ============================================================
+# APP ASSIGNMENTS
+# ============================================================
+
+[[on-window-detected]]
+if = 'test %{app-bundle-id} = com.apple.ScreenContinuity'
+run = 'layout tiling'
+
+[[on-window-detected]]
+if = 'test %{app-bundle-id} = com.apple.systempreferences'
+run = 'layout tiling'
+
+[[on-window-detected]]
+if = 'test %{app-bundle-id} = ru.keepcoder.Telegram'
+run = ['move-node-to-workspace messages', 'exec-and-forget sketchybar --trigger aerospace_workspace_change']
+
+[[on-window-detected]]
+if = 'test %{app-bundle-id} = net.whatsapp.WhatsApp'
+run = ['move-node-to-workspace messages', 'exec-and-forget sketchybar --trigger aerospace_workspace_change']
+
+[[on-window-detected]]
+if = 'test %{app-bundle-id} = com.apple.MobileSMS'
+run = ['move-node-to-workspace messages', 'exec-and-forget sketchybar --trigger aerospace_workspace_change']
+
+[[on-window-detected]]
+if = 'test %{app-bundle-id} = com.spotify.client'
+run = ['move-node-to-workspace music', 'exec-and-forget sketchybar --trigger aerospace_workspace_change']
+
+[[on-window-detected]]
+if = 'test %{app-bundle-id} = com.tomito.tomito'
+run = ['move-node-to-workspace timer', 'exec-and-forget sketchybar --trigger aerospace_workspace_change']
+
+[[on-window-detected]]
+if = 'test %{app-bundle-id} = com.openai.chat'
+run = ['move-node-to-workspace chatgpt', 'exec-and-forget sketchybar --trigger aerospace_workspace_change']
+
+[[on-window-detected]]
+if = 'test %{app-bundle-id} = com.openai.codex'
+run = ['move-node-to-workspace chatgpt', 'exec-and-forget sketchybar --trigger aerospace_workspace_change']
+
+[[on-window-detected]]
+if = 'test %{app-bundle-id} = md.obsidian'
+run = ['move-node-to-workspace notes', 'exec-and-forget sketchybar --trigger aerospace_workspace_change']
+
+
+# ============================================================
+# MONITOR ASSIGNMENTS
+# ============================================================
+
+[workspace-to-monitor-force-assignment]
+
+2 = 'secondary'
+
+# Homebrew CLI tools are available when launched outside Terminal.
+[exec.env-vars]
+PATH = "/opt/homebrew/bin:/usr/local/bin:${PATH}"

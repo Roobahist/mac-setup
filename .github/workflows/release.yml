@@ -1,0 +1,48 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-15
+    strategy:
+      matrix:
+        arch: [arm64, x86_64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: swift test
+      - run: python3 scripts/check-profile.py
+      - name: Package
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          BUILD_ARCH: ${{ matrix.arch }}
+        run: bash scripts/package.sh "$BUILD_ARCH" "$RELEASE_TAG"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.arch }}
+          path: |
+            dist/*.tar.gz
+            dist/*.sha256
+          retention-days: 7
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: release-files
+          merge-multiple: true
+      - name: Publish assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: gh release create "$RELEASE_TAG" release-files/* --verify-tag --generate-notes --title "$RELEASE_TAG"
