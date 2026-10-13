@@ -82,6 +82,7 @@ struct TaskPickerUI {
     private var state = TaskPickerState()
     private var searchMode = false
     private var helpVisible = false
+    private var reviewMode = false
     private var statusCache: [String: String] = [:]
     private let engine: Engine
     private let colorEnabled: Bool
@@ -113,6 +114,18 @@ struct TaskPickerUI {
             if helpVisible {
                 if case .interrupt = key { return nil }
                 helpVisible = false
+                continue
+            }
+            if reviewMode {
+                switch key {
+                case .enter: reviewMode = true
+                case .escape: reviewMode = false
+                case .interrupt: return nil
+                case let .character(character):
+                    if character == "b" { reviewMode = false }
+                    if character == "q" { return nil }
+                default: break
+                }
                 continue
             }
             switch key {
@@ -174,7 +187,18 @@ struct TaskPickerUI {
         lines.append(tint("  ↑↓ Move  Space Toggle  Tab Category  / Search  A All  Enter Continue  Q Quit", "2"))
         lines.append("  " + String(repeating: "─", count: max(5, min(85, width - 4))))
 
-        if helpVisible {
+        if reviewMode {
+            lines.append(tint("  REVIEW SELECTION", "1;36"))
+            lines.append("  \(state.selectedCount) tasks selected in the following categories:")
+            for category in state.categories.dropFirst() {
+                let count = state.tasks.filter { $0.category == category && state.selected.contains($0.id) }.count
+                if count > 0 { lines.append("    [x] \(category): \(count)") }
+            }
+            lines.append("")
+            lines.append("  Each task still shows a preview and asks before making changes.")
+            lines.append("  Existing settings are journaled for recovery; apps are not uninstalled.")
+            lines.append(tint("  Enter: start setup   Esc / B: edit selection   Q: cancel", "1;36"))
+        } else if helpVisible {
             lines.append("  HELP")
             for line in [
                 "  Pick any combination of tasks. Dependencies are selected automatically.",
