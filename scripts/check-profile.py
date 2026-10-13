@@ -23,8 +23,16 @@ for profile in karabiner["profiles"]:
     assert all(not rule["description"].startswith("Grading:") for rule in profile["complex_modifications"]["rules"])
 
 vorssaint = plistlib.loads((root / "vorssaint/preferences.plist").read_bytes())
-for forbidden in ["shelfItems", "textSnippets", "commandBarUsage", "commandBarQueryHabitKey", "notchDownloadsFolderBookmark", "appVolumes", "NSOSPLastRootDirectory"]:
+for forbidden in ["shelfItems", "textSnippets", "commandBarUsage", "commandBarQueryHabitKey", "notchDownloadsFolderBookmark", "NSOSPLastRootDirectory", "recorderEditorPresets", "audioPriorityDeviceNames", "audioPriorityInputUIDs", "audioPriorityOutputUIDs"]:
     assert forbidden not in vorssaint, f"Private Vorssaint field: {forbidden}"
-assert all(isinstance(value, (bool, int, float, str)) for value in vorssaint.values())
+assert all(isinstance(value, (bool, int, float, str, dict, list, bytes)) for value in vorssaint.values())
+for key, value in vorssaint.items():
+    if isinstance(value, bytes):
+        assert key == "notchQuickAccessLayout"
+        assert json.loads(value) == {"buttons": [], "version": 1}
+    if isinstance(value, list):
+        assert all(re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]+)+", item) for item in value), key
+    if isinstance(value, dict):
+        assert not value, key
 assert vorssaint["autoQuitEnabled"] is True
 print("Public profile checks passed. These checks do not replace a full secret review.")
