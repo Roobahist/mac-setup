@@ -95,7 +95,7 @@ final class EngineTests: XCTestCase {
         _ = try write("dot-files/alacritty/alacritty.toml", "portable settings")
         let old = try write(".config/aerospace/personal.toml", "old settings")
         engine = try Engine(paths: paths, runner: runner, dotfilesSource: source)
-        XCTAssertEqual(try engine.state(Catalog.task("dotfiles-linked")), .ready)
+        XCTAssertEqual(try engine.state(Catalog.task("dotfiles-linked")), .done)
 
         _ = try engine.apply(Catalog.task("dotfiles-linked"))
         XCTAssertEqual(try engine.state(Catalog.task("dotfiles-linked")), .done)
