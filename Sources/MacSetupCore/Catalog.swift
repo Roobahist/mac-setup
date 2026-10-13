@@ -10,6 +10,7 @@ public struct Preference {
 public enum TaskAction {
     case install(packages: [String], cask: Bool, app: String?)
     case profile([String])
+    case linkedDotfiles
     case preferences([Preference], restart: String?)
     case vorssaint
     case gitIgnore
@@ -38,6 +39,9 @@ public enum Catalog {
             "Follow Homebrew's official installation instructions in Terminal. It may request your administrator password and Command Line Tools.",
             "Finish the shell PATH instructions printed by the installer, then return here. No remote installation script is executed by mac-setup."
         ])),
+        SetupTask("dotfiles-linked", "Tools", "Link public dotfiles",
+                  "Clone the public dot-files repository. Only selected application profiles are linked later. Requires Git.",
+                  action: .linkedDotfiles),
         SetupTask("fonts", "Tools", "Interface and terminal fonts", "Install Hack Nerd Font and JetBrains Mono.", dependencies: ["homebrew"], action: .install(packages: ["font-hack-nerd-font", "font-jetbrains-mono"], cask: true, app: nil)),
         SetupTask("aerospace", "Window management", "AeroSpace", "Install the tiling window manager.", dependencies: ["homebrew"], action: .install(packages: ["nikitabobko/tap/aerospace"], cask: true, app: "AeroSpace")),
         SetupTask("aerospace-profile", "Window management", "AeroSpace configuration", "Apply workspace names, key bindings, app rules and SketchyBar integration. Replaces the AeroSpace config folder after backup.", dependencies: ["aerospace"], action: .profile(["aerospace"])),

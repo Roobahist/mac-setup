@@ -1,9 +1,12 @@
 # mac-setup
 
-A guided macOS setup CLI for apps, dotfiles, and system preferences.
+A keyboard-driven macOS setup CLI for reproducing a complete, opinionated setup while
+letting each person choose which parts to install.
 
-Choose changes one by one, preview them, and keep recovery records. The public
-configuration profile is bundled with each release. No GitHub account or repository checkout is required to run downloaded builds.
+Browse a live checklist, select or deselect components, preview their prerequisites,
+and apply changes with confirmation and recovery records. The public configurations
+come from [dot-files](https://github.com/Roobahist/dot-files); offline snapshots are
+bundled with every release. No GitHub account is required to run downloaded builds.
 
 ## Run from source
 
@@ -14,14 +17,35 @@ and macOS 14+. The CLI never runs as root.
 ```sh
 git clone https://github.com/Roobahist/mac-setup.git
 cd mac-setup
-swift run mac-setup plan
 swift run mac-setup
+swift run mac-setup profiles
+swift run mac-setup plan --preset complete
 ```
 
-`plan` is read-only. The interactive menu shows task numbers and IDs, includes
-prerequisites, and asks before each task. Skipping a prerequisite leaves dependent
-tasks pending. `--yes` approves automatic tasks only; permission and Settings steps
-remain pending rather than being silently marked complete.
+## Interactive checklist
+
+Run `mac-setup` or `mac-setup setup` in a terminal to open the full-screen picker:
+
+- **Up/Down** or **J/K**: move between tasks.
+- **Space**: select or deselect a task. Required prerequisites are included automatically.
+- **Tab** and **Shift+Tab**: cycle through categories.
+- **/**: search by task name, description, category, or ID. **Esc** clears the filter.
+- **A**: select or clear tasks currently shown by the category and search filters.
+- **1**, **2**, **3**, **4**: Minimal, Productivity, Developer, or Complete preset.
+- **?**: keyboard shortcut help.
+- **Enter**: review the selection, then Enter again to begin. **B** returns to editing.
+- **Q** or **Ctrl+C**: cancel without making changes.
+
+Deselecting a prerequisite also deselects tasks that require it. A selected task is
+an instruction to check and, if needed, configure that component; deselecting does
+**not** uninstall an already installed application.
+
+The picker never performs installations by itself. Applying the selection uses the
+existing task previews, confirmation prompts, prerequisite checks, and local recovery
+journal. Guided permission steps are not silently marked complete.
+
+If you are scripting installation, use task IDs or a preset instead of the picker.
+`--yes` approves automated tasks only; guided steps remain pending.
 
 ## Download a build
 
@@ -42,18 +66,22 @@ The installer does not disable Gatekeeper or remove quarantine attributes.
 ## Commands
 
 ```sh
+mac-setup profiles
 mac-setup list
 mac-setup status
-mac-setup plan aerospace-profile sketchybar-start
+mac-setup plan --preset productivity
+mac-setup setup --preset developer
 mac-setup setup aerospace-profile sketchybar-start
 mac-setup setup --all --dry-run
+mac-setup dotfiles status
+mac-setup dotfiles update
 mac-setup backups
 mac-setup restore --dry-run
 mac-setup restore
 mac-setup update
 ```
 
-The default command opens the interactive checklist. `status` distinguishes
+The default command opens the interactive picker. `status` distinguishes
 automatically verified state, guided steps, and steps the user confirmed.
 Stored preference verification does not guarantee the visible behavior of an
 undocumented setting on every macOS release.
@@ -89,9 +117,43 @@ marked complete. Finder list icon size and display modes use supported manual UI
 
 ## Public dotfiles source
 
-The portable application configurations are maintained in [dot-files](https://github.com/Roobahist/dot-files). This repository includes checked-in snapshots so a downloaded mac-setup release remains self-contained and works offline. The independent Vorssaint snapshot stays here.
+The canonical portable configurations live in [dot-files](https://github.com/Roobahist/dot-files).
+Vorssaint's separate sanitized preference snapshot remains managed by `mac-setup`.
 
-To refresh bundled profiles from the canonical source, run:
+There are two ways to install an application profile:
+
+1. **Linked mode:** select **Link public dotfiles** in the checklist. This clones
+   `dot-files` into `~/dot-files`. When you later select an application's profile
+   task, only that application's configuration directory is linked into `~/.config`.
+   Subsequent source changes are visible through the same symlink.
+2. **Bundled mode:** leave the linked task unselected and do not have an existing
+   `~/dot-files` checkout. The chosen profile is copied from the current `mac-setup`
+   release, so setup works without network access.
+
+Existing ordinary configuration directories are recorded in the local recovery
+journal before being replaced. Existing links to **other** repositories are refused,
+never overwritten or detached. A user-created symlink for the parent
+`~/.config` directory is refused. Linking one app does not enable or install other
+applications. Running a profile task again against its managed link does not
+replace that link.
+
+```sh
+mac-setup setup dotfiles-linked
+mac-setup setup aerospace-profile karabiner-profile
+mac-setup dotfiles status
+mac-setup dotfiles update
+```
+
+The `dotfiles update` command requires a clean checkout with the expected
+Git remote and runs `git pull --ff-only`. If you have uncommitted changes,
+commit or stash them before updating. It does not force-reset your checkout.
+
+If you use `mac-setup update`, it reapplies installed bundled profiles only;
+it is not an application updater. To obtain new linked configuration, use
+`mac-setup dotfiles update`. To obtain newer bundled snapshots, install a
+newer `mac-setup` release.
+
+For maintainers, refresh checked-in snapshots with:
 
 ```sh
 python3 scripts/sync-dotfiles.py
@@ -99,9 +161,9 @@ python3 scripts/check-profile.py
 swift test
 ```
 
-A GitHub Actions workflow checks for updates hourly and when notified by the public dot-files repository. It opens a reviewable PR when profiles change. To enable immediate notifications, add a fine-grained token with Contents write permission limited to mac-setup as `MAC_SETUP_DISPATCH_TOKEN` in dot-files repository secrets. GitHub Actions may also need permission to create pull requests. The hourly sync works without that secret.
-
-If you manage your own Mac with symlinks from a local dot-files checkout, use that repository's install and update scripts. Running mac-setup's profile installer intentionally backs up and detaches symlinks, so do not apply those profile tasks on top of a checkout you wish to keep linked.
+The repository sync workflow checks hourly and can create a reviewable pull request.
+Optional immediate notifications require a fine-grained token stored in
+`dot-files` as `MAC_SETUP_DISPATCH_TOKEN`; scheduled checks need no token.
 
 ## Your data and backups
 
@@ -111,10 +173,10 @@ $HOME-relative paths; one generic key-sequence example is disabled by default. A
 personal Vorssaint transfer can use its native export/import, but exports must be
 reviewed before sharing. Stored settings alone cannot capture its unpersisted defaults.
 
-Profile installation merges bundled files into the relevant config folders,
-preserving unrelated files. If a config folder is a symlink into a personal repo,
-the installer backs up that symlink and detaches it into an ordinary local folder;
-it does not edit the linked repo. A symlinked parent config directory is rejected.
+Bundled profile installation merges files into their configuration folders while
+preserving unrelated files. Linked profiles preserve their symlinks. The installer
+refuses unrelated symlinks instead of detaching them. A symlinked parent config
+directory is rejected.
 An existing `~/.aerospace.toml` must be moved aside manually to avoid ambiguous config.
 
 Recovery records and backups live in `~/Library/Application Support/mac-setup`.

@@ -38,9 +38,8 @@ default=(
   label.padding_right=0
 )
 
-# WallpaperAccentWatcher persists plugins/colors.sh on each new wallpaper.
-# Watching the whole config tree would rebuild the bar on that write, causing
-# visible flicker and racing the direct focused-workspace update.
+# Runtime wallpaper accents come from a local cache file, not this Git checkout.
+# Avoid rebuilding the entire bar whenever its color changes.
 sketchybar --default "${default[@]}" --hotload false
 
 

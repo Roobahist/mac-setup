@@ -7,10 +7,13 @@ public final class Engine {
     public let paths: Paths
     public let runner: CommandRunning
     public let journal: Journal
+    public let dotfiles: LinkedDotfiles
 
-    public init(paths: Paths = Paths(), runner: CommandRunning = ProcessRunner()) throws {
+    public init(paths: Paths = Paths(), runner: CommandRunning = ProcessRunner(), dotfilesSource: DotfilesSource? = nil) throws {
         self.paths = paths; self.runner = runner
-        journal = try Journal(paths: paths, runner: runner)
+        let record = try Journal(paths: paths, runner: runner)
+        journal = record
+        dotfiles = LinkedDotfiles(paths: paths, runner: runner, journal: record, source: dotfilesSource)
     }
 
     public func state(_ task: SetupTask) throws -> TaskState {
@@ -22,9 +25,23 @@ public final class Engine {
                 let result = try runner.run(brew, ["list", cask ? "--cask" : "--formula", "--versions", package])
                 return result.status == 0 && !result.text.isEmpty
             } ? .done : .ready
+        case .linkedDotfiles:
+            return dotfiles.status()
         case let .profile(directories):
             if directories.contains("aerospace"), Journal.exists(paths.home.appendingPathComponent(".aerospace.toml")) { return .blocked }
-            return try directories.allSatisfy { try profileMatches($0) } ? .done : .ready
+            for name in directories {
+                let target = paths.config.appendingPathComponent(name)
+                if dotfiles.isSymlink(target) {
+                    if dotfiles.source.isLinked(name, config: paths.config),
+                       Journal.exists(dotfiles.source.checkout.appendingPathComponent(name)) {
+                        continue
+                    }
+                    return .blocked
+                }
+                if dotfiles.status() == .done { return .ready }
+                if try !profileMatches(name) { return .ready }
+            }
+            return .done
         case let .preferences(preferences, _):
             return try preferences.allSatisfy { equalPlist(try journal.preference($0.domain, $0.key), $0.value) } ? .done : .ready
         case .vorssaint:
@@ -57,11 +74,16 @@ public final class Engine {
         case let .install(packages, cask, _):
             lines.append("Homebrew installs: " + packages.joined(separator: ", ") + (cask ? " (casks)" : " (formulae)"))
             lines.append("App installations can request administrator approval. Installed packages are not automatically uninstalled by restore.")
+        case .linkedDotfiles:
+            lines.append("Clone public dot-files into \(dotfiles.source.checkout.path) if it is not there already.")
+            lines.append("Only profiles selected later are linked into \(paths.config.path). Existing local folders are backed up.")
+            lines.append("Links pointing to a different repository are never changed automatically.")
         case let .profile(directories):
             for name in directories {
                 lines.append("Merge bundled files into \(paths.config.appendingPathComponent(name).path). Existing unrelated files are preserved.")
             }
-            lines.append("Existing folder contents or symlinks are backed up. Linked personal repositories are detached, not edited.")
+            lines.append("Selected profiles use links when dot-files is checked out, otherwise bundled snapshots.")
+            lines.append("Existing directories are backed up. Unrelated symlinks are never overwritten.")
         case let .preferences(preferences, restart):
             lines += preferences.map { "\($0.domain) / \($0.key) → \($0.value)" }
             if let restart { lines.append("Restart \(restart) after saving preferences. Finish active Finder file operations first.") }
@@ -74,7 +96,7 @@ public final class Engine {
         case .atuinShell: lines.append("Append the managed zsh block to \(shellRC().path). An existing Atuin initialization is preserved.")
         case .service: lines.append("Start or restart the SketchyBar user service. Never run Homebrew as root.")
         case .accent:
-            lines.append("Read the current wallpaper locally; run Python + ImageMagick; save the accent in SketchyBar's colors.sh. No background watcher is installed.")
+            lines.append("Read the current wallpaper locally and write a validated accent into the local cache, without editing tracked dotfiles. No background watcher is installed.")
         case let .guide(url, app, instructions):
             if let app { lines.append("Open \(app).") }
             if let url { lines.append("Open: \(url)") }
@@ -106,11 +128,24 @@ public final class Engine {
                     }
                 }
                 guard try state(task) == .done else { throw SetupError("Installation could not be verified.") }
+            case .linkedDotfiles:
+                try dotfiles.install(transaction: id)
+                guard dotfiles.status() == .done else { throw SetupError("Dotfiles installation could not be verified.") }
             case let .profile(directories):
+                for name in directories where dotfiles.isSymlink(paths.config.appendingPathComponent(name)) &&
+                    !dotfiles.source.isLinked(name, config: paths.config) {
+                    throw SetupError("\(name) uses an unrelated configuration symlink. Resolve it manually.")
+                }
                 if directories.contains("aerospace"), Journal.exists(paths.home.appendingPathComponent(".aerospace.toml")) {
                     throw SetupError("~/.aerospace.toml exists. AeroSpace refuses ambiguous config locations. Move that file aside yourself, then retry.")
                 }
-                for name in directories { try installProfile(name, transaction: id) }
+                for name in directories {
+                    if dotfiles.status() == .done {
+                        try dotfiles.link(name, transaction: id)
+                    } else {
+                        try installProfile(name, transaction: id)
+                    }
+                }
                 guard try state(task) == .done else { throw SetupError("Profile verification failed.") }
                 if directories.contains("aerospace"), let tool = executable("aerospace") {
                     let running = try runner.run(tool, ["list-workspaces", "--all"])
@@ -295,12 +330,12 @@ public final class Engine {
         let result = try runner.checked(python, [paths.profile.appendingPathComponent("unsplash/get_wallpaper_accent.py").path, "-"], input: bytes)
         let color = result.text
         guard color.range(of: "^#[0-9A-Fa-f]{6}$", options: .regularExpression) != nil else { throw SetupError("Accent extractor returned an invalid color.") }
-        let target = paths.config.appendingPathComponent("sketchybar/plugins/colors.sh")
-        let old = try String(contentsOf: target, encoding: .utf8)
-        let expression = try NSRegularExpression(pattern: "(?m)^export HIGHLIGHT_COLOR=.*$")
-        guard expression.numberOfMatches(in: old, range: NSRange(old.startIndex..., in: old)) == 1 else { throw SetupError("Cannot locate a unique HIGHLIGHT_COLOR in SketchyBar config.") }
-        let updated = expression.stringByReplacingMatches(in: old, range: NSRange(old.startIndex..., in: old), withTemplate: "export HIGHLIGHT_COLOR=0xff" + color.dropFirst())
-        try journal.write(target, data: Data(updated.utf8), transaction: transaction)
+        let envCache = ProcessInfo.processInfo.environment["XDG_CACHE_HOME"]
+        let cacheRoot = envCache.flatMap { $0.hasPrefix("/") ? URL(fileURLWithPath: $0) : nil }
+            ?? paths.home.appendingPathComponent(".cache")
+        let target = cacheRoot.appendingPathComponent("sketchybar/highlight-color")
+        let value = "0xff" + String(color.dropFirst()) + "\n"
+        try journal.write(target, data: Data(value.utf8), transaction: transaction)
         if let sketchybar = executable("sketchybar"), let aerospace = executable("aerospace") {
             let focused = try runner.run(aerospace, ["list-workspaces", "--focused"])
             if focused.status == 0 && !focused.text.isEmpty {

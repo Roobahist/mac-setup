@@ -15,6 +15,12 @@ jobs:
           python-version: '3.12'
       - name: Test with isolated homes and fake system commands
         run: swift test
+      - name: Smoke-test CLI commands
+        run: |
+          swift run mac-setup --version
+          swift run mac-setup profiles
+          swift run mac-setup plan --preset minimal > /dev/null
+          swift run mac-setup dotfiles status
       - name: Validate public profile
         run: python3 scripts/check-profile.py
       - name: Validate shell scripts
