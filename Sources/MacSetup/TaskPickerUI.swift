@@ -9,6 +9,7 @@ private enum PickerKey {
 /// Isolates terminal mode changes and restores the original configuration on every exit.
 private final class RawTerminal {
     private var saved: termios
+    private var pendingByte: UInt8?
 
     init?() {
         guard isatty(STDIN_FILENO) != 0, isatty(STDOUT_FILENO) != 0 else { return nil }
@@ -32,6 +33,7 @@ private final class RawTerminal {
     }
 
     private func readByte(_ timeout: Int32? = nil) -> UInt8? {
+        if let byte = pendingByte { pendingByte = nil; return byte }
         if let timeout {
             var pending = pollfd(fd: STDIN_FILENO, events: Int16(POLLIN), revents: 0)
             guard Darwin.poll(&pending, 1, timeout) > 0 else { return nil }
@@ -50,7 +52,10 @@ private final class RawTerminal {
         case 127, 8: return .backspace
         case 27:
             guard let prefix = readByte(120) else { return .escape }
-            guard prefix == 91 || prefix == 79 else { return .escape }
+            guard prefix == 91 || prefix == 79 else {
+                pendingByte = prefix  // Preserve a key typed quickly after Escape.
+                return .escape
+            }
 
             // CSI: ESC [ A / B, ESC [ 1 ; modifier A / B.
             // SS3: ESC O A / B (application cursor-key mode).
