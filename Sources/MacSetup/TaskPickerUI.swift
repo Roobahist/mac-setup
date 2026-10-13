@@ -3,12 +3,13 @@ import Darwin
 import MacSetupCore
 
 private enum PickerKey {
-    case up, down, tab, backTab, enter, space, escape, backspace, character(Character), interrupt
+    case up, down, tab, backTab, enter, space, escape, backspace, character(Character), interrupt, idle
 }
 
 /// Isolates terminal mode changes and restores the original configuration on every exit.
 private final class RawTerminal {
     private var saved: termios
+    private var pendingByte: UInt8?
 
     init?() {
         guard isatty(STDIN_FILENO) != 0, isatty(STDOUT_FILENO) != 0 else { return nil }
@@ -32,6 +33,7 @@ private final class RawTerminal {
     }
 
     private func readByte(_ timeout: Int32? = nil) -> UInt8? {
+        if let byte = pendingByte { pendingByte = nil; return byte }
         if let timeout {
             var pending = pollfd(fd: STDIN_FILENO, events: Int16(POLLIN), revents: 0)
             guard Darwin.poll(&pending, 1, timeout) > 0 else { return nil }
@@ -40,8 +42,8 @@ private final class RawTerminal {
         return Darwin.read(STDIN_FILENO, &byte, 1) == 1 ? byte : nil
     }
 
-    func nextKey() -> PickerKey {
-        guard let byte = readByte() else { return .interrupt }
+    func nextKey(timeout: Int32 = 100) -> PickerKey {
+        guard let byte = readByte(timeout) else { return .idle }
         switch byte {
         case 3, 4: return .interrupt
         case 9: return .tab
@@ -49,8 +51,19 @@ private final class RawTerminal {
         case 32: return .space
         case 127, 8: return .backspace
         case 27:
-            guard let prefix = readByte(50) else { return .escape }
-            if prefix == 91, let code = readByte(50) {
+            guard let prefix = readByte(120) else { return .escape }
+            guard prefix == 91 || prefix == 79 else {
+                pendingByte = prefix  // Preserve a key typed quickly after Escape.
+                return .escape
+            }
+
+            // CSI: ESC [ A / B, ESC [ 1 ; modifier A / B.
+            // SS3: ESC O A / B (application cursor-key mode).
+            for _ in 0..<12 {
+                guard let code = readByte(120) else { return .escape }
+                // Intermediate parameters are ASCII 0x20-0x3F. A final byte
+                // is 0x40-0x7E, regardless of modifier parameter length.
+                guard code >= 0x40 && code <= 0x7E else { continue }
                 switch code {
                 case 65: return .up
                 case 66: return .down
@@ -64,7 +77,7 @@ private final class RawTerminal {
                let scalar = UnicodeScalar(Int(byte)) {
                 return .character(Character(scalar))
             }
-            return .escape
+            return .idle
         }
     }
 
@@ -77,13 +90,71 @@ private final class RawTerminal {
     }
 }
 
+/// Runs potentially slow Homebrew and preferences checks outside the input loop.
+/// Only the cached result is ever read by the renderer.
+private final class TaskStatusLookup {
+    private let lock = NSLock()
+    private let worker = DispatchQueue(label: "mac-setup.picker.status", qos: .utility)
+    private var values: [String: String] = [:]
+    private var submitted = Set<String>()
+    private var generation = 0
+    private var closed = false
+
+    var revision: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return generation
+    }
+
+    func status(for task: SetupTask, engine: Engine) -> String {
+        lock.lock()
+        if let value = values[task.id] {
+            lock.unlock()
+            return value
+        }
+        let enqueue = !closed && submitted.insert(task.id).inserted
+        lock.unlock()
+        if enqueue {
+            worker.async { [weak self] in
+                guard let self else { return }
+                self.lock.lock()
+                let cancelled = self.closed
+                self.lock.unlock()
+                if cancelled { return }
+                let value: String
+                do { value = try engine.state(task).rawValue }
+                catch { value = "Status unavailable" }
+                self.lock.lock()
+                if !self.closed {
+                    self.values[task.id] = value
+                    self.generation += 1
+                }
+                self.lock.unlock()
+            }
+        }
+        return "Checking…"
+    }
+
+    func cancel() {
+        lock.lock()
+        closed = true
+        lock.unlock()
+    }
+
+    /// Wait only when execution might mutate state. Cancel never blocks quitting.
+    func finishBeforeApplying() {
+        cancel()
+        worker.sync {}
+    }
+}
+
 /// Interactive picker is deliberately separate from the execution engine.
 struct TaskPickerUI {
     private var state = TaskPickerState()
     private var searchMode = false
     private var helpVisible = false
     private var reviewMode = false
-    private var statusCache: [String: String] = [:]
+    private let statusLookup = TaskStatusLookup()
     private let engine: Engine
     private let colorEnabled: Bool
 
@@ -97,9 +168,19 @@ struct TaskPickerUI {
         guard let terminal = RawTerminal() else {
             throw SetupError("Interactive selection requires a terminal. Use setup --preset complete, --all, or task IDs in scripts.")
         }
+        defer { statusLookup.cancel() }
+        var needsRedraw = true
+        var lastRevision = -1
         while true {
-            terminal.write(render(size: terminal.dimensions))
+            let revision = statusLookup.revision
+            if needsRedraw || revision != lastRevision {
+                terminal.write(render(size: terminal.dimensions))
+                lastRevision = statusLookup.revision
+                needsRedraw = false
+            }
             let key = terminal.nextKey()
+            if case .idle = key { continue }
+            needsRedraw = true
             if searchMode {
                 switch key {
                 case .enter: searchMode = false
@@ -118,7 +199,9 @@ struct TaskPickerUI {
             }
             if reviewMode {
                 switch key {
-                case .enter: reviewMode = true
+                case .enter:
+                    statusLookup.finishBeforeApplying()
+                    return state.orderedSelection
                 case .escape: reviewMode = false
                 case .interrupt: return nil
                 case let .character(character):
@@ -136,8 +219,9 @@ struct TaskPickerUI {
             case .space: state.toggleFocused()
             case .backspace: state.removeSearchCharacter()
             case .escape: state.clearSearch()
-            case .enter: return state.orderedSelection
+            case .enter: reviewMode = true
             case .interrupt: return nil
+            case .idle: continue
             case let .character(character):
                 switch character {
                 case "q": return nil
@@ -156,13 +240,8 @@ struct TaskPickerUI {
         }
     }
 
-    private mutating func taskStatus(_ task: SetupTask) -> String {
-        if let cached = statusCache[task.id] { return cached }
-        let result: String
-        do { result = try engine.state(task).rawValue }
-        catch { result = "Could not inspect: \(error)" }
-        statusCache[task.id] = result
-        return result
+    private func taskStatus(_ task: SetupTask) -> String {
+        statusLookup.status(for: task, engine: engine)
     }
 
     private func tint(_ text: String, _ code: String) -> String {
