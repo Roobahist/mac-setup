@@ -97,14 +97,20 @@ final class EngineTests: XCTestCase {
         engine = try Engine(paths: paths, runner: runner, dotfilesSource: source)
         XCTAssertEqual(try engine.state(Catalog.task("dotfiles-linked")), .ready)
 
-        let transaction = try engine.apply(Catalog.task("dotfiles-linked"))
+        _ = try engine.apply(Catalog.task("dotfiles-linked"))
+        XCTAssertEqual(try engine.state(Catalog.task("dotfiles-linked")), .done)
+        XCTAssertFalse(source.isLinked("aerospace", config: paths.config))
+        XCTAssertFalse(source.isLinked("alacritty", config: paths.config))
+
+        let first = try engine.apply(Catalog.task("aerospace-profile"))
+        let second = try engine.apply(Catalog.task("alacritty-profile"))
         XCTAssertTrue(source.isLinked("aerospace", config: paths.config))
         XCTAssertTrue(source.isLinked("alacritty", config: paths.config))
-        XCTAssertEqual(try engine.state(Catalog.task("dotfiles-linked")), .done)
         XCTAssertEqual(try engine.state(Catalog.task("aerospace-profile")), .done)
         XCTAssertFalse(FileManager.default.fileExists(atPath: old.path))
 
-        try engine.journal.restore(transaction)
+        try engine.journal.restore(second)
+        try engine.journal.restore(first)
         XCTAssertEqual(try String(contentsOf: old), "old settings")
         XCTAssertFalse(source.isLinked("aerospace", config: paths.config))
         XCTAssertFalse(source.isLinked("alacritty", config: paths.config))
