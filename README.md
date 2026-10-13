@@ -122,7 +122,7 @@ or replace the executable itself.
 
 ## Included tasks
 
-- Homebrew guidance; AeroSpace, SketchyBar, Vorssaint, Raycast, Karabiner, Alacritty,
+- Automatic Homebrew installation and zsh setup; AeroSpace, SketchyBar, Vorssaint, Raycast, Karabiner, Alacritty,
   Atuin, fonts, Python and ImageMagick installation through Homebrew.
 - Portable AeroSpace workspaces, app rules and bindings; SketchyBar workspace bar,
   clock, fonts and accent; Karabiner shortcuts; Alacritty and Atuin preferences.
@@ -132,9 +132,11 @@ or replace the executable itself.
   items, hidden desktop files, dark appearance, Finder list view and tab preferences.
 - A managed Atuin zsh initialization block and macOS global Git ignore rules that
   preserve existing rules.
-- Guided Finder sidebar and icon sizing, display scaling, menu-bar auto-hide,
-  two-finger secondary click, default icon colors, Liquid Glass, desktop widgets,
-  app permissions and login items.
+- Automatic Finder list icon sizing, menu-bar auto-hide, two-finger secondary click,
+  Mission Control workspace settings, and desktop widget hiding (macOS 14+), with preference verification and backups.
+- Guided Finder sidebar customization, display scaling, icon colors/Liquid Glass,
+  app permissions, onboarding and app-specific login items. These require choices
+  or a supported app/Settings approval workflow.
 - Local wallpaper accent extraction. `setup wallpaper-colors` reads the current
   wallpaper; the `--image` option accepts a local image path if the wallpaper is
   unavailable. Image bytes are never uploaded.
@@ -285,3 +287,9 @@ triggers the focused-workspace update directly. Its behavior is preserved. Use a
 local SketchyBar configuration rather than a symlink into tracked dotfiles if you
 want generated colors to remain outside your repository. Manual
 `setup wallpaper-colors` remains backed up like any other setup task.
+
+Homebrew setup runs the official installer in your terminal when missing, including
+any password or Command Line Tools prompts. The CLI then adds `brew shellenv` to
+zsh's `.zprofile` after backup. Restore can undo the shell edit but does not uninstall
+Homebrew. Privacy approvals always remain guided. Stored preference verification
+does not replace checking the visible result; some changes need logout and login.

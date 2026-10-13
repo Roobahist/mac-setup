@@ -101,7 +101,10 @@ public struct TaskPickerState {
     public func hierarchySpacer(after task: SetupTask, before next: SetupTask) -> String? {
         let currentPrefix = hierarchyPrefix(for: task)
         let nextPrefix = hierarchyPrefix(for: next)
-        guard currentPrefix.count > nextPrefix.count else { return nil }
+        let opensGroup = currentPrefix.isEmpty && !nextPrefix.isEmpty
+        let endsLeafSibling = !currentPrefix.isEmpty && currentPrefix.count == nextPrefix.count &&
+            !visibleTasks.contains { $0.dependencies.first == task.id }
+        guard currentPrefix.count > nextPrefix.count || opensGroup || endsLeafSibling else { return nil }
         return nextPrefix.isEmpty ? "" : String(nextPrefix.dropLast(4)) + "│"
     }
 

@@ -20,6 +20,11 @@ public final class Engine {
 
     public func state(_ task: SetupTask) throws -> TaskState {
         switch task.action {
+        case .homebrew: return tools("brew") != nil ? .done : .ready
+        case .finderIcons:
+            let views = try journal.preference("com.apple.finder", "StandardViewSettings") as? [String: Any] ?? [:]
+            let lists = ["ListViewSettings", "ExtendedListViewSettingsV2"].compactMap { views[$0] as? [String: Any] }
+            return !lists.isEmpty && lists.allSatisfy { equalPlist($0["iconSize"], 32.0) } ? .done : .ready
         case let .install(packages, cask, app):
             if let app, appPath(app, home: paths.home) != nil { return .done }
             guard let brew = tools("brew") else { return .blocked }
@@ -67,7 +72,6 @@ public final class Engine {
             return try journal.launchAgentLoaded(WallpaperWatcher.label) ? .done : .ready
         case .accent: return .ready // A new wallpaper needs a new extraction.
         case .guide:
-            if task.id == "homebrew" { return tools("brew") != nil ? .done : .guided }
             let recorded = journal.transactions.contains { $0.task == task.id && $0.complete && $0.changes.isEmpty }
             return recorded ? .confirmed : .guided
         }
@@ -76,6 +80,12 @@ public final class Engine {
     public func preview(_ task: SetupTask) throws -> [String] {
         var lines = [task.summary]
         switch task.action {
+        case .homebrew:
+            lines.append("Download https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh to a temporary file, then run the official installer interactively with /bin/bash.")
+            lines.append("The installer may request administrator authentication or Command Line Tools approval. mac-setup stays a normal user process.")
+            lines.append("Back up and append a managed brew shellenv block to zsh's .zprofile. Installation itself is not undone by restore; shell configuration is.")
+        case .finderIcons:
+            lines.append("Back up StandardViewSettings and change only iconSize in its list-view dictionaries to 32. Preserve column layout, sorting and text size. Restart Finder; finish active file operations first.")
         case let .install(packages, cask, _):
             lines.append("Homebrew installs: " + packages.joined(separator: ", ") + (cask ? " (casks)" : " (formulae)"))
             lines.append("App installations can request administrator approval. Installed packages are not automatically uninstalled by restore.")
@@ -120,8 +130,20 @@ public final class Engine {
         let id = try journal.begin(task.id)
         do {
             switch task.action {
+            case .homebrew: try installHomebrew(transaction: id)
+            case .finderIcons:
+                var views = try journal.preference("com.apple.finder", "StandardViewSettings") as? [String: Any] ?? [:]
+                let keys = ["ListViewSettings", "ExtendedListViewSettingsV2"].filter { views[$0] is [String: Any] }
+                for key in keys.isEmpty ? ["ListViewSettings"] : keys {
+                    var list = views[key] as? [String: Any] ?? [:]
+                    list["iconSize"] = 32.0
+                    views[key] = list
+                }
+                try journal.setPreference("com.apple.finder", "StandardViewSettings", views, transaction: id)
+                try runner.checked("/usr/bin/killall", ["Finder"])
+                guard try state(task) == .done else { throw SetupError("Finder icon size verification failed.") }
             case let .install(packages, cask, app):
-                guard let brew = tools("brew") else { throw SetupError("Install Homebrew using its guided task first.") }
+                guard let brew = tools("brew") else { throw SetupError("Install Homebrew first.") }
                 if task.id == "vorssaint" {
                     #if arch(x86_64)
                     throw SetupError("Vorssaint requires Apple silicon.")
@@ -179,6 +201,29 @@ public final class Engine {
             return id
         } catch {
             throw SetupError("\(error)\nRecovery record: \(id). Run mac-setup restore \(id) to undo recorded changes; installed apps remain installed.")
+        }
+    }
+
+    private func installHomebrew(transaction: String) throws {
+        if tools("brew") == nil {
+            let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let script = directory.appendingPathComponent("install.sh")
+            try runner.checked("/usr/bin/curl", ["--fail", "--location", "--silent", "--show-error", "--proto", "=https", "--tlsv1.2", "https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh", "--output", script.path])
+            guard !(try Data(contentsOf: script)).isEmpty else { throw SetupError("Homebrew installer download was empty.") }
+            try runner.checked("/bin/bash", [script.path], interactive: true)
+        }
+        guard let brew = tools("brew") else { throw SetupError("Homebrew installation could not be verified. Finish the installer requirements and retry.") }
+        let profile: URL
+        if let zdot = ProcessInfo.processInfo.environment["ZDOTDIR"], !zdot.isEmpty, paths.home == FileManager.default.homeDirectoryForCurrentUser {
+            profile = expandedPath(zdot).appendingPathComponent(".zprofile")
+        } else { profile = paths.home.appendingPathComponent(".zprofile") }
+        let old = Journal.exists(profile) ? try String(contentsOf: profile, encoding: .utf8) : ""
+        if !old.contains("# >>> mac-setup: Homebrew >>>") && !old.contains("brew shellenv") {
+            let quoted = "'" + brew.replacingOccurrences(of: "'", with: "'\"'\"'") + "'"
+            let block = "\n# >>> mac-setup: Homebrew >>>\neval \"$(" + quoted + " shellenv)\"\n# <<< mac-setup: Homebrew <<<\n"
+            try journal.write(profile, data: Data((old + block).utf8), transaction: transaction)
         }
     }
 
