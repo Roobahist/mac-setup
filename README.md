@@ -99,7 +99,7 @@ python3 scripts/check-profile.py
 swift test
 ```
 
-A GitHub Actions workflow checks for updates hourly and when notified by the public dot-files repository. It opens a reviewable PR when profiles change. To enable immediate notifications, add a fine-grained token with Actions write permission on mac-setup as `MAC_SETUP_DISPATCH_TOKEN` in dot-files repository secrets. GitHub Actions may also need permission to create pull requests. The hourly sync works without that secret.
+A GitHub Actions workflow checks for updates hourly and when notified by the public dot-files repository. It opens a reviewable PR when profiles change. To enable immediate notifications, add a fine-grained token with Contents write permission limited to mac-setup as `MAC_SETUP_DISPATCH_TOKEN` in dot-files repository secrets. GitHub Actions may also need permission to create pull requests. The hourly sync works without that secret.
 
 If you manage your own Mac with symlinks from a local dot-files checkout, use that repository's install and update scripts. Running mac-setup's profile installer intentionally backs up and detaches symlinks, so do not apply those profile tasks on top of a checkout you wish to keep linked.
 
