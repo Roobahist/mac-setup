@@ -403,7 +403,7 @@ final class EngineTests: XCTestCase {
         XCTAssertEqual(try engine.state(Catalog.task("finder-icons")), .done)
         let views = runner.preferences["com.apple.finder"]!["StandardViewSettings"] as! [String: Any]
         XCTAssertTrue(equalPlist(views["IconViewSettings"], original["IconViewSettings"]))
-        XCTAssertEqual((views["ExtendedListViewSettingsV2"] as! [String: Any])["sortColumn"] as? String, "name")
+        XCTAssertEqual((views["ExtendedListViewSettingsV2"] as! [String: Any])["sortColumn"] as? String, "dateModified")
         try engine.journal.restore(id)
         XCTAssertTrue(equalPlist(runner.preferences["com.apple.finder"]!["StandardViewSettings"], original))
     }
@@ -421,6 +421,25 @@ final class EngineTests: XCTestCase {
             try engine.journal.restore(record)
         }
         if case .guide = Catalog.desktopWidgetAction(macOSMajorVersion: 13) {} else { XCTFail("Unsupported desktop widgets must remain guided") }
+    }
+
+    func testReferenceFinderDefaultsMatchBothColumnLayouts() {
+        let original: [String: Any] = ["ListViewSettings": ["columns": ["name": ["width": 320], "comments": ["width": 240, "visible": true]]], "ExtendedListViewSettingsV2": ["columns": [["identifier": "name", "width": 320], ["identifier": "dateModified", "width": 180], ["identifier": "comments", "visible": true]]]]
+        let result = Engine.finderListDefaults(original)
+        for key in ["ListViewSettings", "ExtendedListViewSettingsV2"] {
+            let list = result[key] as! [String: Any]
+            XCTAssertTrue(equalPlist(list["textSize"], 13))
+            XCTAssertTrue(equalPlist(list["iconSize"], 32))
+            XCTAssertTrue(equalPlist(list["calculateAllSizes"], false))
+            XCTAssertTrue(equalPlist(list["useRelativeDates"], true))
+            XCTAssertTrue(equalPlist(list["showIconPreview"], true))
+        }
+        let legacy = (result["ListViewSettings"] as! [String: Any])["columns"] as! [String: [String: Any]]
+        XCTAssertEqual(legacy["name"]?["width"] as? Int, 320)
+        XCTAssertEqual(Set(legacy.filter { equalPlist($0.value["visible"], true) }.keys), ["name", "dateModified", "size", "kind"])
+        let modern = (result["ExtendedListViewSettingsV2"] as! [String: Any])["columns"] as! [[String: Any]]
+        XCTAssertEqual(Set(modern.filter { equalPlist($0["visible"], true) }.compactMap { $0["identifier"] as? String }), ["name", "dateModified", "size", "kind"])
+        XCTAssertTrue(equalPlist(result, Engine.finderListDefaults(result)))
     }
 
 }

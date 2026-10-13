@@ -101,7 +101,12 @@ public enum Catalog {
         SetupTask("finder-tabs", "Finder", "Prefer windows over tabs", "Disable Finder's folder-tab preference and set the system tab preference to Never. Explicit tab commands remain available.", action: .preferences([
             Preference("com.apple.finder", "FinderWindowTabs", false), Preference("NSGlobalDomain", "AppleWindowTabbingMode", "manual")
         ], restart: "Finder")),
-        SetupTask("finder-icons", "Finder", "Larger list-view icons", "Set Finder's default list icon size to 32 while preserving other view options. Existing folder overrides may remain.", action: .finderIcons),
+        SetupTask("finder-icons", "Finder", "Finder list-view settings", "Match the reference: list view, no groups, Date Modified sorting, large icons, text 13, selected columns, relative dates and previews. Existing folder overrides may remain.", dependencies: ["finder-list"], action: .finderIcons),
+        SetupTask("finder-view-check", "Finder", "Folder list-view behavior", "Check the folder-specific Always open and Browse in list view options from the reference.", dependencies: ["finder-icons"], action: .guide(url: nil, app: "Finder", instructions: [
+            "Open Macintosh HD (or your startup disk) and press Command+J. Enable Always open in list view and Browse in list view.",
+            "Check Group By: None; Sort By: Date Modified; large icons; text size 13; only Date Modified, Size and Kind columns besides Name; relative dates and icon previews enabled; Calculate all sizes disabled. Click Use as Defaults.",
+            "Existing folders can retain their own view metadata. Repeat the two top checkbox choices for folders that override the default. mac-setup does not rewrite every folder's .DS_Store file."
+        ])),
         SetupTask("finder-sidebar", "Finder", "Clean up Finder sidebar", "Keep Home and Macintosh HD; remove unused favorites such as Desktop.", action: .guide(url: nil, app: "Finder", instructions: [
             "In Finder > Settings > Sidebar, enable your Home folder and Hard disks; disable unused entries such as Desktop.",
             "Drag useful folders into Favorites. Remove an existing favorite using its context menu > Remove from Sidebar. This removes the shortcut, not the folder.",
@@ -123,7 +128,7 @@ public enum Catalog {
         ], restart: nil)),
         SetupTask("appearance-details", "Appearance", "Default icon colors and Liquid Glass", "Use the default icon appearance and the most transparent available glass style.", action: .guide(url: "x-apple.systempreferences:com.apple.Appearance-Settings.extension", app: nil, instructions: [
             "Keep dark system appearance but choose the default icon style rather than tinted or clear icons, where macOS exposes that choice.",
-            "Choose the clear Liquid Glass style if available. Check Accessibility > Display for Reduce Transparency if glass appears opaque.",
+            "Match the transparent Control Center reference: choose Clear Liquid Glass (or the most transparent available setting) and keep Reduce Transparency off in Accessibility > Display. The material depends on macOS and the wallpaper; network names and slider values from the reference are not copied.",
             "Older macOS releases may not offer these controls. Record this task as skipped on unsupported systems."
         ])),
         SetupTask("desktop-widgets", "Appearance", "Hide desktop widgets", "Disable desktop widgets while preserving Stage Manager widget settings. Log out if widgets have not refreshed.", action: desktopWidgetAction(macOSMajorVersion: ProcessInfo.processInfo.operatingSystemVersion.majorVersion)),

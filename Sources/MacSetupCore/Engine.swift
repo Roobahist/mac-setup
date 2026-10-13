@@ -23,8 +23,9 @@ public final class Engine {
         case .homebrew: return tools("brew") != nil ? .done : .ready
         case .finderIcons:
             let views = try journal.preference("com.apple.finder", "StandardViewSettings") as? [String: Any] ?? [:]
-            let lists = ["ListViewSettings", "ExtendedListViewSettingsV2"].compactMap { views[$0] as? [String: Any] }
-            return !lists.isEmpty && lists.allSatisfy { equalPlist($0["iconSize"], 32.0) } ? .done : .ready
+            let grouping = try journal.preference("com.apple.finder", "FXPreferredGroupBy")
+            let view = try journal.preference("com.apple.finder", "FXPreferredViewStyle")
+            return equalPlist(views, Self.finderListDefaults(views)) && equalPlist(grouping, "None") && equalPlist(view, "Nlsv") ? .done : .ready
         case let .install(packages, cask, app):
             if let app, appPath(app, home: paths.home) != nil { return .done }
             guard let brew = tools("brew") else { return .blocked }
@@ -85,7 +86,7 @@ public final class Engine {
             lines.append("The installer may request administrator authentication or Command Line Tools approval. mac-setup stays a normal user process.")
             lines.append("Back up and append a managed brew shellenv block to zsh's .zprofile. Installation itself is not undone by restore; shell configuration is.")
         case .finderIcons:
-            lines.append("Back up StandardViewSettings and change only iconSize in its list-view dictionaries to 32. Preserve column layout, sorting and text size. Restart Finder; finish active file operations first.")
+            lines.append("Back up Finder view defaults. Apply list view, no grouping, Date Modified sorting, large icons, text size 13, Date Modified/Size/Kind columns, relative dates and previews. Preserve widths and unrelated settings. Restart Finder; finish active file operations first.")
         case let .install(packages, cask, _):
             lines.append("Homebrew installs: " + packages.joined(separator: ", ") + (cask ? " (casks)" : " (formulae)"))
             lines.append("App installations can request administrator approval. Installed packages are not automatically uninstalled by restore.")
@@ -133,13 +134,10 @@ public final class Engine {
             case .homebrew: try installHomebrew(transaction: id)
             case .finderIcons:
                 var views = try journal.preference("com.apple.finder", "StandardViewSettings") as? [String: Any] ?? [:]
-                let keys = ["ListViewSettings", "ExtendedListViewSettingsV2"].filter { views[$0] is [String: Any] }
-                for key in keys.isEmpty ? ["ListViewSettings"] : keys {
-                    var list = views[key] as? [String: Any] ?? [:]
-                    list["iconSize"] = 32.0
-                    views[key] = list
-                }
+                views = Self.finderListDefaults(views)
                 try journal.setPreference("com.apple.finder", "StandardViewSettings", views, transaction: id)
+                try journal.setPreference("com.apple.finder", "FXPreferredGroupBy", "None", transaction: id)
+                try journal.setPreference("com.apple.finder", "FXPreferredViewStyle", "Nlsv", transaction: id)
                 try runner.checked("/usr/bin/killall", ["Finder"])
                 guard try state(task) == .done else { throw SetupError("Finder icon size verification failed.") }
             case let .install(packages, cask, app):
@@ -202,6 +200,43 @@ public final class Engine {
         } catch {
             throw SetupError("\(error)\nRecovery record: \(id). Run mac-setup restore \(id) to undo recorded changes; installed apps remain installed.")
         }
+    }
+
+    public static func finderListDefaults(_ original: [String: Any]) -> [String: Any] {
+        var views = original
+        let existing = ["ListViewSettings", "ExtendedListViewSettingsV2"].filter { views[$0] is [String: Any] }
+        let visible: Set<String> = ["name", "dateModified", "size", "kind"]
+        let identifiers = ["name", "dateModified", "size", "kind", "dateCreated", "dateLastOpened", "dateAdded", "version", "comments", "label", "ubiquity", "shareOwner", "shareLastEditor", "invitationStatus"]
+        for key in existing.isEmpty ? ["ListViewSettings"] : existing {
+            var list = views[key] as? [String: Any] ?? [:]
+            list["iconSize"] = 32.0; list["textSize"] = 13.0
+            list["sortColumn"] = "dateModified"
+            list["useRelativeDates"] = true; list["calculateAllSizes"] = false; list["showIconPreview"] = true
+            if var columns = list["columns"] as? [[String: Any]] {
+                for index in columns.indices {
+                    if let identifier = columns[index]["identifier"] as? String {
+                        columns[index]["visible"] = visible.contains(identifier)
+                        if identifier == "dateModified" { columns[index]["ascending"] = false }
+                    }
+                }
+                for identifier in identifiers where !columns.contains(where: { $0["identifier"] as? String == identifier }) {
+                    columns.append(["identifier": identifier, "visible": visible.contains(identifier), "ascending": identifier != "dateModified"])
+                }
+                list["columns"] = columns
+            } else {
+                var columns = list["columns"] as? [String: [String: Any]] ?? [:]
+                for (index, identifier) in identifiers.enumerated() {
+                    var column = columns[identifier] ?? ["index": index]
+                    column["visible"] = visible.contains(identifier)
+                    if identifier == "dateModified" { column["ascending"] = false }
+                    columns[identifier] = column
+                }
+                for identifier in Array(columns.keys) where !visible.contains(identifier) { columns[identifier]?["visible"] = false }
+                list["columns"] = columns
+            }
+            views[key] = list
+        }
+        return views
     }
 
     private func installHomebrew(transaction: String) throws {

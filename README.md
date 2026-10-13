@@ -293,3 +293,10 @@ any password or Command Line Tools prompts. The CLI then adds `brew shellenv` to
 zsh's `.zprofile` after backup. Restore can undo the shell edit but does not uninstall
 Homebrew. Privacy approvals always remain guided. Stored preference verification
 does not replace checking the visible result; some changes need logout and login.
+
+The Finder reference preset uses list view, no grouping, Date Modified sorting,
+32-point icons, 13-point text, Name/Date Modified/Size/Kind columns, relative dates
+and icon previews, with Calculate all sizes off. Folder-specific Always open/Browse
+checkboxes remain a guided check because existing folders store their own view
+metadata. The appearance guide targets Clear Liquid Glass with Reduce Transparency
+off, matching the transparent Control Center reference.
