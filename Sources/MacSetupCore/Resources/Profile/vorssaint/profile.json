@@ -1,0 +1,19 @@
+{
+  "appVersion": "3.4.1",
+  "formatVersion": 1,
+  "exportedSettings": 796,
+  "publicSettings": 786,
+  "excludedKeys": [
+    "audioPriorityDeviceNames",
+    "audioPriorityInputUIDs",
+    "audioPriorityOutputUIDs",
+    "diskEjectExcludedVolumes",
+    "fanControlResume",
+    "keepAwakeUntilTime",
+    "launchAtLoginWanted",
+    "recorderEditorPresets",
+    "screenshotFileNumberNext",
+    "textSnippets"
+  ],
+  "source": "User-provided native settings export; original private content is not bundled."
+}

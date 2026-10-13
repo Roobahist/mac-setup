@@ -7,17 +7,21 @@ public final class Engine {
     public let paths: Paths
     public let runner: CommandRunning
     public let journal: Journal
+    private let runtimeSource: URL?
+    private let resolveTool: (String) -> String?
 
-    public init(paths: Paths = Paths(), runner: CommandRunning = ProcessRunner()) throws {
+    public init(paths: Paths = Paths(), runner: CommandRunning = ProcessRunner(), runtimeSource: URL? = nil, tools: @escaping (String) -> String? = executable) throws {
         self.paths = paths; self.runner = runner
         journal = try Journal(paths: paths, runner: runner)
+        self.runtimeSource = runtimeSource ?? Bundle.main.executableURL?.resolvingSymlinksInPath().deletingLastPathComponent()
+        resolveTool = tools
     }
 
     public func state(_ task: SetupTask) throws -> TaskState {
         switch task.action {
         case let .install(packages, cask, app):
             if let app, appPath(app, home: paths.home) != nil { return .done }
-            guard let brew = executable("brew") else { return .blocked }
+            guard let brew = resolveTool("brew") else { return .blocked }
             return try packages.allSatisfy { package in
                 let result = try runner.run(brew, ["list", cask ? "--cask" : "--formula", "--versions", package])
                 return result.status == 0 && !result.text.isEmpty
@@ -28,7 +32,8 @@ public final class Engine {
         case let .preferences(preferences, _):
             return try preferences.allSatisfy { equalPlist(try journal.preference($0.domain, $0.key), $0.value) } ? .done : .ready
         case .vorssaint:
-            return try vorssaintPreferences().allSatisfy { equalPlist(try journal.preference($0.domain, $0.key), $0.value) } ? .done : .ready
+            let values = try journal.preferences("com.vorssaint.utils")
+            return try vorssaintPreferences().allSatisfy { equalPlist(values[$0.key], $0.value) } ? .done : .ready
         case .gitIgnore:
             let values = try journal.gitValues("core.excludesfile")
             guard values.count == 1 else { return .ready }
@@ -41,11 +46,24 @@ public final class Engine {
             let text = (try? String(contentsOf: file, encoding: .utf8)) ?? ""
             return hasAtuinInit(text) ? .done : .ready
         case .service:
-            guard executable("sketchybar") != nil else { return .blocked }
+            guard resolveTool("sketchybar") != nil else { return .blocked }
             return try journal.serviceStarted() ? .done : .ready
         case .accent: return .ready // A new wallpaper needs a new extraction.
+        case .wallpaperWatcher:
+            guard try journal.launchAgentLoaded(WallpaperWatcher.label), let runtimeSource else { return .ready }
+            let runtime = paths.state.appendingPathComponent("watcher-runtime")
+            for name in ["mac-setup", "MacSetup_MacSetupCore.bundle"] {
+                let actual = try Journal.fingerprint(runtime.appendingPathComponent(name))
+                let expected = try Journal.fingerprint(runtimeSource.appendingPathComponent(name))
+                if actual == nil || actual != expected { return .ready }
+            }
+            return .done
+        case .finderIcons:
+            let values = try journal.preference("com.apple.finder", "StandardViewSettings") as? [String: Any]
+            let list = values?["ListViewSettings"] as? [String: Any]
+            return equalPlist(list?["iconSize"], 32.0) ? .done : .ready
         case .guide:
-            if task.id == "homebrew" { return executable("brew") != nil ? .done : .guided }
+            if task.id == "homebrew" { return resolveTool("brew") != nil ? .done : .guided }
             let recorded = journal.transactions.contains { $0.task == task.id && $0.complete && $0.changes.isEmpty }
             return recorded ? .confirmed : .guided
         }
@@ -68,13 +86,20 @@ public final class Engine {
             lines.append("Verification checks stored preferences; confirm the visible result on this macOS version.")
         case .vorssaint:
             lines.append("Merge \(try vorssaintPreferences().count) portable settings into com.vorssaint.utils. Quit Vorssaint first; launch it afterwards.")
-            lines.append("No shelf items, snippets, bookmarks, command usage, device IDs or account data are included. Unpersisted defaults require the app's native export.")
+            lines.append("The native 3.4.1 export includes default values and quit-on-close exceptions. No snippets, bookmarks, device IDs, private presets or account data are included.")
         case .gitIgnore:
             lines.append("Append missing macOS rules to the currently configured ignore file, or ~/.gitignore_global if none is configured.")
         case .atuinShell: lines.append("Append the managed zsh block to \(shellRC().path). An existing Atuin initialization is preserved.")
         case .service: lines.append("Start or restart the SketchyBar user service. Never run Homebrew as root.")
         case .accent:
             lines.append("Read the current wallpaper locally; run Python + ImageMagick; save the accent in SketchyBar's colors.sh. No background watcher is installed.")
+        case .wallpaperWatcher:
+            lines.append("Copy the executable and resource bundle to \(paths.state.appendingPathComponent("watcher-runtime").path). Register \(WallpaperWatcher.label) for this user only.")
+            lines.append("Stop the old WallpaperAccentWatcher first if it is running. Restore unregisters this watcher and restores its previous runtime/plist; the last derived accent stays until changed or restored separately.")
+            lines.append("Registration is verified separately from wallpaper access. Use watcher-status and the wallpaper-access guided task to test the visible result.")
+        case .finderIcons:
+            lines.append("Change only StandardViewSettings > ListViewSettings > iconSize to 32. Preserve columns, sorting, text size and other view defaults. Restart Finder; finish active file operations first.")
+            lines.append("This preference layout matches the source Mac. Use finder-view-check to verify behavior on the recipient's macOS version.")
         case let .guide(url, app, instructions):
             if let app { lines.append("Open \(app).") }
             if let url { lines.append("Open: \(url)") }
@@ -90,7 +115,7 @@ public final class Engine {
         do {
             switch task.action {
             case let .install(packages, cask, app):
-                guard let brew = executable("brew") else { throw SetupError("Install Homebrew using its guided task first.") }
+                guard let brew = resolveTool("brew") else { throw SetupError("Install Homebrew using its guided task first.") }
                 if task.id == "vorssaint" {
                     #if arch(x86_64)
                     throw SetupError("Vorssaint requires Apple silicon.")
@@ -112,7 +137,7 @@ public final class Engine {
                 }
                 for name in directories { try installProfile(name, transaction: id) }
                 guard try state(task) == .done else { throw SetupError("Profile verification failed.") }
-                if directories.contains("aerospace"), let tool = executable("aerospace") {
+                if directories.contains("aerospace"), let tool = resolveTool("aerospace") {
                     let running = try runner.run(tool, ["list-workspaces", "--all"])
                     if running.status == 0 { try runner.checked(tool, ["reload-config"]) }
                 }
@@ -123,11 +148,21 @@ public final class Engine {
                 if try runner.run("/usr/bin/pgrep", ["-x", "Vorssaint"]).status == 0 {
                     throw SetupError("Quit Vorssaint from its menu before applying the profile, then retry. Its private contents will remain local.")
                 }
-                for preference in try vorssaintPreferences() { try journal.setPreference(preference.domain, preference.key, preference.value, transaction: id) }
+                try journal.setPreferences(vorssaintPreferences(), transaction: id)
             case .gitIgnore: try applyGitIgnore(transaction: id)
             case .atuinShell: try applyAtuinShell(transaction: id)
             case .service: try journal.startService(transaction: id)
             case .accent: try applyAccent(transaction: id, image: image)
+            case .wallpaperWatcher: try installWallpaperWatcher(transaction: id, image: image)
+            case .finderIcons:
+                let existing = try journal.preference("com.apple.finder", "StandardViewSettings")
+                guard existing == nil || existing is [String: Any] else { throw SetupError("Unrecognized Finder View Options schema; use the guided View Options UI.") }
+                var values = existing as? [String: Any] ?? [:]
+                guard values["ListViewSettings"] == nil || values["ListViewSettings"] is [String: Any] else { throw SetupError("Unrecognized Finder list-view schema; use View Options in Finder.") }
+                var list = values["ListViewSettings"] as? [String: Any] ?? [:]
+                list["iconSize"] = 32.0; values["ListViewSettings"] = list
+                try journal.setPreference("com.apple.finder", "StandardViewSettings", values, transaction: id)
+                try runner.checked("/usr/bin/killall", ["Finder"])
             case .guide: break
             }
             try journal.finish(id)
@@ -156,7 +191,7 @@ public final class Engine {
     public func updateTasks() -> [String] {
         Catalog.tasks.filter { task in
             let isProfile: Bool
-            switch task.action { case .profile, .vorssaint: isProfile = true; default: isProfile = false }
+            switch task.action { case .profile, .vorssaint, .wallpaperWatcher: isProfile = true; default: isProfile = false }
             return isProfile && journal.transactions.contains {
                 $0.task == task.id && $0.complete && $0.changes.contains(where: { !$0.restored })
             }
@@ -170,6 +205,8 @@ public final class Engine {
     }
 
     private func profileMatches(_ name: String) throws -> Bool {
+        let targetRoot = paths.config.appendingPathComponent(name)
+        if (try? FileManager.default.attributesOfItem(atPath: targetRoot.path)[.type] as? FileAttributeType) == .typeSymbolicLink { return false }
         let root = paths.profile.appendingPathComponent(name)
         let files = try bundledFiles(name)
         guard !files.isEmpty else { return false }
@@ -282,7 +319,11 @@ public final class Engine {
     }
 
     private func applyAccent(transaction: String, image: URL?) throws {
-        guard let python = executable("python3"), executable("magick") != nil else { throw SetupError("Install wallpaper-tools first.") }
+        try refreshAccent(image: image, transaction: transaction)
+    }
+
+    public func refreshAccent(image: URL? = nil, transaction: String? = nil) throws {
+        guard let python = resolveTool("python3"), resolveTool("magick") != nil else { throw SetupError("Install wallpaper-tools first.") }
         let wallpaper: URL
         if let image { wallpaper = image }
         else {
@@ -300,12 +341,46 @@ public final class Engine {
         let expression = try NSRegularExpression(pattern: "(?m)^export HIGHLIGHT_COLOR=.*$")
         guard expression.numberOfMatches(in: old, range: NSRange(old.startIndex..., in: old)) == 1 else { throw SetupError("Cannot locate a unique HIGHLIGHT_COLOR in SketchyBar config.") }
         let updated = expression.stringByReplacingMatches(in: old, range: NSRange(old.startIndex..., in: old), withTemplate: "export HIGHLIGHT_COLOR=0xff" + color.dropFirst())
-        try journal.write(target, data: Data(updated.utf8), transaction: transaction)
-        if let sketchybar = executable("sketchybar"), let aerospace = executable("aerospace") {
-            let focused = try runner.run(aerospace, ["list-workspaces", "--focused"])
-            if focused.status == 0 && !focused.text.isEmpty {
-                try runner.checked(sketchybar, ["--trigger", "aerospace_workspace_change", "FOCUSED_WORKSPACE=" + focused.text])
+        if let transaction { try journal.write(target, data: Data(updated.utf8), transaction: transaction) }
+        else {
+            // A background process must never follow config symlinks into a personal repo.
+            var check = target
+            while check.path != paths.home.path && check.path != "/" {
+                if (try? FileManager.default.attributesOfItem(atPath: check.path)[.type] as? FileAttributeType) == .typeSymbolicLink {
+                    throw SetupError("The watcher refuses a symlinked color configuration. Apply sketchybar-profile to create a backed-up local copy first.")
+                }
+                check.deleteLastPathComponent()
             }
+            let attributes = try FileManager.default.attributesOfItem(atPath: target.path)
+            try Data(updated.utf8).write(to: target, options: .atomic)
+            if let permissions = attributes[.posixPermissions] { try FileManager.default.setAttributes([.posixPermissions: permissions], ofItemAtPath: target.path) }
         }
+        if let sketchybar = resolveTool("sketchybar"), let aerospace = resolveTool("aerospace") {
+            let focused = try runner.checked(aerospace, ["list-workspaces", "--focused"])
+            guard !focused.text.isEmpty && !focused.text.contains("\n") else { throw SetupError("AeroSpace returned an invalid focused workspace; the watcher will retry.") }
+            try runner.checked(sketchybar, ["--trigger", "aerospace_workspace_change", "FOCUSED_WORKSPACE=" + focused.text])
+        }
+    }
+
+    private func installWallpaperWatcher(transaction: String, image: URL?) throws {
+        guard !(try journal.launchAgentLoaded(WallpaperWatcher.legacyLabel)) else {
+            throw SetupError("The old WallpaperAccentWatcher job is loaded. Stop it first, then retry; mac-setup will not disable another tool's job automatically.")
+        }
+        guard let runtimeSource, FileManager.default.isExecutableFile(atPath: runtimeSource.appendingPathComponent("mac-setup").path),
+              FileManager.default.fileExists(atPath: runtimeSource.appendingPathComponent("MacSetup_MacSetupCore.bundle").path) else {
+            throw SetupError("Watcher installation needs the compiled mac-setup executable beside its resource bundle. Use an extracted release or the Swift build output.")
+        }
+        let plist = paths.home.appendingPathComponent("Library/LaunchAgents/" + WallpaperWatcher.label + ".plist")
+        let staging = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: staging) }
+        for name in ["mac-setup", "MacSetup_MacSetupCore.bundle"] {
+            try FileManager.default.copyItem(at: runtimeSource.appendingPathComponent(name), to: staging.appendingPathComponent(name))
+        }
+        try journal.suspendLaunchAgent(WallpaperWatcher.label, plist: plist, transaction: transaction)
+        try journal.replace(paths.state.appendingPathComponent("watcher-runtime"), with: staging, transaction: transaction)
+        try journal.write(plist, data: WallpaperWatcher.launchPlist(paths: paths, image: image), transaction: transaction)
+        try journal.loadLaunchAgent(plist)
+        guard try journal.launchAgentLoaded(WallpaperWatcher.label) else { throw SetupError("Wallpaper watcher registration could not be verified.") }
     }
 }

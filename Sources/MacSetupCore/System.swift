@@ -42,7 +42,7 @@ public struct ProcessRunner: CommandRunning {
         process.environment = environment
         // A file avoids pipe-buffer deadlocks on verbose subprocesses.
         let outputURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        FileManager.default.createFile(atPath: outputURL.path, contents: nil)
+        FileManager.default.createFile(atPath: outputURL.path, contents: nil, attributes: [.posixPermissions: 0o600])
         let output = try FileHandle(forWritingTo: outputURL)
         defer { try? output.close(); try? FileManager.default.removeItem(at: outputURL) }
         if !interactive { process.standardOutput = output; process.standardError = output }
@@ -50,7 +50,9 @@ public struct ProcessRunner: CommandRunning {
         var inputHandle: FileHandle?
         if let input {
             let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-            try input.write(to: url)
+            guard FileManager.default.createFile(atPath: url.path, contents: input, attributes: [.posixPermissions: 0o600]) else {
+                throw SetupError("Cannot prepare private subprocess input.")
+            }
             inputURL = url
             inputHandle = try FileHandle(forReadingFrom: url)
             process.standardInput = inputHandle

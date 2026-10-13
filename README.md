@@ -52,6 +52,8 @@ mac-setup backups
 mac-setup restore --dry-run
 mac-setup restore
 mac-setup update
+mac-setup watcher-status
+mac-setup watcher-stop
 ```
 
 The default command opens the interactive checklist. `status` distinguishes
@@ -60,6 +62,7 @@ Stored preference verification does not guarantee the visible behavior of an
 undocumented setting on every macOS release.
 
 `update` reapplies previously installed profiles bundled in the current executable.
+It also refreshes a previously installed wallpaper watcher runtime when changed.
 Install a newer CLI build first to obtain newer profiles. It does not pull a private
 repository, upgrade every Homebrew package, or replace the executable itself.
 
@@ -69,10 +72,12 @@ repository, upgrade every Homebrew package, or replace the executable itself.
   Atuin, fonts, Python and ImageMagick installation through Homebrew.
 - Portable AeroSpace workspaces, app rules and bindings; SketchyBar workspace bar,
   clock, fonts and accent; Karabiner shortcuts; Alacritty and Atuin preferences.
-- A snapshot of 181 portable Vorssaint preferences, including quit-on-close.
+- A snapshot of 786 portable Vorssaint settings from the native 3.4.1 export,
+  including defaults, quit-on-close exceptions and feature choices.
   Quit Vorssaint before applying or restoring it. Launch it afterwards.
 - Dock auto-hide with a five-second reveal delay, removal of ordinary pinned Dock
-  items, hidden desktop files, dark appearance, Finder list view and tab preferences.
+  items, hidden desktop files, dark appearance, Finder list view, 32-point default
+  list icons, and tab preferences. Other Finder View Options are preserved.
 - A managed Atuin zsh initialization block and macOS global Git ignore rules that
   preserve existing rules.
 - Guided Finder sidebar and icon sizing, display scaling, menu-bar auto-hide,
@@ -81,20 +86,27 @@ repository, upgrade every Homebrew package, or replace the executable itself.
 - Local wallpaper accent extraction. `setup wallpaper-colors` reads the current
   wallpaper; the `--image` option accepts a local image path if the wallpaper is
   unavailable. Image bytes are never uploaded.
+- A startup wallpaper watcher adapted from the author's existing watcher. It
+  uses a private copy of the CLI, polls the main display every two seconds,
+  debounces changes, detects overwritten image files, and retries errors.
 
-The original full checklist is represented, but two pieces remain explicitly
-pending: automatic wallpaper-change watching (the personal watcher source is
-missing) and removal of system-managed Finder/launcher Dock controls. A reliable
+The original full checklist is represented. Removal of system-managed
+Finder/launcher Dock controls remains explicitly pending. A reliable
 long menu-bar reveal delay is also not implemented. These tasks are not falsely
-marked complete. Finder list icon size and display modes use supported manual UIs.
+marked complete. Finder View Options have a guided visual check for existing-folder
+overrides; display modes use the supported manual UI.
 
 ## Your data and backups
 
 The public profile has no personal snippets, shelf contents, Atuin database,
 authentication session, device bookmarks or private Git history. Karabiner uses
 recipient-relative paths; disabled personal grading macros are removed. A full
-personal Vorssaint transfer can use its native export/import, but exports must be
-reviewed before sharing. Stored settings alone cannot capture its unpersisted defaults.
+personal Vorssaint transfer can use its native export/import. The public profile is
+now based on that native export and includes default values. Ten keys are excluded:
+snippets, private recorder presets, audio-device choices, volume exclusions, login
+registration, live fan/awake state and screenshot numbering. `profile.json` lists
+the exclusions. Portable onboarding flags travel; operating-system permission
+grants never do. Raw exports must be reviewed before sharing.
 
 Profile installation merges bundled files into the relevant config folders,
 preserving unrelated files. If a config folder is a symlink into a personal repo,
@@ -113,7 +125,8 @@ setup before restoring any target in that record. `--force` explicitly permits
 discarding later edits. A partially completed restore can be retried.
 
 Restore covers managed files, selected preference keys, global Git ignore settings,
-and a SketchyBar service newly started by this tool. It does not uninstall apps,
+startup watcher registration/runtime, and a SketchyBar service newly started by
+this tool. It does not uninstall apps,
 revoke permissions, undo manual settings, or remove every empty parent directory.
 Relaunch affected apps or log out after restoring preferences.
 
@@ -140,3 +153,37 @@ behavior still need testing on a spare Mac or disposable user account before a
 stable release.
 
 MIT license. Third-party apps and fonts retain their own licenses; see NOTICE.md.
+
+## Wallpaper watcher
+
+`mac-setup setup wallpaper-watcher` previews and installs a private runtime copy
+under `~/Library/Application Support/mac-setup/watcher-runtime` and a user LaunchAgent
+named `io.github.roobahist.mac-setup.wallpaper`. Moving the downloaded CLI does not
+break the watcher. No separate graphical app is installed.
+
+Only the active wallpaper on the main display supplies the accent. `watch` runs the
+same behavior in the foreground; `watch --once` performs one refresh. `--image`
+can select an accessible local image instead. The optional image choice is persisted
+in a startup watcher installed with that option. Python and ImageMagick receive
+image bytes locally; no image data is uploaded.
+
+Run `watcher-status` to inspect registration and recent logs, then change wallpapers
+to verify the visible result. Registration alone does not prove file access or a
+healthy extraction. If the wallpaper provider stores an image in a protected
+container, choose an accessible image or explicitly approve the runtime executable
+in Privacy & Security > Full Disk Access. Permission given to Terminal does not
+automatically authorize the startup executable. macOS may require reapproval after
+a binary update. No permission database or security setting is edited by the CLI.
+
+The original WallpaperAccentWatcher must be stopped before installing this watcher;
+the CLI refuses to disable another tool's job. `watcher-stop` unloads the job but
+retains its startup plist. Re-running setup registers it again. Restoring the
+watcher installation backup unloads it and restores the previous runtime/plist;
+if an older watcher installation was registered, it is registered again afterwards.
+The last derived accent is left in place. Stop the watcher before restoring older
+SketchyBar configuration backups; they may otherwise detect generated color edits.
+
+The daemon only edits `HIGHLIGHT_COLOR` and refuses symlinked configuration paths
+so it cannot alter a linked personal repository. Its own periodic writes do not
+create an unlimited series of backups. Manual `setup wallpaper-colors` remains
+backed up like any other setup task.

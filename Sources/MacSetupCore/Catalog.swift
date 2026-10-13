@@ -16,6 +16,8 @@ public enum TaskAction {
     case atuinShell
     case service
     case accent
+    case wallpaperWatcher
+    case finderIcons
     case guide(url: String?, app: String?, instructions: [String])
 }
 
@@ -52,10 +54,10 @@ public enum Catalog {
         SetupTask("vorssaint", "Apps", "Vorssaint", "Install the modular macOS utility (Apple silicon, macOS 14+).", dependencies: ["homebrew"], action: .install(packages: ["vorssaint"], cask: true, app: "Vorssaint")),
         SetupTask("vorssaint-profile", "Apps", "Vorssaint preferences", "Apply the portable preference snapshot, including quit-on-last-window. Quit Vorssaint first. Private snippets, shelf contents and machine state are excluded.", dependencies: ["vorssaint"], action: .vorssaint),
         SetupTask("vorssaint-access", "Apps", "Vorssaint access and remaining settings", "Finish permissions and settings that cannot be transferred as public preferences.", dependencies: ["vorssaint-profile"], action: .guide(url: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility", app: "Vorssaint", instructions: [
-            "Launch Vorssaint and complete its onboarding. Grant only permissions requested by the features you enable.",
+            "Launch Vorssaint and review the imported feature choices. Its portable onboarding flags are included; permissions still require approval on this Mac. Grant only permissions requested by the features you enable.",
             "Check Quit on close and select the apps it should affect. Test by closing an app's last window.",
-            "Use Vorssaint's native Settings export/import for a full personal transfer, including defaults not persisted to disk. Review any export before sharing; never publish snippets or personal content.",
-            "Enable launch at login in Vorssaint itself. The captured profile merges portable stored settings; it does not overwrite another Mac's private content or register login items."
+            "The public profile now comes from the native Vorssaint 3.4.1 export, including default values and quit-on-close exceptions. Personal snippets, device choices and private presets remain local.",
+            "Enable launch at login in Vorssaint itself. The captured profile merges portable settings; it does not overwrite another Mac's private content or register login items."
         ])),
         SetupTask("raycast", "Apps", "Raycast", "Install Raycast. Account setup and personal extensions stay local.", dependencies: ["homebrew"], action: .install(packages: ["raycast"], cask: true, app: "Raycast")),
         SetupTask("raycast-access", "Apps", "Raycast setup", "Set the launcher shortcut and authorize the extensions you use.", dependencies: ["raycast"], action: .guide(url: nil, app: "Raycast", instructions: [
@@ -88,7 +90,8 @@ public enum Catalog {
         SetupTask("finder-tabs", "Finder", "Prefer windows over tabs", "Disable Finder's folder-tab preference and set the system tab preference to Never. Explicit tab commands remain available.", action: .preferences([
             Preference("com.apple.finder", "FinderWindowTabs", false), Preference("NSGlobalDomain", "AppleWindowTabbingMode", "manual")
         ], restart: "Finder")),
-        SetupTask("finder-icons", "Finder", "Larger list-view icons", "Use Finder's supported View Options UI.", action: .guide(url: nil, app: "Finder", instructions: [
+        SetupTask("finder-icons", "Finder", "Larger list-view icons", "Set the Finder list-view default icon size to 32, matching the current setup. Preserve every other View Options value. Existing folders can keep their own overrides.", dependencies: ["finder-list"], action: .finderIcons),
+        SetupTask("finder-view-check", "Finder", "Check Finder View Options", "Confirm the larger icons visually and adjust folder-specific overrides if needed.", dependencies: ["finder-icons"], action: .guide(url: nil, app: "Finder", instructions: [
             "Open your Home folder, choose View > as List, then View > Show View Options (Command+J).",
             "Choose the larger icon size and your preferred text size. Click Use as Defaults if available. Existing folders may retain individual view settings."
         ])),
@@ -120,9 +123,12 @@ public enum Catalog {
         ])),
         SetupTask("wallpaper-tools", "Appearance", "Wallpaper color dependencies", "Install Python and ImageMagick for local accent extraction.", dependencies: ["homebrew"], action: .install(packages: ["python", "imagemagick"], cask: false, app: nil)),
         SetupTask("wallpaper-colors", "Appearance", "Match SketchyBar accent to wallpaper", "Extract an accent locally from the current wallpaper and update SketchyBar. Run again after a wallpaper change.", dependencies: ["wallpaper-tools", "sketchybar-profile"], action: .accent),
-        SetupTask("wallpaper-watcher", "Appearance", "Automatic wallpaper color updates", "Configure the wallpaper-change watcher after its source is available.", action: .guide(url: nil, app: nil, instructions: [
-            "The personal setup references WallpaperAccentWatcher, but its source is not in the shared dotfiles. This automatic integration still needs that source or an agreed replacement.",
-            "For now, run mac-setup setup wallpaper-colors after changing the wallpaper. This task cannot be automatically verified."
+        SetupTask("wallpaper-watcher", "Appearance", "Automatic wallpaper color updates", "Install a user-level startup watcher using a private runtime copy of this CLI. It watches the main display wallpaper and refreshes the accent after changes.", dependencies: ["wallpaper-tools", "sketchybar-start"], action: .wallpaperWatcher),
+        SetupTask("wallpaper-access", "Appearance", "Wallpaper watcher access and test", "Check the background watcher's logs and authorize file access only if the chosen wallpaper requires it.", dependencies: ["wallpaper-watcher"], action: .guide(url: nil, app: nil, instructions: [
+            "Change to another static wallpaper and check that the focused SketchyBar workspace changes color after a few seconds.",
+            "Run mac-setup watcher-status to see registration and recent logs. A running job alone does not prove wallpaper access.",
+            "If macOS blocks the wallpaper file, use an accessible local copy or approve the installed watcher executable in Privacy & Security > Full Disk Access. The background executable has its own process identity; Terminal's permission is not a substitute.",
+            "Do not run the old WallpaperAccentWatcher alongside this watcher. Permissions are never granted automatically."
         ])),
         SetupTask("dock-special-items", "Appearance", "Finder and launcher Dock items", "Review special Dock items that are not ordinary pinned apps.", action: .guide(url: "x-apple.systempreferences:com.apple.Desktop-Settings.extension", app: nil, instructions: [
             "The dock-minimal task removes ordinary pinned launchers. Finder and Trash are system-managed items.",

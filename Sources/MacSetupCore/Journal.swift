@@ -3,7 +3,7 @@ import CryptoKit
 import Darwin
 import CoreFoundation
 
-public enum ChangeKind: String, Codable { case path, preference, git, service }
+public enum ChangeKind: String, Codable { case path, preference, git, service, launchAgent }
 
 public struct SavedChange: Codable {
     public let kind: ChangeKind
@@ -58,8 +58,12 @@ public final class Journal {
     }
 
     private func add(_ change: SavedChange, to id: String) throws {
+        try add([change], to: id)
+    }
+
+    private func add(_ changes: [SavedChange], to id: String) throws {
         guard let index = transactions.firstIndex(where: { $0.id == id }) else { throw SetupError("Unknown backup.") }
-        transactions[index].changes.append(change)
+        transactions[index].changes.append(contentsOf: changes)
         try save() // The recovery record reaches disk before the change.
     }
 
@@ -119,21 +123,25 @@ public final class Journal {
     }
 
     public func preference(_ domain: String, _ key: String) throws -> Any? {
+        try preferences(domain)[key]
+    }
+
+    public func preferences(_ domain: String) throws -> [String: Any] {
         let result = try runner.run("/usr/bin/defaults", ["export", domain, "-"])
         if result.status != 0 {
             // Missing domains are normal. Other errors must not masquerade as absence.
-            if result.text.contains("does not exist") || result.text.contains("not found") { return nil }
+            if result.text.contains("does not exist") || result.text.contains("not found") { return [:] }
             throw SetupError("Cannot read preferences for \(domain): \(result.text)")
         }
         guard let values = try PropertyListSerialization.propertyList(from: result.output, format: nil) as? [String: Any] else {
             throw SetupError("Cannot decode preferences for \(domain).")
         }
-        return values[key]
+        return values
     }
 
-    private func setPreference(_ domain: String, _ key: String, _ value: Any?) throws {
+    private func setPreference(_ domain: String, _ key: String, _ value: Any?, knownPresent: Bool = false) throws {
         guard let value else {
-            if try preference(domain, key) != nil { try runner.checked("/usr/bin/defaults", ["delete", domain, key]) }
+            if try knownPresent || preference(domain, key) != nil { try runner.checked("/usr/bin/defaults", ["delete", domain, key]) }
             return
         }
         let data = try PropertyListSerialization.data(fromPropertyList: value is String || value is NSNumber ? ["value": value] : value, format: .xml, options: 0)
@@ -154,6 +162,44 @@ public final class Journal {
         try add(SavedChange(kind: .preference, target: domain, key: key, backup: nil, before: try old.map(plistData), after: try plistData(value), restored: false), to: transaction)
         try setPreference(domain, key, value)
         guard equalPlist(try preference(domain, key), value) else { throw SetupError("Preference verification failed: \(domain) \(key)") }
+    }
+
+    public func setPreferences(_ desired: [Preference], transaction: String) throws {
+        var old: [String: [String: Any]] = [:]
+        for domain in Set(desired.map(\.domain)) { old[domain] = try preferences(domain) }
+        let changed = desired.filter { !equalPlist(old[$0.domain]?[$0.key], $0.value) }
+        let snapshots = try changed.map { preference in
+            SavedChange(kind: .preference, target: preference.domain, key: preference.key, backup: nil,
+                before: try old[preference.domain]?[preference.key].map(plistData), after: try plistData(preference.value), restored: false)
+        }
+        try add(snapshots, to: transaction)
+        for preference in changed { try setPreference(preference.domain, preference.key, preference.value) }
+        var actual: [String: [String: Any]] = [:]
+        for domain in Set(changed.map(\.domain)) { actual[domain] = try preferences(domain) }
+        guard changed.allSatisfy({ equalPlist(actual[$0.domain]?[$0.key], $0.value) }) else {
+            throw SetupError("Preference verification failed. The recovery record covers every changed key.")
+        }
+    }
+
+    public func launchAgentLoaded(_ label: String) throws -> Bool {
+        try runner.run("/bin/launchctl", ["print", "gui/\(getuid())/\(label)"]).status == 0
+    }
+
+    public func suspendLaunchAgent(_ label: String, plist: URL, transaction: String) throws {
+        let old = try launchAgentLoaded(label)
+        try add(SavedChange(kind: .launchAgent, target: label, key: plist.path, backup: nil,
+            before: try plistData(old), after: try plistData(true), restored: false), to: transaction)
+        if old { try stopLaunchAgent(label) }
+    }
+
+    public func stopLaunchAgent(_ label: String) throws {
+        if try launchAgentLoaded(label) {
+            try runner.checked("/bin/launchctl", ["bootout", "gui/\(getuid())/\(label)"])
+        }
+    }
+
+    public func loadLaunchAgent(_ plist: URL) throws {
+        try runner.checked("/bin/launchctl", ["bootstrap", "gui/\(getuid())", plist.path])
     }
 
     public func gitValues(_ key: String) throws -> [String] {
@@ -194,16 +240,27 @@ public final class Journal {
     public func restore(_ id: String, force: Bool = false) throws {
         try reload()
         guard let index = transactions.firstIndex(where: { $0.id == id }) else { throw SetupError("Unknown backup: \(id)") }
+        var domains: [String: [String: Any]] = [:]
+        for change in transactions[index].changes where change.kind == .preference && !change.restored {
+            if domains[change.target] == nil { domains[change.target] = try preferences(change.target) }
+        }
+        var observed: [Int: Data] = [:]
         // Preflight all conflicts before restoring anything.
-        for change in transactions[index].changes where !change.restored {
-            let current = try currentValue(change)
-            if !force && current != change.after && current != change.before {
+        for (offset, change) in transactions[index].changes.enumerated() where !change.restored {
+            let current = change.kind == .preference ? try domains[change.target]?[change.key!].map(plistData) : try currentValue(change)
+            observed[offset] = current
+            let interruptedJob = change.kind == .launchAgent && !transactions[index].complete
+            if !force && !interruptedJob && current != change.after && current != change.before {
                 throw SetupError("\(change.target) changed since setup. Nothing restored. Inspect it first; --force explicitly discards later edits.")
             }
             if let backup = change.backup, !Self.exists(paths.state.appendingPathComponent("backups/" + backup)) {
                 throw SetupError("Missing backup file for \(change.target).")
             }
             if change.kind == .path { try refuseSymlinkParents(URL(fileURLWithPath: change.target)) }
+        }
+        // Stop background writers before restoring their executable and plist.
+        for change in transactions[index].changes where change.kind == .launchAgent && !change.restored {
+            try stopLaunchAgent(change.target)
         }
         for changeIndex in transactions[index].changes.indices.reversed() {
             let change = transactions[index].changes[changeIndex]
@@ -216,7 +273,9 @@ public final class Journal {
                     try FileManager.default.copyItem(at: paths.state.appendingPathComponent("backups/" + backup), to: url)
                 }
             case .preference:
-                try setPreference(change.target, change.key!, try change.before.map(plistValue))
+                if observed[changeIndex] != change.before {
+                    try setPreference(change.target, change.key!, try change.before.map(plistValue), knownPresent: observed[changeIndex] != nil)
+                }
             case .git:
                 let key = change.key!
                 if !(try gitValues(key)).isEmpty { try runner.checked("/usr/bin/git", ["config", "--global", "--unset-all", key]) }
@@ -227,6 +286,8 @@ public final class Journal {
                 guard let brew = executable("brew") else { throw SetupError("Homebrew is required to restore the service state.") }
                 let wasStarted = try plistValue(change.before!) as? Bool ?? false
                 try runner.checked(brew, ["services", wasStarted ? "start" : "stop", "sketchybar"], interactive: true)
+            case .launchAgent:
+                if try plistValue(change.before!) as? Bool == true { try loadLaunchAgent(URL(fileURLWithPath: change.key!)) }
             }
             transactions[index].changes[changeIndex].restored = true
             try save()
@@ -239,6 +300,7 @@ public final class Journal {
         case .preference: return try preference(change.target, change.key!).map(plistData)
         case .git: return try plistData(gitValues(change.key!))
         case .service: return try plistData(serviceStarted())
+        case .launchAgent: return try plistData(launchAgentLoaded(change.target))
         }
     }
 

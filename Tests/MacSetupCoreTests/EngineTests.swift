@@ -6,9 +6,28 @@ final class FakeRunner: CommandRunning {
     var git: [String: [String]] = [:]
     var calls: [[String]] = []
     var failWrites = false
+    var jobs = Set<String>()
 
     func run(_ executable: String, _ args: [String], interactive: Bool, input: Data?) throws -> CommandResult {
         calls.append([executable] + args)
+        if args == ["list-workspaces", "--focused"] { return CommandResult(status: 0, output: Data("1\n".utf8)) }
+        if args.first?.hasSuffix("get_wallpaper_accent.py") == true {
+            XCTAssertNotNil(input)
+            return CommandResult(status: 0, output: Data("#123ABC\n".utf8))
+        }
+        if executable == "/bin/launchctl" {
+            let label = args[1].components(separatedBy: "/").last!
+            switch args[0] {
+            case "print": return CommandResult(status: jobs.contains(label) ? 0 : 113)
+            case "bootout": jobs.remove(label)
+            case "bootstrap":
+                let data = try Data(contentsOf: URL(fileURLWithPath: args[2]))
+                let values = try PropertyListSerialization.propertyList(from: data, format: nil) as! [String: Any]
+                jobs.insert(values["Label"] as! String)
+            default: XCTFail("Unexpected launchctl command")
+            }
+            return CommandResult(status: 0)
+        }
         if executable == "/usr/bin/defaults" {
             let operation = args[0], domain = args[1]
             if operation == "export" {
@@ -203,12 +222,14 @@ final class EngineTests: XCTestCase {
         let keys = Set(preferences.map(\.key))
         XCTAssertTrue(keys.contains("autoQuitEnabled"))
         XCTAssertTrue(equalPlist(preferences.first(where: { $0.key == "autoQuitEnabled" })?.value, true))
-        for forbidden in ["shelfItems", "textSnippets", "commandBarUsage", "notchDownloadsFolderBookmark", "appVolumes", "NSOSPLastRootDirectory"] {
+        for forbidden in ["shelfItems", "textSnippets", "commandBarUsage", "notchDownloadsFolderBookmark", "NSOSPLastRootDirectory", "audioPriorityDeviceNames", "recorderEditorPresets", "launchAtLoginWanted"] {
             XCTAssertFalse(keys.contains(forbidden))
         }
         runner.preferences["com.vorssaint.utils"] = ["textSnippets": Data("private".utf8)]
         let id = try engine.apply(Catalog.task("vorssaint-profile"))
         XCTAssertEqual(runner.preferences["com.vorssaint.utils"]?["textSnippets"] as? Data, Data("private".utf8))
+        XCTAssertEqual(runner.preferences["com.vorssaint.utils"]?["autoQuitExceptions"] as? [String], ["com.apple.finder", "com.apple.mobilephone"])
+        XCTAssertLessThan(runner.calls.filter { $0.count > 1 && $0[0] == "/usr/bin/defaults" && $0[1] == "export" }.count, 5)
         try engine.journal.restore(id)
         XCTAssertEqual(runner.preferences["com.vorssaint.utils"]?["textSnippets"] as? Data, Data("private".utf8))
     }
@@ -223,5 +244,104 @@ final class EngineTests: XCTestCase {
         let first = try SetupLock(paths: paths)
         XCTAssertThrowsError(try SetupLock(paths: paths))
         withExtendedLifetime(first) {}
+    }
+
+    func testWallpaperPolicyDebouncesAndRetriesFailures() throws {
+        var policy = WallpaperPolicy()
+        let now = Date()
+        let first = WallpaperFingerprint(path: "first", size: 10, modified: now)
+        let second = WallpaperFingerprint(path: "second", size: 20, modified: now)
+        XCTAssertTrue(policy.shouldApply(first, now: now))
+        policy.succeeded(first)
+        XCTAssertFalse(policy.shouldApply(first, now: now))
+        XCTAssertFalse(policy.shouldApply(second, now: now))
+        XCTAssertTrue(policy.shouldApply(second, now: now.addingTimeInterval(2)))
+        policy.failed(second, now: now)
+        XCTAssertFalse(policy.shouldApply(second, now: now.addingTimeInterval(10)))
+        XCTAssertTrue(policy.shouldApply(second, now: now.addingTimeInterval(16)))
+        policy.succeeded(second)
+        let overwritten = WallpaperFingerprint(path: "second", size: 21, modified: now.addingTimeInterval(30))
+        XCTAssertFalse(policy.shouldApply(overwritten, now: now.addingTimeInterval(30)))
+        XCTAssertTrue(policy.shouldApply(overwritten, now: now.addingTimeInterval(32)))
+    }
+
+    func watcherRuntime() throws -> URL {
+        let source = home.appendingPathComponent("release")
+        let binary = try write("release/mac-setup", "fake binary for tests")
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: binary.path)
+        _ = try write("release/MacSetup_MacSetupCore.bundle/Profile/file", "resource")
+        return source
+    }
+
+    func testWallpaperStartupInstallAndRestoreOnlyUseTheCurrentUser() throws {
+        let source = try watcherRuntime()
+        engine = try Engine(paths: paths, runner: runner, runtimeSource: source)
+        let id = try engine.apply(Catalog.task("wallpaper-watcher"))
+        XCTAssertTrue(runner.jobs.contains(WallpaperWatcher.label))
+        XCTAssertEqual(try engine.state(Catalog.task("wallpaper-watcher")), .done)
+        let plist = home.appendingPathComponent("Library/LaunchAgents/" + WallpaperWatcher.label + ".plist")
+        let values = try PropertyListSerialization.propertyList(from: Data(contentsOf: plist), format: nil) as! [String: Any]
+        XCTAssertEqual(values["Label"] as? String, WallpaperWatcher.label)
+        XCTAssertTrue((values["ProgramArguments"] as! [String])[0].hasPrefix(paths.state.path))
+        try engine.journal.restore(id)
+        XCTAssertFalse(runner.jobs.contains(WallpaperWatcher.label))
+        XCTAssertFalse(Journal.exists(plist))
+        XCTAssertFalse(Journal.exists(paths.state.appendingPathComponent("watcher-runtime")))
+    }
+
+    func testExistingWallpaperJobIsRestoredAfterUpdatingItsRuntime() throws {
+        let source = try watcherRuntime()
+        engine = try Engine(paths: paths, runner: runner, runtimeSource: source)
+        _ = try engine.apply(Catalog.task("wallpaper-watcher"))
+        let binary = source.appendingPathComponent("mac-setup")
+        try Data("new test version".utf8).write(to: binary)
+        XCTAssertEqual(try engine.state(Catalog.task("wallpaper-watcher")), .ready)
+        let update = try engine.apply(Catalog.task("wallpaper-watcher"))
+        try engine.journal.restore(update)
+        XCTAssertTrue(runner.jobs.contains(WallpaperWatcher.label))
+        XCTAssertEqual(try String(contentsOf: paths.state.appendingPathComponent("watcher-runtime/mac-setup")), "fake binary for tests")
+    }
+
+    func testLegacyWallpaperJobIsNotDisabled() throws {
+        let source = try watcherRuntime()
+        engine = try Engine(paths: paths, runner: runner, runtimeSource: source)
+        runner.jobs.insert(WallpaperWatcher.legacyLabel)
+        XCTAssertThrowsError(try engine.apply(Catalog.task("wallpaper-watcher")))
+        XCTAssertTrue(runner.jobs.contains(WallpaperWatcher.legacyLabel))
+        XCTAssertFalse(runner.jobs.contains(WallpaperWatcher.label))
+    }
+
+    func testBackgroundAccentOnlyChangesTheColorAndDoesNotGrowTheJournal() throws {
+        let color = try write(".config/sketchybar/plugins/colors.sh", "export BAR_COLOR=0x35000000\nexport HIGHLIGHT_COLOR=0xff000000\n")
+        let image = try write("wallpaper.png", "fake image bytes")
+        engine = try Engine(paths: paths, runner: runner, tools: { "/usr/bin/" + $0 })
+        try engine.refreshAccent(image: image)
+        XCTAssertEqual(try String(contentsOf: color), "export BAR_COLOR=0x35000000\nexport HIGHLIGHT_COLOR=0xff123ABC\n")
+        XCTAssertTrue(engine.journal.transactions.isEmpty)
+        XCTAssertFalse(Journal.exists(paths.state))
+    }
+
+    func testBackgroundAccentRefusesAConfigSymlinkIntoAPrivateRepo() throws {
+        let original = try write("private/plugins/colors.sh", "export HIGHLIGHT_COLOR=0xff000000\n")
+        try FileManager.default.createDirectory(at: paths.config, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: paths.config.appendingPathComponent("sketchybar"), withDestinationURL: original.deletingLastPathComponent().deletingLastPathComponent())
+        let image = try write("wallpaper.png", "fake image bytes")
+        engine = try Engine(paths: paths, runner: runner, tools: { "/usr/bin/" + $0 })
+        XCTAssertThrowsError(try engine.refreshAccent(image: image))
+        XCTAssertEqual(try String(contentsOf: original), "export HIGHLIGHT_COLOR=0xff000000\n")
+    }
+
+    func testFinderIconSizePreservesOtherViewOptionsAndRestoresThem() throws {
+        let original: [String: Any] = ["ListViewSettings": ["iconSize": 16.0, "textSize": 14.0, "sortColumn": "name", "columns": ["name": ["width": 300]]], "IconViewSettings": ["iconSize": 64.0]]
+        runner.preferences["com.apple.finder"] = ["StandardViewSettings": original]
+        let id = try engine.apply(Catalog.task("finder-icons"))
+        XCTAssertEqual(try engine.state(Catalog.task("finder-icons")), .done)
+        let changed = runner.preferences["com.apple.finder"]?["StandardViewSettings"] as! [String: Any]
+        let list = changed["ListViewSettings"] as! [String: Any]
+        XCTAssertEqual(list["textSize"] as? Double, 14.0)
+        XCTAssertEqual(list["sortColumn"] as? String, "name")
+        XCTAssertTrue(equalPlist(changed["IconViewSettings"], original["IconViewSettings"]))
+        try engine.journal.restore(id)
+        XCTAssertTrue(equalPlist(runner.preferences["com.apple.finder"]?["StandardViewSettings"], original))
     }
 }
