@@ -254,6 +254,26 @@ struct TaskPickerUI {
         return "\u{001B}[H\u{001B}[2J" + output + "\r\n"
     }
 
-    // Rendering truncates plain text before ANSI styling. The terminal clips wide rows.
-    private func clipANSIText(_ value: String, width: Int) -> String { value }
+    /// Truncate visible text without cutting ANSI color sequences in half.
+    private func clipANSIText(_ value: String, width: Int) -> String {
+        var rendered = ""
+        var visible = 0
+        var escape = false
+        for scalar in value.unicodeScalars {
+            if scalar == "\u{001B}" {
+                escape = true
+                rendered.append(String(scalar))
+                continue
+            }
+            if escape {
+                rendered.append(String(scalar))
+                if scalar == "m" { escape = false }
+                continue
+            }
+            if visible >= max(1, width - 1) { break }
+            rendered.append(String(scalar))
+            visible += 1
+        }
+        return rendered + "\u{001B}[0m"
+    }
 }
