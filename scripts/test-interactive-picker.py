@@ -72,8 +72,9 @@ try:
             rb"\x1b\[1;46;30m[^\r\n]*Interface and terminal fonts", active_screen(b)
         )), timeout=4.0
     )
-    assert "↳ Interface and terminal fonts".encode() in active_screen(bytes(captured))
-    assert b"[parents: homebrew]" in active_screen(bytes(captured))
+    assert "├── [x] Interface and terminal fonts".encode() in active_screen(bytes(captured))
+    read_until(lambda b: "│   └──".encode() in active_screen(b))
+    assert b"[parents:" not in active_screen(bytes(captured))
     assert time.monotonic() - start < 4.0, "Cursor movement is blocked by status checks"
 
     os.write(master, b"\x1bOA")  # SS3 cursor up

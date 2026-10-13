@@ -82,16 +82,20 @@ public struct TaskPickerState {
     }
 
     public func hierarchyPrefix(for task: SetupTask) -> String {
-        guard !task.dependencies.isEmpty else { return "" }
-        let byID = Dictionary(uniqueKeysWithValues: visibleTasks.map { ($0.id, $0) })
-        var depth = 0
-        var parent = task.dependencies.first
+        let visible = visibleTasks
+        let byID = Dictionary(uniqueKeysWithValues: visible.map { ($0.id, $0) })
+        var path = [task]
         var visited: Set<String> = [task.id]
-        while let id = parent, let ancestor = byID[id], visited.insert(id).inserted {
-            depth += 1
-            parent = ancestor.dependencies.first
+        while let parent = path.last?.dependencies.first, let ancestor = byID[parent], visited.insert(parent).inserted {
+            path.append(ancestor)
         }
-        return String(repeating: "  ", count: depth) + "↳ "
+        path.reverse()
+        guard path.count > 1 else { return "" }
+        func isLast(_ node: SetupTask) -> Bool {
+            visible.last(where: { $0.dependencies.first == node.dependencies.first })?.id == node.id
+        }
+        let guides = path.dropFirst().dropLast().map { isLast($0) ? "    " : "│   " }.joined()
+        return guides + (isLast(task) ? "└── " : "├── ")
     }
 
     public var focusedTask: SetupTask? {

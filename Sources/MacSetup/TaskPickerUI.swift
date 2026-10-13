@@ -306,7 +306,7 @@ struct TaskPickerUI {
         } else if helpVisible {
             lines.append("  HELP")
             for line in [
-                "  Indented arrows show children; parent IDs show every dependency.",
+                "  Connected branches show children; shared requirements appear below.",
                 "  Installed parents can stay unchecked while their children are selected.",
                 "  Unchecking a missing parent also unchecks children that need it.",
                 "  U toggles updates for an installed Homebrew or package task.",
@@ -334,13 +334,20 @@ struct TaskPickerUI {
                 let task = visible[index]
                 let focused = index == state.cursorIndex
                 let checked = state.selected.contains(task.id)
-                let type = state.updates.contains(task.id) ? "UPDATE " : (task.guided ? "GUIDED " : "AUTO   ")
+                let type = state.updates.contains(task.id) ? "UPDATE" : (task.guided ? "GUIDED" : "")
                 let prefix = focused ? " ❯ " : "   "
                 let marker = checked ? "[x]" : "[ ]"
-                let parents = task.dependencies.isEmpty ? "" : "  [parents: " + task.dependencies.joined(separator: ", ") + "]"
-                let title = clip(prefix + marker + "  " + state.hierarchyPrefix(for: task) + task.title +
-                                 "  " + type + parents, to: width - 2)
-                lines.append(focused ? tint(title, "1;46;30") : (checked ? title : tint(title, "2")))
+                let tree = state.hierarchyPrefix(for: task)
+                let body = clip(prefix + tree + marker + " " + task.title, to: width - type.count - 5)
+                let padding = String(repeating: " ", count: max(2, width - 3 - body.count - type.count))
+                if focused {
+                    lines.append(tint(body + padding + type, "1;46;30"))
+                } else {
+                    let guide = tint(prefix + tree, "2;36")
+                    let label = String(body.dropFirst((prefix + tree).count))
+                    let style = !checked ? "2" : (tree.isEmpty ? "1" : "0")
+                    lines.append(guide + tint(label, style) + padding + tint(type, state.updates.contains(task.id) ? "33" : "2"))
+                }
             }
 
             lines.append("  " + String(repeating: "─", count: max(5, min(85, width - 4))))

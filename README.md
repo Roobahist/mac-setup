@@ -49,10 +49,11 @@ Run `mac-setup` or `mac-setup setup` in a terminal to open the full-screen picke
 - **Enter**: review the selection, then Enter again to begin. **B** returns to editing.
 - **Q** or **Ctrl+C**: cancel without making changes.
 
-Children are grouped beneath their primary parent with indentation and branch
-arrows. Each child row lists all parent task IDs, including shared dependencies;
-the focused task shows which parents are installed or ready. Parent references stay
-visible even when category or search filters hide the parent itself.
+Children are grouped beneath their primary parent using continuous `│`, `├──`
+and `└──` tree connectors. Root tasks stand out, and guided/update labels occupy a
+quiet column on the right. Shared prerequisites and their readiness appear only
+in the focused task's detail panel, keeping the checklist uncluttered. Filters
+show matching tasks once, without orphaned branches to hidden parents.
 
 The picker first inspects installed packages and completed setup tasks in the
 background. Navigation stays responsive while selection changes wait for that scan.
