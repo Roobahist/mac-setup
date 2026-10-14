@@ -299,6 +299,24 @@ private final class SetupModel: ObservableObject {
         do { try engine.openGuideSettings(task) } catch { message = String(describing: error) }
     }
 
+    func openGuideStep(_ index: Int) {
+        guard let task = current else { return }
+        do { try engine.openGuideStep(task, index: index) }
+        catch { message = String(describing: error) }
+    }
+
+    func guideStepVerified(_ index: Int) -> Bool {
+        if current?.id == "karabiner-access", index < 5 {
+            let required = [["services"], ["driver"], ["accessibility"], ["input"], ["keyboard", "profile"]]
+            guard required.indices.contains(index), let task = current else { return false }
+            let observed = guideProgress.observedRequirements[task.id] ?? []
+            return required[index].allSatisfy { id in
+                observed.contains { $0.id == id && $0.ready }
+            }
+        }
+        return checkedSteps.contains(index)
+    }
+
     func pauseForEdits() {
         guard !busy, page == .failed || page == .guide else { return }
         pausedSetup = true
@@ -779,32 +797,67 @@ private struct SetupView: View {
     }
 
     private var guide: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 14) {
             Text(model.current?.title ?? "Test your setup").font(.title2.bold())
-            Text("Task \(model.index + 1) of \(model.tasks.count). The app or settings for this task has opened. This checklist is saved locally. Detected Karabiner permissions are checked automatically; you still test the physical shortcuts.").foregroundStyle(.secondary)
+            Text("Task \(model.index + 1) of \(model.tasks.count). Follow each step below. Open the related setting and check that step before continuing.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
             ForEach(Array(model.steps.enumerated()), id: \.offset) { i, instruction in
-                Toggle(isOn: Binding(get: { model.checkedSteps.contains(i) }, set: { enabled in
-                    model.setGuideStep(i, enabled)
-                })) {
-                    Text("\(i + 1). \(instruction)").fixedSize(horizontal: false, vertical: true)
-                }.toggleStyle(.checkbox).padding(14).background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
-            }
-            Label(model.message, systemImage: model.checkReady ? "checkmark.circle" : "exclamationmark.circle").foregroundStyle(model.checkReady ? Color.primary : Color.orange)
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Button("Open app again") { if let task = model.current { do { try model.engine.openGuide(task) } catch { model.message = String(describing: error) } } }
-                    Button("Check again") { model.checkAgain() }.disabled(model.busy)
-                    if model.busy { ProgressView().controlSize(.small) }
-                }
-                HStack {
-                    if model.current?.id == "karabiner-access" {
-                        Button("Services & Driver Extensions") { model.openSettings() }
-                        Button("Accessibility") { model.openPermissionPane("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") }
-                        Button("Input Monitoring") { model.openPermissionPane("x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent") }
-                    } else if let task = model.current, case let .guide(url, _, _) = task.action, url != nil {
-                        Button(task.id == "raycast-access" ? "Keyboard Settings" : "Open permission settings") { model.openSettings() }
+                let automatic = model.current?.id == "karabiner-access" && i < 5
+                let verified = model.guideStepVerified(i)
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(alignment: .top, spacing: 12) {
+                        Text(String(i + 1))
+                            .font(.system(size: 13, weight: .semibold, design: .rounded))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 24, height: 24)
+                            .background(Color(nsColor: .quaternaryLabelColor).opacity(0.18),
+                                        in: RoundedRectangle(cornerRadius: 7))
+                        Text(instruction)
+                            .font(.system(size: 13))
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
+                    HStack(spacing: 12) {
+                        if let task = model.current,
+                           let route = GuideStepRouting.destination(task: task, index: i) {
+                            Button(route.title) { model.openGuideStep(i) }
+                                .controlSize(.regular)
+                        }
+                        if automatic {
+                            Button("Check this step") { model.checkAgain() }
+                                .disabled(model.busy)
+                            Label(verified ? "Verified" : "Needs attention",
+                                  systemImage: verified ? "checkmark.circle.fill" : "circle.dashed")
+                                .font(.caption)
+                                .foregroundStyle(verified ? Color.secondary : Color.orange)
+                        } else {
+                            Toggle("Completed", isOn: Binding(
+                                get: { model.checkedSteps.contains(i) },
+                                set: { model.setGuideStep(i, $0) }
+                            )).toggleStyle(.checkbox)
+                        }
+                        Spacer(minLength: 0)
+                        if automatic && model.busy {
+                            ProgressView().controlSize(.small)
+                        }
+                    }
+                    .padding(.leading, 36)
                 }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(Color(nsColor: .separatorColor).opacity(0.48)))
+            }
+            if !model.message.isEmpty {
+                Label(model.message,
+                      systemImage: model.checkReady ? "checkmark.circle" : "info.circle")
+                    .font(.callout)
+                    .foregroundStyle(model.checkReady ? Color.secondary : Color.primary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
