@@ -25,12 +25,23 @@ struct WorkspacePickerView {
         case normal, muted, accent, title, selected, success, caution, danger
     }
 
+    /// The terminal may render a private-use glyph as one or two cells.
+    /// Paint it over reserved blank cells rather than including it in the text
+    /// used to calculate subsequent column positions.
+    private struct GlyphPlacement {
+        let symbol: String
+        let offset: Int
+    }
+
     private struct Line {
         let text: String
         let tone: Tone
-        init(_ text: String = "", _ tone: Tone = .normal) {
+        let glyph: GlyphPlacement?
+
+        init(_ text: String = "", _ tone: Tone = .normal, glyph: GlyphPlacement? = nil) {
             self.text = text
             self.tone = tone
+            self.glyph = glyph
         }
     }
 
@@ -85,8 +96,17 @@ struct WorkspacePickerView {
         return padded ? clipped + String(repeating: " ", count: bound - cells(clipped)) : clipped
     }
 
-    private func styled(_ line: Line, width: Int, padded: Bool = false) -> String {
-        color(fit(line.text, to: width, padded: padded), line.tone)
+    private func styled(_ line: Line, width: Int, padded: Bool = false,
+                        startColumn: Int = 3) -> String {
+        let text = color(fit(line.text, to: width, padded: padded), line.tone)
+        guard let glyph = line.glyph, glyph.offset + 4 <= width else { return text }
+
+        // Preserve the insertion point, move to the icon cell, draw the glyph,
+        // then return to the next column. A missing-font rectangle can occupy
+        // two cells without shifting any following text or the right-hand panel.
+        let absoluteColumn = startColumn + glyph.offset
+        return text + "\u{001B}7\u{001B}[\(absoluteColumn)G"
+            + color(glyph.symbol, line.tone) + "\u{001B}8"
     }
 
     private func divider() -> Line {
@@ -126,14 +146,17 @@ struct WorkspacePickerView {
         let ws = layout.workspaces[index]
         let columns = workspaceColumns(width: width, includeID: includeID)
         let symbol = WorkspaceConfiguration.symbol(for: ws.glyph) ?? "?"
+        let iconOffset = 3 + columns.shortcut + 2 + columns.name + 2
         let text = " \(index == selected ? ">" : " ") "
             + fit(shortcut(at: index), to: columns.shortcut, padded: true) + "  "
             + fit(ws.name, to: columns.name, padded: true) + "  "
-            + fit(symbol, to: columns.icon, padded: true) + "  "
+            + String(repeating: " ", count: columns.icon) + "  "
             + fit(ws.glyph, to: columns.glyph, padded: true)
             + (includeID ? "  " + fit(ws.id, to: columns.id, padded: true) : "")
             + "  " + fit(String(ws.apps.count), to: columns.apps, padded: true)
-        return Line(fit(text, to: width, padded: true), index == selected ? .selected : .normal)
+        return Line(fit(text, to: width, padded: true),
+                    index == selected ? .selected : .normal,
+                    glyph: GlyphPlacement(symbol: symbol, offset: iconOffset))
     }
 
     private func tableHeading(width: Int, includeID: Bool) -> Line {
@@ -165,7 +188,9 @@ struct WorkspacePickerView {
             Line("AeroSpace ID", .muted),
             Line("  \(workspace.id)", .normal),
             Line("SketchyBar glyph", .muted),
-            Line("  \(WorkspaceConfiguration.symbol(for: workspace.glyph) ?? "?")  \(workspace.glyph)", .normal),
+            Line("        \(workspace.glyph)", .normal,
+                 glyph: GlyphPlacement(symbol: WorkspaceConfiguration.symbol(for: workspace.glyph) ?? "?",
+                                       offset: 2)),
             Line(),
             Line("APP RULES  \(workspace.apps.count)", .accent)
         ]
@@ -200,7 +225,7 @@ struct WorkspacePickerView {
             left.append(Line("  Showing \(range.lowerBound + 1)-\(range.upperBound) of \(layout.workspaces.count); use ↑↓ to scroll", .muted))
         }
         if !wide {
-            left += [Line(), Line("SELECTED: \(workspace.name)  |  ID: \(workspace.id)  |  Glyph: \(WorkspaceConfiguration.symbol(for: workspace.glyph) ?? "?") \(workspace.glyph)", .accent)]
+            left += [Line(), Line("SELECTED: \(workspace.name)  |  ID: \(workspace.id)  |  Glyph: \(workspace.glyph)", .accent)]
             if !workspace.apps.isEmpty {
                 left.append(Line("Assigned: " + appNames().joined(separator: ", "), .muted))
             } else {
@@ -215,7 +240,7 @@ struct WorkspacePickerView {
             let r = index < right.count ? right[index] : Line()
             return styled(l, width: leftWidth, padded: true)
                 + color(" │ ", .muted)
-                + styled(r, width: rightWidth)
+                + styled(r, width: rightWidth, startColumn: leftWidth + 6)
         }
     }
 
@@ -233,9 +258,10 @@ struct WorkspacePickerView {
             let glyph = matches[index]
             let label = fit(glyph.name, to: 20, padded: true)
             let text = " \(index == resultCursor ? ">" : " ") "
-                + fit(glyph.symbol, to: 4, padded: true) + "  " + label
+                + "    " + "  " + label
                 + "  " + glyph.keywords
-            lines.append(Line(text, index == resultCursor ? .selected : .normal))
+            lines.append(Line(text, index == resultCursor ? .selected : .normal,
+                              glyph: GlyphPlacement(symbol: glyph.symbol, offset: 3)))
         }
         if matches.isEmpty { lines.append(Line("  No matching glyphs. Try another keyword.", .caution)) }
         if let candidate = matches.indices.contains(resultCursor) ? matches[resultCursor] : nil {
