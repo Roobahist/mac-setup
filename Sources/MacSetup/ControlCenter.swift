@@ -143,143 +143,121 @@ struct ControlCenterView: View {
     // Expanded and collapsed sidebar use identical rows, icon sizes, and
     // leading offsets. Collapsing only removes their titles.
     private var sidebar: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 7) {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
                 Button {
                     compactSidebar.toggle()
                     if compactSidebar { query = "" }
                 } label: {
                     Image(systemName: "sidebar.left")
-                        .font(.system(size: 18, weight: .regular))
-                        .frame(width: 44, height: 42)
+                        .font(.system(size: 17, weight: .medium))
+                        .frame(width: 30, height: 30)
                 }
                 .buttonStyle(.plain)
                 .help(compactSidebar ? "Expand sidebar" : "Collapse sidebar")
                 .accessibilityLabel(compactSidebar ? "Expand sidebar" : "Collapse sidebar")
 
                 if !compactSidebar {
-                    Image(systemName: "slider.horizontal.3")
-                        .font(.system(size: 19, weight: .medium))
-                        .foregroundStyle(Color.accentColor)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Mac Setup").font(.headline)
-                        Text("Your Mac, your way")
-                            .font(.caption).foregroundStyle(.secondary)
+                    HStack(spacing: 9) {
+                        Image(systemName: "slider.horizontal.3")
+                            .font(.system(size: 19, weight: .medium))
+                            .foregroundStyle(Color.accentColor)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Mac Setup").font(.headline)
+                            Text("Your Mac, your way")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
                     }
-                    .padding(.leading, 5)
                 }
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 13)
-            .padding(.top, 12)
-            .padding(.bottom, 14)
+            .padding(.horizontal, 14)
+            .padding(.top, 19)
+            .padding(.bottom, 12)
 
-            Group {
-                if compactSidebar {
-                    Button { compactSidebar = false } label: {
-                        Image(systemName: "magnifyingglass")
-                            .font(.system(size: 18))
-                            .frame(width: 44, height: 34)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Expand sidebar to search settings")
-                    .accessibilityLabel("Expand sidebar to search settings")
-                } else {
-                    TextField("Search settings", text: $query)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(height: 34)
-                        .accessibilityLabel("Search settings and features")
+            if compactSidebar {
+                Button {
+                    compactSidebar = false
+                } label: {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 17))
+                        .frame(width: 30, height: 34)
                 }
+                .buttonStyle(.plain)
+                .help("Expand sidebar to search settings")
+                .accessibilityLabel("Expand sidebar to search settings")
+                .padding(.horizontal, 14)
+            } else {
+                TextField("Search settings", text: $query)
+                    .textFieldStyle(.roundedBorder)
+                    .padding(.horizontal, 12)
+                    .accessibilityLabel("Search settings and features")
             }
-            .padding(.horizontal, 13)
-            .padding(.bottom, 14)
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 3) {
-                    sidebarSectionTitle("Customize")
-                    ForEach(customization) { item in sidebarItem(item) }
-                    Divider()
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 9)
-                    sidebarSectionTitle("Mac Setup")
+            // Always render the original macOS sidebar List. Both widths get
+            // the same rows, icon metrics, selection style and section spacing.
+            // Only the text labels become invisible when collapsed.
+            List(selection: $destination) {
+                Section {
+                    ForEach(customization) { item in
+                        sidebarLabel(item).tag(item)
+                    }
+                } header: {
+                    Text("Customize")
+                        .opacity(compactSidebar ? 0 : 1)
+                        .accessibilityHidden(compactSidebar)
+                }
+
+                Section {
                     Button(action: beginGuided) {
-                        sidebarRowContent("Guided Setup", symbol: "checklist",
-                            selected: guidedStep != nil)
+                        sidebarLabel(.guidedSetup)
+                            .foregroundStyle(guidedStep != nil
+                                ? Color.accentColor : Color.primary)
                     }
                     .buttonStyle(.plain)
                     .help("Walk through the existing customization sections")
                     .accessibilityLabel("Guided Setup")
-                    sidebarItem(.updates)
+
+                    sidebarLabel(.updates).tag(ControlDestination.updates)
+                } header: {
+                    Text("Mac Setup")
+                        .opacity(compactSidebar ? 0 : 1)
+                        .accessibilityHidden(compactSidebar)
                 }
-                .padding(.top, 4)
             }
+            .listStyle(.sidebar)
+            .scrollContentBackground(.hidden)
 
             HStack(spacing: 8) {
-                Image(systemName: "info.circle")
-                    .font(.system(size: 13))
-                    .frame(width: 44)
-                    .help("Version \(MacSetupVersion.installed)")
-                if !compactSidebar {
+                if compactSidebar {
+                    Image(systemName: "info.circle")
+                        .help("Version \(MacSetupVersion.installed)")
+                } else {
                     Text("Version \(MacSetupVersion.installed)")
                 }
                 Spacer(minLength: 0)
-                if !compactSidebar {
-                    Circle().fill(model.busy ? Color.orange : Color.green)
-                        .frame(width: 7, height: 7)
-                        .accessibilityLabel(model.busy ? "Checking settings" : "Ready")
-                }
+                Circle().fill(model.busy ? Color.orange : Color.green)
+                    .frame(width: 7, height: 7)
+                    .accessibilityLabel(model.busy ? "Checking or applying settings" : "Ready")
             }
             .font(.caption2)
             .foregroundStyle(.secondary)
-            .padding(.horizontal, 13)
+            .padding(.horizontal, 16)
             .padding(.bottom, 12)
         }
-        .frame(maxWidth: .infinity)
     }
 
-    private func sidebarSectionTitle(_ title: String) -> some View {
-        HStack {
-            if !compactSidebar {
-                Text(title)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 0)
+    /// Preserve the original Label in expanded mode. The collapsed mode uses
+    /// that same native List row with only its title hidden, never a new button.
+    @ViewBuilder private func sidebarLabel(_ item: ControlDestination) -> some View {
+        if compactSidebar {
+            Label(item.title, systemImage: item.symbol)
+                .labelStyle(.iconOnly)
+                .help(item.title)
+                .accessibilityLabel(item.title)
+        } else {
+            Label(item.title, systemImage: item.symbol)
         }
-        // Keep the same vertical positions when only the text is hidden.
-        .frame(height:28, alignment: .bottom)
-        .padding(.leading,25)
-        .padding(.bottom,5)
-    }
-
-    private func sidebarRowContent(_ title: String, symbol: String, selected: Bool) -> some View {
-        HStack(spacing: 5) {
-            Image(systemName: symbol)
-                .font(.system(size: 18, weight: .regular))
-                .frame(width: 44, height: 42)
-            if !compactSidebar {
-                Text(title)
-                    .font(.system(size: 13, weight: selected ? .semibold : .regular))
-                    .lineLimit(1)
-            }
-            Spacer(minLength: 0)
-        }
-        .foregroundStyle(selected ? Color.accentColor : Color.primary)
-        .frame(height: 43)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(selected ? Color.accentColor.opacity(0.14) : Color.clear,
-                    in: RoundedRectangle(cornerRadius: 9))
-        .contentShape(RoundedRectangle(cornerRadius: 9))
-        .padding(.horizontal, 13)
-    }
-
-    private func sidebarItem(_ item: ControlDestination) -> some View {
-        Button { selectDestination(item) } label: {
-            sidebarRowContent(item.title, symbol: item.symbol, selected: destination == item)
-        }
-        .buttonStyle(.plain)
-        .help(item.title)
-        .accessibilityLabel(item.title)
     }
 
     private func selectDestination(_ item: ControlDestination) {
