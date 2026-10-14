@@ -13,7 +13,7 @@ final class SetupModel: ObservableObject {
     @Published var shortcuts = ShortcutSettings(entries: [])
     @Published private(set) var appliedLayout = WorkspaceConfiguration.defaultLayout
     @Published private(set) var appliedShortcuts = ShortcutSettings(entries: [])
-    var workspaceHasDraftChanges: Bool { layout != appliedLayout }
+    var workspaceHasDraftChanges: Bool { layout.workspaces != appliedLayout.workspaces }
     var shortcutsHaveDraftChanges: Bool { shortcuts != appliedShortcuts || layout.keymap != appliedLayout.keymap }
     @Published var pausedSetup = false
     let aerospaceTemplate: String
@@ -106,7 +106,7 @@ final class SetupModel: ObservableObject {
 
     func review() {
         do {
-            if scope != .feature, let error = workspaceError(in: layout) { throw SetupError(error) }
+            if let error = configurationError(for: scope) { throw SetupError(error) }
             let chosen: [String]
             switch scope {
             case .full: chosen = picker.orderedSelection
@@ -131,6 +131,27 @@ final class SetupModel: ObservableObject {
         } catch { return String(describing: error) }
     }
 
+    /// Validate only the section being applied, using other sections' saved
+    /// configuration instead of potentially unrelated unsaved drafts.
+    func configurationError(for selected: SetupScope) -> String? {
+        do {
+            switch selected {
+            case .full:
+                try shortcuts.validate(workspaces: layout, aerospaceTemplate: aerospaceTemplate)
+            case .workspaces:
+                var pending = layout
+                pending.keymap = appliedLayout.keymap
+                try appliedShortcuts.validate(workspaces: pending, aerospaceTemplate: aerospaceTemplate)
+            case .shortcuts:
+                var pending = appliedLayout
+                pending.keymap = layout.keymap
+                try shortcuts.validate(workspaces: pending, aerospaceTemplate: aerospaceTemplate)
+            case .feature: break
+            }
+            return nil
+        } catch { return String(describing: error) }
+    }
+
     func start() {
         do {
             setupLock = try SetupLock(paths: engine.paths)
@@ -141,13 +162,15 @@ final class SetupModel: ObservableObject {
                 try shortcuts.save(to: engine.paths)
                 try layout.save(to: engine.paths)
             case .workspaces:
-                let savedShortcuts = try ShortcutSettings.load(
-                    from: engine.paths, aerospaceTemplate: aerospaceTemplate)
-                try savedShortcuts.validate(workspaces: layout, aerospaceTemplate: aerospaceTemplate)
-                try layout.save(to: engine.paths)
+                var chosen = layout
+                chosen.keymap = appliedLayout.keymap
+                try appliedShortcuts.validate(workspaces: chosen, aerospaceTemplate: aerospaceTemplate)
+                try chosen.save(to: engine.paths)
             case .shortcuts:
-                let savedLayout = try WorkspaceConfiguration.load(from: engine.paths)
-                try shortcuts.validate(workspaces: savedLayout, aerospaceTemplate: aerospaceTemplate)
+                var chosen = appliedLayout
+                chosen.keymap = layout.keymap
+                try shortcuts.validate(workspaces: chosen, aerospaceTemplate: aerospaceTemplate)
+                try chosen.save(to: engine.paths)
                 try shortcuts.save(to: engine.paths)
             case .feature: break
             }
@@ -987,19 +1010,21 @@ struct SetupView: View {
         HStack {
             switch model.page {
             case .workspaces, .shortcuts:
-                Text("Only this configuration will be applied.")
+                Text(model.page == .workspaces
+                     ? (model.workspaceHasDraftChanges ? "Draft changes are not yet active." : "Workspace order is saved.")
+                     : (model.shortcutsHaveDraftChanges ? "Shortcut changes are not yet active." : "Shortcuts are saved."))
                     .foregroundStyle(.secondary)
                 Spacer()
-                Button(model.page == .workspaces ? "Apply workspaces" : "Apply shortcuts") {
+                Button(model.page == .workspaces ? "Review & apply workspaces" : "Review & apply shortcuts") {
                     model.review()
-                    if model.page == .review { model.start() }
                 }
-                .disabled(model.busy || model.workspaceError(in: model.layout) != nil)
+                .disabled(model.busy || model.configurationError(for: model.scope) != nil)
                 .keyboardShortcut(.defaultAction)
             case .review:
                 Button("Back to features") { onReturn?() }
                 Spacer()
-                Button(model.scope == .full ? "Apply selected setup" : "Apply selected feature") { model.start() }
+                Button(model.scope == .full ? "Apply selected setup" :
+                       (model.scope == .feature ? "Apply selected feature" : "Apply changes now")) { model.start() }
                     .disabled(model.busy).keyboardShortcut(.defaultAction)
             case .running:
                 Text("Applying your changes.").foregroundStyle(.secondary)
