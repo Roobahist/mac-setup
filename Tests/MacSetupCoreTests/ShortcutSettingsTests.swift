@@ -15,6 +15,10 @@ final class ShortcutSettingsTests: XCTestCase {
         XCTAssertTrue(settings.entries.contains { $0.provider == .aerospace && $0.action == "'fullscreen'" })
         XCTAssertTrue(settings.entries.contains { $0.provider == .karabiner && $0.action == "Finder" })
         XCTAssertTrue(settings.entries.contains { $0.provider == .raycast && $0.action == "launcher" })
+        XCTAssertEqual(settings.raycastHotkey, "Option-15")
+        XCTAssertTrue(settings.entries.contains {
+            $0.provider == .karabiner && $0.action == "open:com.apple.Terminal"
+        })
         XCTAssertGreaterThan(settings.entries.filter { $0.provider == .aerospace }.count, 10)
         try settings.validate(workspaces: .defaultLayout, aerospaceTemplate: aerospaceTemplate())
     }
@@ -98,6 +102,21 @@ final class ShortcutSettingsTests: XCTestCase {
                                                    aerospaceTemplate: aerospaceTemplate()))
         settings.updateAdvancedRule(original)
         try settings.validate(workspaces: .defaultLayout, aerospaceTemplate: aerospaceTemplate())
+    }
+
+    func testLegacyDefaultMigrationPreservesCustomBindings() throws {
+        let template = try aerospaceTemplate()
+        var settings = ShortcutSettings.defaults(aerospaceTemplate: template)
+        settings.configurationVersion = nil
+        let raycast = try XCTUnwrap(settings.entries.firstIndex(where: { $0.id == "raycast:launcher" }))
+        settings.entries[raycast].shortcut = .init(key: "space", modifiers: ["cmd"])
+        settings.migrateBundledDefaults(installedAlacritty: false)
+        XCTAssertEqual(settings.raycastHotkey, "Option-15")
+        XCTAssertEqual(settings.configurationVersion, 2)
+        var custom = settings
+        custom.entries[raycast].shortcut = .init(key: "t", modifiers: ["cmd"])
+        custom.migrateBundledDefaults(installedAlacritty: false)
+        XCTAssertEqual(custom.raycastHotkey, "Command-17")
     }
 
     func testShortcutPersistenceAndUnsupportedKarabinerAction() throws {

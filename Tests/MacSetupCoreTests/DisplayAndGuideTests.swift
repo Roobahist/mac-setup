@@ -80,7 +80,7 @@ final class DisplayAndGuideTests: XCTestCase {
         runner.preferences["com.apple.symbolichotkeys"] = ["AppleSymbolicHotKeys": original]
         runner.preferences["com.raycast.macos"] = ["raycastGlobalHotkey": "Option-15"]
         let id = try engine.apply(Catalog.task("raycast-profile"))
-        XCTAssertFalse(try engine.spotlightSearchEnabled())
+        XCTAssertTrue(try engine.spotlightSearchEnabled())
         let updated = try engine.journal.preference("com.apple.symbolichotkeys", "AppleSymbolicHotKeys") as! [String: Any]
         XCTAssertTrue(equalPlist(updated["65"], original["65"]))
         XCTAssertTrue(equalPlist(updated["999"], original["999"]))

@@ -16,6 +16,17 @@ final class TaskPickerStateTests: XCTestCase {
         XCTAssertTrue(edited.selected.contains("aerospace-profile"))
     }
 
+    func testTerminalInstallersAndFolderResetNeedOptIn() {
+        let state = TaskPickerState(preset: .complete)
+        for id in ["alacritty", "alacritty-profile", "ghostty", "wezterm", "kitty", "finder-reset-views"] {
+            XCTAssertFalse(state.selected.contains(id), id)
+        }
+        var edited = state
+        edited.toggle("ghostty")
+        XCTAssertTrue(edited.selected.contains("ghostty"))
+        XCTAssertFalse(edited.selected.contains("alacritty"))
+    }
+
     func testCompletePresetIncludesWatcherPermissionsAndExcludesRemovedDockTask() {
         let state = TaskPickerState()
         XCTAssertTrue(state.selected.contains("sketchybar-start"))
@@ -34,7 +45,7 @@ final class TaskPickerStateTests: XCTestCase {
     }
 
     func testRemovingEachTaskChangesOnlyThatTask() {
-        for task in Catalog.tasks {
+        for task in Catalog.tasks where TaskPickerState().selected.contains(task.id) {
             var state = TaskPickerState()
             state.available = Set(Catalog.tasks.map(\.id))
             let before = state.selected
@@ -193,8 +204,8 @@ final class TaskPickerStateTests: XCTestCase {
     func testToggleAllVisibleAndZeroSelectionAreSupported() {
         var state = TaskPickerState()
         state.toggleVisible()
-        XCTAssertEqual(state.selectedCount, 0)
-        state.toggleVisible()
         XCTAssertEqual(state.selectedCount, Catalog.tasks.count)
+        state.toggleVisible()
+        XCTAssertEqual(state.selectedCount, 0)
     }
 }
