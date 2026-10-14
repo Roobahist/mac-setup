@@ -29,8 +29,7 @@ public enum WallpaperWatcher {
             paths.home.appendingPathComponent("Applications/Mac Setup.app/Contents/Helpers/\(name)"),
             URL(fileURLWithPath: "/Applications/Mac Setup.app/Contents/Helpers/\(name)"),
             paths.home.appendingPathComponent(".local/lib/mac-setup/current/\(name)"),
-            Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/\(name)"),
-            Bundle.main.executableURL?.deletingLastPathComponent().appendingPathComponent(name)
+            Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/\(name)")
         ].compactMap { $0 }
         return candidates.first { FileManager.default.isExecutableFile(atPath: $0.path) }
     }
