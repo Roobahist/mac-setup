@@ -157,6 +157,20 @@ public struct WorkspaceConfiguration: Codable, Equatable {
         })
     }
 
+    /// Save visible edits without silently deleting workspaces hidden by an
+    /// optional application task that the user unchecked in this setup run.
+    public func mergingVisible(_ visible: WorkspaceConfiguration,
+                               selectedTasks: Set<String>) throws -> WorkspaceConfiguration {
+        var workspaces = visible.workspaces
+        for (index, item) in self.workspaces.enumerated() {
+            guard let task = item.requiresTask, !selectedTasks.contains(task) else { continue }
+            workspaces.insert(item, at: min(index, workspaces.count))
+        }
+        let merged = WorkspaceConfiguration(workspaces: workspaces)
+        try merged.validate()
+        return merged
+    }
+
     public static func path(in paths: Paths) -> URL {
         paths.state.appendingPathComponent("workspaces.json")
     }
