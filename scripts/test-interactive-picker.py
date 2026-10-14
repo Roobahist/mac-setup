@@ -19,7 +19,7 @@ if len(sys.argv) != 2:
 
 executable = Path(sys.argv[1])
 master, slave = pty.openpty()
-fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 30, 100, 0, 0))
+fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 36, 132, 0, 0))
 env = dict(os.environ, TERM="xterm-256color")
 env.pop("NO_COLOR", None)  # This test asserts ANSI highlighting regardless of the caller.
 process = subprocess.Popen(
@@ -92,12 +92,20 @@ try:
     # Enter the workspace editor from the main setup checklist.
     os.write(master, b"w")
     read_until(lambda b: b"WORKSPACE EDITOR" in active_screen(b), timeout=15.0)
+    workspace_screen = active_screen(bytes(captured))
+    assert b"WORKSPACE ORDER" in workspace_screen
+    assert b"SELECTED WORKSPACE" in workspace_screen, "Wide view should show inspector"
+    assert b"SHORTCUT" in workspace_screen and b"GLYPH" in workspace_screen
+    assert b"APP RULES" in workspace_screen
+    assert b"robot" in workspace_screen, "Glyph name must be readable without Nerd Font"
+    assert b"\\x1b[1;38;5;231;48;5;24m" in workspace_screen, "Selection has no highlight"
     os.write(master, b"g")
     read_until(lambda b: b"Type to filter glyph" in active_screen(b))
     os.write(master, b"clock")
     read_until(lambda b: b"Search: clock" in active_screen(b))
     os.write(master, b"\r")
-    read_until(lambda b: b"G Glyph" in active_screen(b))
+    read_until(lambda b: b"G Glyph" in active_screen(b)
+               and b"UNSAVED CHANGES" in active_screen(b))
     os.write(master, b"p")
     read_until(lambda b: b"Type to filter installed apps" in active_screen(b), timeout=15.0)
     os.write(master, b"zzzzzzz")
@@ -108,6 +116,12 @@ try:
     os.write(master, b"\x1b")
     read_until(lambda b: b"G Glyph" in active_screen(b))
     os.write(master, b"\x1b")
+    read_until(lambda b: b"DISCARD YOUR CHANGES?" in active_screen(b))
+    os.write(master, b"n")
+    read_until(lambda b: b"WORKSPACE ORDER" in active_screen(b))
+    os.write(master, b"q")
+    read_until(lambda b: b"DISCARD YOUR CHANGES?" in active_screen(b))
+    os.write(master, b"y")
     read_until(lambda b: b"MAC SETUP" in active_screen(b)
                and b"WORKSPACE EDITOR" not in active_screen(b))
 
