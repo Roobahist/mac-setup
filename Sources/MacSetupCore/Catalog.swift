@@ -185,7 +185,7 @@ public enum Catalog {
                 "This macOS version already provides a native menu bar background. No extra setting is required."
             ])
         }
-        return .guide(url: "x-apple.systempreferences:com.apple.MenuBar-Settings.extension",
+        return .guide(url: "x-apple.systempreferences:",
                       app: nil, instructions: [
             "Open System Settings > Menu Bar.",
             "Enable Show menu bar background. This adds a native blurred layer when the auto-hidden menu bar is revealed over SketchyBar.",

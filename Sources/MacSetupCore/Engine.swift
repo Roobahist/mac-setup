@@ -98,12 +98,10 @@ public final class Engine {
         case .wallpaperWatcher:
             guard WallpaperWatcher.executable(paths: paths) != nil else { return .blocked }
             return try journal.launchAgentLoaded(WallpaperWatcher.label) ? .done : .ready
-        case let .loginItems(names):
-            let apps = StartupLoginItems.installedPaths(names: names, home: paths.home)
-            guard !apps.isEmpty else { return .ready }
-            // System Events may require Automation consent. Missing access keeps
-            // the task actionable rather than claiming it was configured.
-            return (try? apps.allSatisfy { try journal.loginItemRegistered($0) }) == true
+        case .loginItems:
+            // Avoid requesting System Events Automation access while populating
+            // the feature inventory. Actual items are verified when applied.
+            return journal.transactions.contains { $0.task == task.id && $0.complete }
                 ? .done : .ready
         case .accent: return .ready // A new wallpaper needs a new extraction.
         case .guide:
