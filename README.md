@@ -1,10 +1,10 @@
 # mac-setup
 
-A keyboard-driven macOS setup CLI for reproducing a complete, opinionated setup while
-letting each person choose which parts to install.
+A native Swift setup app and companion CLI for reproducing a macOS setup,
+with readable guidance, workspace previews, readiness checks and recovery records.
 
-Browse a live checklist, select or deselect components, preview their prerequisites,
-and apply changes with confirmation and recovery records. The public configurations
+Choose a repair or installation preset, preview the changes, then apply and test
+them in one Swift window. The public configurations
 come from [dot-files](https://github.com/Roobahist/dot-files); offline snapshots are
 bundled with every release. No GitHub account is required to run downloaded builds.
 
@@ -24,8 +24,8 @@ mac-setup profiles
 mac-setup plan --preset complete
 ```
 
-The one-time installer builds a release executable and installs it with its resource
-bundle into `~/.local`. It backs up `.zshrc` before adding the command directory to
+The one-time installer builds the Swift app and CLI, installs the CLI with its resource
+bundle into `~/.local`, and adds Mac Setup to your user Applications folder. It backs up `.zshrc` before adding the command directory to
 PATH; linked shell configuration files are left for you to update manually. Daily
 launches use the installed executable and do not invoke Swift or rebuild anything.
 You can also run `./mac-setup` directly from this checkout; it builds once if needed.
@@ -35,138 +35,69 @@ The build helper uses SwiftPM's native engine for compatibility with Command Lin
 Tools. This avoids the missing Xcode framework search-path warnings from Swift
 6.4's default build engine. Those warnings did not indicate a failed setup.
 
-## Interactive checklist
+## Swift setup app
 
-Run `mac-setup` or `mac-setup setup` in a terminal to open the full-screen picker:
+Open **Mac Setup.app**, or run `mac-setup`. The native Swift window has four steps:
 
-- **Up/Down** or **J/K**: move between tasks.
-- **Space**: select or deselect a task. Required prerequisites are included automatically.
-- **Tab** and **Shift+Tab**: cycle through categories.
-- **/**: search by task name, description, category, or ID. **Esc** clears the filter.
-- **A**: select or clear tasks currently shown by the category and search filters.
-- **1**, **2**, **3**, **4**: Minimal, Productivity, Developer, or Complete preset.
-- **W**: configure workspace order, names, Nerd Font glyphs and app assignments.
-- **?**: keyboard shortcut help.
-- **Enter**: continue to the workspace step when AeroSpace configuration is selected,
-  then review selections and Enter again to start setup. **B** returns to feature selection.
-  If AeroSpace configuration is not selected, Enter goes directly to review.
-- **Q** or **Ctrl+C**: cancel without making changes.
+1. **Choose features.** Repair is selected by default and targets the reported Dock,
+   menu-bar, workspace, launcher and keyboard problems. Expand a section to change
+   individual tasks, or select another preset. Installed applications are kept.
+2. **Workspaces.** Preview the bar, change names and icons, reorder workspaces,
+   and assign installed apps. The displayed Option shortcut follows the order.
+3. **Review.** Read the selected changes before pressing Start setup once.
+4. **Set up & test.** Automatic tasks run in the app. Each guided task opens its
+   relevant application and shows explicit choices, numbered checks, Check again,
+   and Test passed. A failed task offers Retry, Review selection, or Leave pending.
 
-Children are grouped beneath their primary parent using continuous `│`, `├──`
-and `└──` tree connectors. Checkboxes stay in a fixed left column, and a spacer
-separates completed child groups while continuing any open tree lines. Root tasks stand out, and guided/update labels occupy a
-quiet column on the right. Shared prerequisites and their readiness appear only
-in the focused task's detail panel, keeping the checklist uncluttered. Filters
-show matching tasks once, without orphaned branches to hidden parents.
+Installer output and a secure response field stay inside the Swift window, including
+Homebrew's administrator prompts. The response goes directly to the local installer.
+No password is saved by mac-setup. Privacy and driver approvals still require the
+user's action in the application's assistant or System Settings.
 
-The picker first inspects installed packages and completed setup tasks in the
-background. Navigation stays responsive while selection changes wait for that scan.
-Unchecking an installed parent leaves its children selected. Unchecking a missing
-parent also unchecks children that require it; an installed intermediate parent
-still satisfies its own children. Selecting a child adds only missing prerequisites.
-The same rules apply to app, profile, service and permission dependencies.
+AeroSpace must be running and see windows before its guide can complete. Karabiner
+must report working services, Accessibility, Input Monitoring, its driver, virtual
+keyboard and the Portable profile; a previous yes/no answer cannot bypass these
+checks. Test the physical keyboard shortcuts before continuing.
 
-Checked installed packages are kept by default. Press **U** on Homebrew or an
-installed package task to mark it **UPDATE**; press U again to keep it. Updates are
-previewed and confirmed before execution. Homebrew uses `brew update`; packages use
-a targeted `brew upgrade`, which can also update required dependencies. Apps installed
-outside Homebrew are not taken over. Package updates cannot be undone by restore.
-Deselecting a task does not uninstall anything.
+The Repair preset configures Raycast's **Option+R** shortcut from the reference Mac.
+Its guide explains which optional account/AI/extension screens to skip and how to
+keep Spotlight on Command+Space. Vorssaint's replacement app switcher is disabled
+in this AeroSpace profile so native Command+Tab can follow workspace focus. The
+remaining guide enables quit-on-close and explains the required Accessibility and
+launch-at-login choices. Permission Settings open from a separate button, so they
+cannot obscure an app's onboarding window as soon as it opens.
 
-The picker never performs installations by itself. Applying the selection uses the
-existing task previews, confirmation prompts, prerequisite checks, and local recovery
-journal. Guided permission steps are not silently marked complete.
+Finder, Dock and SystemUIServer refresh once at the end. The Dock is placed at the
+bottom with a one-second reveal delay and a short animation. Menu-bar auto-hide
+covers the desktop and fullscreen. Its reveal timing is controlled by macOS; if the
+visible preference has not refreshed, set it to Always in System Settings and log
+out and back in. Stored defaults alone do not prove visible behavior.
 
-If you are scripting installation, use task IDs or a preset instead of the picker.
-`--yes` approves automated tasks only; guided steps remain pending.
+Use `mac-setup terminal` for the legacy keyboard picker. Scripted `setup --yes`
+applies automatic tasks only and leaves guided tasks pending. Read-only `plan` and
+`status` remain available. Explicit interactive `setup` selections open the Swift app.
 
 ## Customize workspaces
 
-Workspace configuration is **Step 2** of the interactive setup whenever the
-AeroSpace configuration task is selected. Press **Enter** on the feature checklist
-to open it automatically; press **Enter** or **K** to **Keep existing layout**
-and continue to review without saving anything. Press **S** to save your
-changes and continue, or **Esc** to return to the feature checklist.
-When no AeroSpace profile is selected, the workspace step is skipped.
+Workspace configuration is Step 2 whenever AeroSpace configuration is selected.
+Use the native controls to rename, reorder, delete or add workspaces; the Apps
+button shows installed applications with a searchable checklist. An app can be
+assigned to only one workspace. Assignments route new windows; they do not install
+or launch the application.
 
-You can still press **W** in the feature checklist to open it early, or run
-`mac-setup workspaces` at any time to use the editor independently.
-All three steps use the same header navigation, colors, layout spacing and
-bottom keyboard-help area. The editor has a column-aligned workspace table and a selected-workspace
-inspector on wider terminals. In narrow terminals, the inspector is placed
-below the table instead. The workspace list distinguishes shortcut, friendly
-label, glyph name, AeroSpace workspace ID and assigned application count. Color
-highlights the focused row and unsaved changes; `NO_COLOR` and `TERM=dumb`
-are supported, and each row retains an ASCII focus marker without color.
-Glyph previews are always shown alongside their searchable names, even if the
-terminal cannot display Hack Nerd Font glyphs. In that case, the icons may appear
-as rectangles, but the names remain readable. Set your terminal font to Hack Nerd
-Font for correct rendering, independently of SketchyBar's font.
-
-The editor supports these keyboard controls:
-
-- **Up/Down** selects a workspace; **[** and **]** move it left or right.
-- **A** adds a workspace, **D** removes one (with confirmation).
-- **R** renames its AeroSpace workspace ID; **N** edits its descriptive label.
-  IDs use letters, digits, underscores or hyphens. Labels can contain spaces.
-- **G** opens the searchable Nerd Font glyph browser. Start typing a glyph
-  name or keyword (such as `terminal`, `music`, `code` or `notes`) to filter
-  results; use arrows and Enter to select. The bar uses Hack Nerd Font.
-- **P** opens searchable installed-app routing. Type to filter by app name or
-  bundle ID; use arrows and Space/Enter to assign or unassign the focused
-  application. Reassigning an app moves its rule from its previous workspace.
-  Press **+** with an empty search field to enter a bundle ID manually.
-- **S** validates and saves the layout. In guided setup, **K** or **Enter**
-  keeps the existing layout if no edits are pending and continues to review.
-  **Q**, **Esc** from the top-level editor, or **Ctrl+C** cancels editing.
-  Within search results, Esc clears the filter first, then returns to the
-  workspace list. Cancelling with edits asks for confirmation.
-
-At most 13 workspaces are supported, using the familiar Option+backtick,
-Option+1 through Option+0, Option+minus and Option+equal shortcuts in their
-configured order. Option+Shift+key moves a window instead of switching focus.
-The Complete and Productivity presets select an **optional Tomito** installation
-step from the Mac App Store. The default layout includes its Pomodoro timer
-workspace and auto-routing for `com.tomito.tomito`. Uncheck Tomito in the setup
-checklist to hide that workspace when pressing W and to exclude its workspace
-and application routing from AeroSpace/SketchyBar configurations generated by
-that setup run. This does not uninstall Tomito if it is already installed or
-silently discard your saved workspace definitions. Saving edits while Tomito
-is unchecked retains the hidden Pomodoro definition in the private settings;
-the remaining visible workspaces can only use the available shortcut slots. The standalone editor and
-subsequent profile-only updates use the saved layout; optional app choices from
-a prior checklist are not automatically persisted between installer runs.
-Tomito is distributed through the Mac App Store, so installation requires the
-user to complete App Store prompts. The CLI verifies the application exists.
-
-The editor discovers applications in `/Applications`, `/System/Applications`
-and `~/Applications`, including apps in subdirectories. Bundle IDs can be
-entered manually for applications elsewhere. **App assignments route windows
-when the application opens; they do not install or automatically launch apps.**
-An unassigned application opens wherever AeroSpace would normally place it.
-
-Your choices are stored locally in
-`~/Library/Application Support/mac-setup/workspaces.json`. Saving from W
-persists these choices even if you subsequently cancel the installation
-checklist, but it does not modify AeroSpace or SketchyBar until their profile
-tasks run. To apply later changes, use:
-
-```sh
-mac-setup workspaces
-mac-setup setup aerospace-profile sketchybar-profile
-```
-
-AeroSpace and SketchyBar profiles are generated as **local, backed-up copies**
-from the bundled templates rather than symlinks into public dotfiles. This
-keeps private customization outside the public repository and prevents
-`dotfiles update` from overwriting it. The existing recovery journal restores
-the previous generated files; it does not erase workspace choices in
-`workspaces.json`. Other application profiles can still link public dotfiles.
+Your choices are saved locally in
+`~/Library/Application Support/mac-setup/workspaces.json` when setup starts.
+The optional timer workspace is emitted only when Tomito is selected. AeroSpace and
+SketchyBar are generated as backed-up local copies rather than changes to a public
+Git checkout. Glyph mappings have one definition and use the installed Hack Nerd
+Font Mono at 17 points, with 30-point workspace slots and visible inactive colors.
+The bar refreshes after application switching and wake, with a periodic recovery
+check for missed workspace events.
 
 ## Download a build
 
 Download the archive for your processor from [Releases](https://github.com/Roobahist/mac-setup/releases):
-`arm64` for Apple silicon or `x86_64` for Intel. Extract it and keep `mac-setup`
+`arm64` for Apple silicon or `x86_64` for Intel. Extract it and open **Mac Setup.app**. For CLI use, keep `mac-setup`
 beside `MacSetup_MacSetupCore.bundle`. Run the executable directly or run
 `bash install.sh` from the extracted directory to install into `~/.local`.
 Users do not need Xcode to run a downloaded build.
@@ -198,7 +129,7 @@ mac-setup restore
 mac-setup update
 ```
 
-The default command opens the interactive picker. `status` distinguishes
+The default command opens the native Swift app. `status` distinguishes
 automatically verified state, guided steps, and steps the user confirmed.
 Stored preference verification does not guarantee the visible behavior of an
 undocumented setting on every macOS release.
@@ -234,7 +165,7 @@ or replace the executable itself.
   clock, fonts and accent; Karabiner shortcuts; Alacritty and Atuin preferences.
 - A snapshot of 181 portable Vorssaint preferences, including quit-on-close.
   Quit Vorssaint before applying or restoring it. Launch it afterwards.
-- Dock auto-hide with a five-second reveal delay, removal of ordinary pinned Dock
+- Dock auto-hide with a one-second reveal delay, removal of ordinary pinned Dock
   items, hidden desktop files, dark appearance, Finder list view and tab preferences.
 - A managed Atuin zsh initialization block and macOS global Git ignore rules that
   preserve existing rules.
@@ -397,7 +328,7 @@ local SketchyBar configuration rather than a symlink into tracked dotfiles if yo
 want generated colors to remain outside your repository. Manual
 `setup wallpaper-colors` remains backed up like any other setup task.
 
-Homebrew setup runs the official installer in your terminal when missing, including
+Homebrew setup runs the official installer in the Swift window when missing, including
 any password or Command Line Tools prompts. The CLI then adds `brew shellenv` to
 zsh's `.zprofile` after backup. Restore can undo the shell edit but does not uninstall
 Homebrew. Privacy approvals always remain guided. Stored preference verification

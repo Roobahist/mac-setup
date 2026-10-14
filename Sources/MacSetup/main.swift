@@ -3,14 +3,14 @@ import Darwin
 import MacSetupCore
 
 let help = """
-mac-setup 0.2.0 | interactive setup for your Mac
+mac-setup 0.3.0 | interactive setup for your Mac
 
 Usage:
-  mac-setup                     Open the interactive keyboard-driven checklist
+  mac-setup                     Open the native Swift setup app
   mac-setup list                List task IDs
   mac-setup status              Inspect the current setup (read-only)
   mac-setup plan [task IDs]      Preview tasks and prerequisites (read-only)
-  mac-setup setup [task IDs]     Apply selected tasks with individual prompts
+  mac-setup setup [task IDs]     Review and apply selected tasks in the Swift app
   mac-setup setup --all          Walk through all tasks (including unfinished)
   mac-setup setup --preset minimal    Run a curated selection
   mac-setup profiles             Show available selection presets
@@ -27,7 +27,7 @@ Usage:
   mac-setup watcher-enable      Enable the installed watcher
 
 Options:
-  --preset NAME                 complete, minimal, productivity, developer
+  --preset NAME                 repair, complete, minimal, productivity, developer
   --dry-run                     Preview instead of making changes
   --yes                         Approve automatic tasks; guided tasks stay pending
   --image PATH                  Choose an image for wallpaper-colors
@@ -57,7 +57,7 @@ struct Options {
         if args.contains("--help") || args.first == "help" { command = "help"; return }
         if args.contains("--version") { command = "version"; return }
         if let first = args.first, !first.hasPrefix("--") { command = args.removeFirst() }
-        let commands = ["menu", "list", "status", "plan", "setup", "update", "backups", "restore", "profiles", "workspaces", "dotfiles", "watch", "watcher-status", "watcher-stop", "watcher-disable", "watcher-enable"]
+        let commands = ["menu", "gui", "terminal", "list", "status", "plan", "setup", "update", "backups", "restore", "profiles", "workspaces", "dotfiles", "watch", "watcher-status", "watcher-stop", "watcher-disable", "watcher-enable"]
         guard commands.contains(command) else { throw SetupError("Unknown command '\(command)'. Run mac-setup --help.") }
         while !args.isEmpty {
             let value = args.removeFirst()
@@ -65,7 +65,7 @@ struct Options {
             case "--all": all = true
             case "--preset":
                 guard !args.isEmpty, let parsed = SetupPreset(rawValue: args.removeFirst()) else {
-                    throw SetupError("--preset requires complete, minimal, productivity, or developer.")
+                    throw SetupError("--preset requires repair, complete, minimal, productivity, or developer.")
                 }
                 preset = parsed
             case "--dry-run": dryRun = true
@@ -222,9 +222,14 @@ func setup(_ ids: [String], engine: Engine, options: Options) throws {
 do {
     var options = try Options(Array(CommandLine.arguments.dropFirst()))
     if options.command == "help" { print(help); exit(0) }
-    if options.command == "version" { print("0.2.0"); exit(0) }
+    if options.command == "version" { print("0.3.0"); exit(0) }
     guard getuid() != 0 else { throw SetupError("Run mac-setup as your normal user, not with sudo. Individual installers request privileges themselves.") }
     let engine = try Engine()
+    if options.command == "menu" || options.command == "gui" || (options.command == "setup" && !options.yes && !options.dryRun) {
+        let ids = options.all ? Catalog.tasks.map(\.id) : (options.ids.isEmpty ? nil : options.ids)
+        try NativeSetup.run(ids: ids, preset: options.preset)
+        exit(0)
+    }
     switch options.command {
     case "watch":
         try WallpaperWatcher.run(engine: engine, image: options.image, once: options.once)

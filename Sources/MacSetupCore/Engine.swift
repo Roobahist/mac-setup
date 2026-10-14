@@ -11,6 +11,8 @@ public final class Engine {
     /// Optional task choices captured from the setup checklist. A nil value
     /// retains all saved workspaces for standalone profile reapplication.
     public var selectedWorkspaceTaskIDs: Set<String>?
+    public var deferRestarts = false
+    public private(set) var pendingRestarts = Set<String>()
     private var brewRefreshed = false
     private let tools: (String) -> String?
 
@@ -84,6 +86,8 @@ public final class Engine {
             return try journal.launchAgentLoaded(WallpaperWatcher.label) ? .done : .ready
         case .accent: return .ready // A new wallpaper needs a new extraction.
         case .guide:
+            if ["aerospace-access", "karabiner-access", "raycast-access"].contains(task.id),
+               try !checkGuide(task).ready { return .guided }
             let recorded = journal.transactions.contains { $0.task == task.id && $0.complete && $0.changes.isEmpty }
             return recorded ? .confirmed : .guided
         }
@@ -152,7 +156,7 @@ public final class Engine {
                 try journal.setPreference("com.apple.finder", "StandardViewSettings", views, transaction: id)
                 try journal.setPreference("com.apple.finder", "FXPreferredGroupBy", "None", transaction: id)
                 try journal.setPreference("com.apple.finder", "FXPreferredViewStyle", "Nlsv", transaction: id)
-                try runner.checked("/usr/bin/killall", ["Finder"])
+                try restart("Finder")
                 guard try state(task) == .done else { throw SetupError("Finder icon size verification failed.") }
             case let .install(packages, cask, app):
                 guard let brew = tools("brew") else { throw SetupError("Install Homebrew first.") }
@@ -195,17 +199,19 @@ public final class Engine {
                     }
                 }
                 guard try state(task) == .done else { throw SetupError("Profile verification failed.") }
+                if directories.contains("sketchybar"), (try? journal.serviceStarted()) == true {
+                    try journal.startService(transaction: id)
+                }
                 if directories.contains("aerospace"), let tool = executable("aerospace") {
                     let running = try runner.run(tool, ["list-workspaces", "--all"])
                     if running.status == 0 { try runner.checked(tool, ["reload-config"]) }
                 }
             case let .preferences(preferences, restart):
+                if task.id == "raycast-profile" { try quitForPreferences("com.raycast.macos") }
                 for preference in preferences { try journal.setPreference(preference.domain, preference.key, preference.value, transaction: id) }
-                if let restart { try runner.checked("/usr/bin/killall", [restart]) }
+                if let restart { try self.restart(restart) }
             case .vorssaint:
-                if try runner.run("/usr/bin/pgrep", ["-x", "Vorssaint"]).status == 0 {
-                    throw SetupError("Quit Vorssaint from its menu before applying the profile, then retry. Its private contents will remain local.")
-                }
+                try quitForPreferences("com.vorssaint.utils")
                 for preference in try vorssaintPreferences() { try journal.setPreference(preference.domain, preference.key, preference.value, transaction: id) }
             case .gitIgnore: try applyGitIgnore(transaction: id)
             case .atuinShell: try applyAtuinShell(transaction: id)
@@ -314,6 +320,8 @@ public final class Engine {
 
     public func confirm(_ task: SetupTask) throws {
         guard task.guided else { throw SetupError("Only guided tasks can be confirmed manually.") }
+        let check = try checkGuide(task)
+        guard check.ready else { throw SetupError(check.message) }
         let id = try journal.begin(task.id); try journal.finish(id)
     }
 
@@ -322,15 +330,51 @@ public final class Engine {
             try runner.checked("/usr/bin/open", [url]); return
         }
         guard case let .guide(url, app, _) = task.action else { return }
-        if task.id == "wallpaper-access", let executable = WallpaperWatcher.executable(paths: paths) {
-            try runner.checked("/usr/bin/open", ["-R", executable.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().path])
+        if let app {
+            try runner.checked("/usr/bin/open", ["-a", app])
+            if task.id == "karabiner-access" {
+                let cli = "/Library/Application Support/org.pqrs/Karabiner-Elements/bin/karabiner_cli"
+                if FileManager.default.isExecutableFile(atPath: cli) {
+                    try runner.checked(cli, ["--select-profile", "Portable"])
+                }
+            }
+            return
         }
-        if let app { try runner.checked("/usr/bin/open", ["-a", app]) }
         if let url {
             let result = try runner.run("/usr/bin/open", [url])
             if result.status != 0, url.hasPrefix("x-apple.systempreferences:") {
                 try runner.checked("/usr/bin/open", ["-a", "System Settings"])
             } else if result.status != 0 { throw SetupError("Could not open \(url).") }
+        }
+    }
+
+    private func quitForPreferences(_ bundleID: String) throws {
+        // A temporary test home must never affect apps in the real session.
+        guard paths.home == FileManager.default.homeDirectoryForCurrentUser else { return }
+        let apps = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+        for app in apps { app.terminate() }
+        for _ in 0..<30 {
+            if apps.allSatisfy(\.isTerminated) { return }
+            Thread.sleep(forTimeInterval: 0.1)
+        }
+        throw SetupError("Quit \(bundleID) so its saved settings can be updated, then retry.")
+    }
+
+    private func restart(_ process: String) throws {
+        if deferRestarts { pendingRestarts.insert(process); return }
+        let result = try runner.run("/usr/bin/killall", [process])
+        guard result.status == 0 || result.text.contains("No matching processes") else {
+            throw SetupError("Could not refresh \(process): \(result.text)")
+        }
+    }
+
+    public func finishRestarts() throws {
+        for process in pendingRestarts.sorted() {
+            let result = try runner.run("/usr/bin/killall", [process])
+            guard result.status == 0 || result.text.contains("No matching processes") else {
+                throw SetupError("Could not refresh \(process): \(result.text)")
+            }
+            pendingRestarts.remove(process)
         }
     }
 

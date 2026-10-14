@@ -3,7 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 ARCH="${1:-$(uname -m)}"
-VERSION="${2:-0.1.0}"
+VERSION="${2:-0.3.0}"
 case "$ARCH" in arm64|x86_64) ;; *) echo "Unsupported architecture: $ARCH" >&2; exit 1 ;; esac
 if [[ ! "$VERSION" =~ ^[a-zA-Z0-9._-]+$ ]]; then echo "Invalid version" >&2; exit 1; fi
 
@@ -14,6 +14,7 @@ DEST="dist/$PACKAGE"
 mkdir -p "$DEST"
 cp "$BIN_DIR/mac-setup" "$DEST/mac-setup"
 cp -R "$BIN_DIR/MacSetup_MacSetupCore.bundle" "$DEST/"
+bash scripts/app-bundle.sh "$BIN_DIR" "$DEST/Mac Setup.app"
 cp scripts/install.sh README.md LICENSE NOTICE.md "$DEST/"
 chmod +x "$DEST/mac-setup" "$DEST/install.sh"
 # Ad-hoc signing meets Apple silicon's local executable requirement. It is

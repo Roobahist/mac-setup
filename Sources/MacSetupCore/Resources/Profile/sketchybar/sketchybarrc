@@ -188,7 +188,7 @@ for workspace in "${workspace_ids[@]}"; do
       label="$icon" \
       label.font="$font" \
       label.align=center \
-      label.width=21 \
+      label.width=30 \
       click_script="aerospace workspace '$workspace'"
 
   click_shield_members+=("space.$workspace")
@@ -203,9 +203,10 @@ sketchybar \
   --add item workspace_observer left \
   --set workspace_observer \
     drawing=off \
+    update_freq=2 \
     updates=on \
     script="/bin/bash '$PLUGIN_DIR/aerospace.sh'$WORKSPACE_ARGS" \
-  --subscribe workspace_observer aerospace_workspace_change
+  --subscribe workspace_observer aerospace_workspace_change front_app_switched system_woke
 
 
 ##### Clock #####

@@ -24,7 +24,7 @@ fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 36, 132, 0, 0))
 env = dict(os.environ, TERM="xterm-256color")
 env.pop("NO_COLOR", None)  # This test asserts ANSI highlighting regardless of the caller.
 process = subprocess.Popen(
-    [str(executable)],
+    [str(executable), "terminal"],
     stdin=slave,
     stdout=slave,
     stderr=slave,

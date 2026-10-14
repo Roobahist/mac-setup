@@ -9,7 +9,11 @@ CACHE_FILE="$HOME/.cache/sketchybar/focused-workspace"
 focused_workspace() {
   local focused=""
 
-  if [ -r "$CACHE_FILE" ]; then
+  if [ "$SENDER" = "front_app_switched" ] || [ "$SENDER" = "routine" ] || [ "$SENDER" = "system_woke" ]; then
+    focused="$(aerospace list-workspaces --focused 2>/dev/null)"
+  fi
+
+  if [ -z "$focused" ] && [ -r "$CACHE_FILE" ]; then
     IFS= read -r focused < "$CACHE_FILE"
   fi
 

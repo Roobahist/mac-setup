@@ -124,7 +124,7 @@ public struct WorkspaceConfiguration: Codable, Equatable {
 
     // The layout supports AeroSpace's familiar Option+key navigation.
     public static let keys = ["backtick", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "minus", "equal"]
-    public static let font = "Hack Nerd Font:Bold:14.5"
+    public static let font = "Hack Nerd Font Mono:Bold:17.0"
 
     // Tomito is not a setup dependency, and the timer workspace is optional.
     public static var defaultLayout: WorkspaceConfiguration {
@@ -323,6 +323,7 @@ public struct WorkspaceConfiguration: Codable, Equatable {
 
         """
         return try Self.replace(template, from: "##### Workspace Icons #####\n",
-                                to: "##### AeroSpace Workspaces #####\n", with: section)
+                                to: "# Read workspace names and order directly from AeroSpace\n",
+                                with: section + "##### AeroSpace Workspaces #####\n\nsketchybar --add event aerospace_workspace_change\n\n# ------------------------------------------------------------\n")
     }
 }

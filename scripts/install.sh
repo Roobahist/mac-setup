@@ -24,6 +24,9 @@ INSTALL_DIR="$INSTALL_ROOT/versions/$(date +%Y%m%d-%H%M%S)-$$"
 mkdir "$INSTALL_DIR"
 cp "$SOURCE_DIR/mac-setup" "$INSTALL_DIR/"
 cp -R "$SOURCE_DIR/MacSetup_MacSetupCore.bundle" "$INSTALL_DIR/"
+if [[ -d "$SOURCE_DIR/Mac Setup.app" ]]; then
+  cp -R "$SOURCE_DIR/Mac Setup.app" "$INSTALL_DIR/"
+fi
 chmod +x "$INSTALL_DIR/mac-setup"
 if [[ -e "$INSTALL_ROOT/current" && ! -L "$INSTALL_ROOT/current" ]]; then
   echo "$INSTALL_ROOT/current is not a managed symlink. Move it aside first." >&2; exit 1
@@ -46,4 +49,16 @@ else
     printf '\n# mac-setup command\n%s\n' "$PATH_LINE" >> "$SHELL_RC"
   fi
   echo "Open a new terminal and run: mac-setup"
+fi
+
+if [[ -d "$INSTALL_DIR/Mac Setup.app" ]]; then
+  APP_LINK="$HOME/Applications/Mac Setup.app"
+  APP_TARGET="$INSTALL_ROOT/current/Mac Setup.app"
+  if [[ ! -e "$APP_LINK" && ! -L "$APP_LINK" ]] || [[ -L "$APP_LINK" && "$(readlink "$APP_LINK")" == "$APP_TARGET" ]]; then
+    mkdir -p "$HOME/Applications"
+    ln -sfn "$APP_TARGET" "$APP_LINK"
+    echo "Open Mac Setup from your Applications folder."
+  else
+    echo "Existing Mac Setup.app preserved; open $INSTALL_DIR/Mac Setup.app."
+  fi
 fi
