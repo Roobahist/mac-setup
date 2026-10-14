@@ -386,14 +386,14 @@ public struct WorkspaceConfiguration: Codable, Equatable {
         # APP ASSIGNMENTS
         # ============================================================
 
-        # Keep macOS system dialogs tiled.
+        # Keep auxiliary macOS dialogs out of normal tiling trees.
         [[on-window-detected]]
         if = 'test %{app-bundle-id} = com.apple.ScreenContinuity'
-        run = 'layout tiling'
+        run = 'layout floating'
 
         [[on-window-detected]]
         if = 'test %{app-bundle-id} = com.apple.systempreferences'
-        run = 'layout tiling'
+        run = 'layout floating'
 
         \(rules)
 

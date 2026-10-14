@@ -205,15 +205,15 @@ for workspace in "${workspace_ids[@]}"; do
 
 done
 
-# A single observer updates every workspace together. Per-workspace subscribers
-# caused redundant AeroSpace queries, long event queues, and stale colors.
+# Update on workspace and foreground-app events, not on a polling timer.
+# Repeated scheduled updates previously caused unnecessary full-bar redraws.
 printf -v WORKSPACE_ARGS ' %q' "${workspace_ids[@]}"
 
 sketchybar \
   --add item workspace_observer left \
   --set workspace_observer \
     drawing=off \
-    update_freq=2 \
+    update_freq=0 \
     updates=on \
     script="/bin/bash '$PLUGIN_DIR/aerospace.sh'$WORKSPACE_ARGS" \
   --subscribe workspace_observer aerospace_workspace_change front_app_switched system_woke
@@ -232,7 +232,7 @@ sketchybar \
     label.width=400 \
     label.color="$BASE_WHITE" \
     script="$PLUGIN_DIR/clock.sh" \
-    update_freq=1 \
+    update_freq=60 \
     updates=on
 
 click_shield_members+=("clock")
@@ -267,7 +267,7 @@ fi
 
 ##### Host Display Geometry #####
 sketchybar --add item display_geometry left \
-  --set display_geometry drawing=off updates=on update_freq=15 \
+  --set display_geometry drawing=off updates=on update_freq=0 \
     script="/bin/bash '$PLUGIN_DIR/geometry.sh'" \
   --subscribe display_geometry display_change system_woke
 if [ -x "$PLUGIN_DIR/mac-setup-display" ]; then
