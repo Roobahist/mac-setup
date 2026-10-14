@@ -192,7 +192,15 @@ public final class Journal {
     }
 
     public func registerLoginItem(_ path: String, transaction: String) throws {
-        guard !(try loginItemRegistered(path)) else { return }
+        if try loginItemRegistered(path) {
+            // Record a no-op for already registered items so future checks can
+            // recognize a fully configured task without asking System Events.
+            // Restoration leaves these pre-existing items untouched.
+            try add(SavedChange(kind: .loginItem, target: path, key: nil, backup: nil,
+                                before: try plistData(true), after: try plistData(true),
+                                restored: false), to: transaction)
+            return
+        }
         // Journal the precise app path before making the change. Never remove
         // another user's login items, or items that were already registered.
         try add(SavedChange(kind: .loginItem, target: path, key: nil, backup: nil,

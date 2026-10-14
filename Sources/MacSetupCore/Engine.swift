@@ -98,11 +98,17 @@ public final class Engine {
         case .wallpaperWatcher:
             guard WallpaperWatcher.executable(paths: paths) != nil else { return .blocked }
             return try journal.launchAgentLoaded(WallpaperWatcher.label) ? .done : .ready
-        case .loginItems:
-            // Avoid requesting System Events Automation access while populating
-            // the feature inventory. Actual items are verified when applied.
-            return journal.transactions.contains { $0.task == task.id && $0.complete }
-                ? .done : .ready
+        case let .loginItems(names):
+            // Inspect only our own journal during initial inventory, never
+            // prompt System Events just to draw the feature-selection screen.
+            let apps = StartupLoginItems.installedPaths(names: names, home: paths.home)
+            guard !apps.isEmpty else { return .ready }
+            return journal.transactions.contains { record in
+                record.task == task.id && record.complete &&
+                apps.allSatisfy { app in
+                    record.changes.contains { $0.kind == .loginItem && $0.target == app && !$0.restored }
+                }
+            } ? .done : .ready
         case .accent: return .ready // A new wallpaper needs a new extraction.
         case .guide:
             if ["aerospace-access", "karabiner-access", "raycast-access"].contains(task.id),
