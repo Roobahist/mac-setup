@@ -38,15 +38,15 @@ enum ControlDestination: String, CaseIterable, Identifiable {
 
 struct ControlCenterView: View {
     @ObservedObject var model: SetupModel
-    @State private var destination: ControlDestination? = .home
-    @State private var previousDestination: ControlDestination = .home
-    @State private var query = ""
-    @State private var activeFeature: String?
+    @LocalViewState private var destination: ControlDestination? = .home
+    @LocalViewState private var previousDestination: ControlDestination = .home
+    @LocalViewState private var query = ""
+    @LocalViewState private var activeFeature: String?
 
     init(model: SetupModel, initialDestination: ControlDestination = .home) {
         self.model = model
-        _destination = State(initialValue: initialDestination)
-        _previousDestination = State(initialValue: initialDestination)
+        _destination = LocalViewState(initialValue: initialDestination)
+        _previousDestination = LocalViewState(initialValue: initialDestination)
     }
 
     var body: some View {

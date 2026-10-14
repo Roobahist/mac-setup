@@ -5,12 +5,12 @@ import MacSetupCore
 struct TweakControl: View {
     let tweak: TweakDescriptor
     let service: TweakService
-    @State private var current: Double = 0
-    @State private var draft: Double = 0
-    @State private var isStored = false
-    @State private var status = ""
-    @State private var working = false
-    @State private var lastTransaction: String?
+    @LocalViewState private var current: Double = 0
+    @LocalViewState private var draft: Double = 0
+    @LocalViewState private var isStored = false
+    @LocalViewState private var status = ""
+    @LocalViewState private var working = false
+    @LocalViewState private var lastTransaction: String?
 
     private var changed: Bool { abs(draft - current) > 0.00001 }
 

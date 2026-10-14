@@ -3,10 +3,10 @@ import SwiftUI
 import MacSetupCore
 
 struct UpdateCenter: View {
-    @State private var release: MacSetupRelease?
-    @State private var message = ""
-    @State private var checking = false
-    @State private var installing = false
+    @LocalViewState private var release: MacSetupRelease?
+    @LocalViewState private var message = ""
+    @LocalViewState private var checking = false
+    @LocalViewState private var installing = false
 
     var body: some View {
         ScrollView {
