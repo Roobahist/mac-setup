@@ -11,6 +11,10 @@ final class SetupModel: ObservableObject {
     @Published var states: [String: String] = [:]
     @Published var layout = WorkspaceConfiguration.defaultLayout
     @Published var shortcuts = ShortcutSettings(entries: [])
+    @Published private(set) var appliedLayout = WorkspaceConfiguration.defaultLayout
+    @Published private(set) var appliedShortcuts = ShortcutSettings(entries: [])
+    var workspaceHasDraftChanges: Bool { layout != appliedLayout }
+    var shortcutsHaveDraftChanges: Bool { shortcuts != appliedShortcuts || layout.keymap != appliedLayout.keymap }
     @Published var pausedSetup = false
     let aerospaceTemplate: String
     let karabinerTemplate: Data
@@ -48,6 +52,8 @@ final class SetupModel: ObservableObject {
             installedAlacritty: ApplicationDiscovery.scan(home: engine.paths.home)
                 .contains { $0.name == "Alacritty" })
         layout = try WorkspaceConfiguration.load(from: engine.paths)
+        appliedLayout = layout
+        appliedShortcuts = shortcuts
         guideProgress = try GuideProgress.load(from: engine.paths)
         apps = ApplicationDiscovery.scan(home: engine.paths.home)
         if let preset { picker.choose(preset) }
@@ -128,10 +134,22 @@ final class SetupModel: ObservableObject {
     func start() {
         do {
             setupLock = try SetupLock(paths: engine.paths)
-            if scope != .feature {
+            // Applying one section must never save an unrelated unsaved draft.
+            switch scope {
+            case .full:
                 if let error = workspaceError(in: layout) { throw SetupError(error) }
                 try shortcuts.save(to: engine.paths)
                 try layout.save(to: engine.paths)
+            case .workspaces:
+                let savedShortcuts = try ShortcutSettings.load(
+                    from: engine.paths, aerospaceTemplate: aerospaceTemplate)
+                try savedShortcuts.validate(workspaces: layout, aerospaceTemplate: aerospaceTemplate)
+                try layout.save(to: engine.paths)
+            case .shortcuts:
+                let savedLayout = try WorkspaceConfiguration.load(from: engine.paths)
+                try shortcuts.validate(workspaces: savedLayout, aerospaceTemplate: aerospaceTemplate)
+                try shortcuts.save(to: engine.paths)
+            case .feature: break
             }
             engine.selectedWorkspaceTaskIDs = scope == .full ? picker.selected : nil
             pausedSetup = false
@@ -156,7 +174,18 @@ final class SetupModel: ObservableObject {
             worker.async { [self] in
                 do {
                     try engine.finishRestarts()
-                    DispatchQueue.main.async { self.log("Finished successfully"); self.busy = false; self.page = .finished; self.setupLock = nil }
+                    let updatedLayout = try? WorkspaceConfiguration.load(from: engine.paths)
+                    let updatedShortcuts = try? ShortcutSettings.load(
+                        from: engine.paths, aerospaceTemplate: aerospaceTemplate)
+                    DispatchQueue.main.async {
+                        self.log("Finished successfully. Saved and refreshed selected configuration.")
+                        if let updatedLayout { self.appliedLayout = updatedLayout }
+                        if let updatedShortcuts { self.appliedShortcuts = updatedShortcuts }
+                        self.busy = false
+                        self.page = .finished
+                        self.setupLock = nil
+                        self.refreshInventory()
+                    }
                 } catch {
                     DispatchQueue.main.async { self.log("Restart failed: \(error)"); self.busy = false; self.message = String(describing: error); self.page = .failed }
                 }
