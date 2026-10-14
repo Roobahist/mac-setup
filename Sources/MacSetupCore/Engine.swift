@@ -243,11 +243,16 @@ public final class Engine {
                 }
                 guard try state(task) == .done else { throw SetupError("Profile verification failed.") }
                 if directories.contains("sketchybar") {
-                    // A running graphical SketchyBar must actually reload the
-                    // generated files. Do not silently accept a stale menu.
-                    if let sketchybar = executable("sketchybar"),
-                       (try? journal.serviceStarted()) == true {
-                        try runner.checked(sketchybar, ["--reload"])
+                    // The running bar is the authority, not Homebrew's service
+                    // status. Users can run SketchyBar independently of brew
+                    // services. A successful file copy must refresh that bar.
+                    if let sketchybar = executable("sketchybar") {
+                        let running = try runner.run(sketchybar, ["--query", "bar"])
+                        if running.status == 0 {
+                            try runner.checked(sketchybar, ["--reload"])
+                        } else if (try? journal.serviceStarted()) == true {
+                            throw SetupError("SketchyBar service is registered but its bar is unavailable. Restart SketchyBar and retry.")
+                        }
                     }
                 }
                 if directories.contains("aerospace"), let tool = executable("aerospace") {
