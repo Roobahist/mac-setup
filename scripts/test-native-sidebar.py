@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Regression guard: expanded sidebar remains native and compact uses real icons.
+"""Sidebar invariant: one native sidebar of fixed internal size.
 
-The user chose the native expanded sidebar but the dedicated compact rail.
-Do not collapse by clipping the expanded List to 70 points again.
-This is a structural check; screenshots remain necessary for visual QA.
+The collapsed state is a narrow viewport onto the *same* native List. Never
+switch to a second icon renderer or resize the underlying list. That would
+change selection, hover, tint, insets and the location of each icon.
+Visual alignment still needs manual screenshot verification on macOS.
 """
 
 from pathlib import Path
@@ -13,37 +14,29 @@ source = (Path(__file__).resolve().parents[1]
 start = source.index("    private var sidebar: some View {")
 end = source.index("    private func selectDestination(", start)
 sidebar = source[start:end]
-assert "VStack(alignment: .leading, spacing: 10)" in sidebar
+
+assert "sidebar\n                .frame(width: 248, alignment: .leading)" in source
+assert ".frame(width: compactSidebar ? 70 : 248, alignment: .leading)" in source
+assert ".clipped()" in source
+
+# One set of controls for both expanded and collapsed states.
+assert sidebar.count("List(selection: $destination)") == 1
+assert "ForEach(customization)" in sidebar
+assert 'Label(item.title, systemImage: item.symbol).tag(item)' in sidebar
+assert ".listStyle(.sidebar)" in sidebar
+assert ".scrollContentBackground(.hidden)" in sidebar
+assert "compactRow" not in sidebar
+assert "if compactSidebar {\n                ScrollView" not in sidebar
+assert ".labelStyle(.iconOnly)" not in sidebar
+
+# User-defined selected/hover behavior is the macOS native List, not a
+# replacement button. It receives the same 248-point geometry in both states.
+assert 'Image(systemName: "sidebar.left")' in sidebar
 assert ".frame(width: 30, height: 30)" in sidebar
+assert ".padding(.horizontal, 14)" in sidebar
+assert 'Text("Customize")' in sidebar
+assert 'Text("Mac Setup")' in sidebar
+assert ".opacity(compactSidebar ? 0 : 1)" in sidebar
 assert 'Text("Your Mac, your way")' in sidebar
 
-# Two distinct layouts: icon-only ScrollView, original expanded native List.
-compact_start = sidebar.index("            if compactSidebar {\n"
-                             "                // This is an actual icon rail")
-expanded_start = sidebar.index("            } else {\n"
-                              "                List(selection: $destination)", compact_start)
-compact, expanded = sidebar[compact_start:expanded_start], sidebar[expanded_start:]
-assert "ScrollView {" in compact
-assert "compactRow(item)" in compact
-assert "compactRow(.updates)" in compact
-assert 'Image(systemName: ControlDestination.guidedSetup.symbol)' in compact
-assert 'Text("Customize")' not in compact
-assert ".frame(width: 50, height: 43)" in compact
-
-assert "List(selection: $destination)" in expanded
-assert ".listStyle(.sidebar)" in expanded
-assert ".scrollContentBackground(.hidden)" in expanded
-assert 'Text("Customize")' in expanded
-assert 'Text("Mac Setup")' in expanded
-assert "sidebarLabel(item).tag(item)" in expanded
-
-# Compact icons must use the same accent blue as the expanded native List.
-helper = sidebar[sidebar.index("    private func compactRow("):]
-assert "Color.primary.opacity(0.16)" in helper
-assert ".foregroundStyle(Color.accentColor)" in helper
-assert '.foregroundStyle(Color.accentColor)\n                        .help("Guided Setup")' in compact
-assert "Text(item.title)" not in helper
-assert "Image(systemName: item.symbol)" in helper
-assert "Button { selectDestination(item) }" in helper
-assert ".frame(width: compactSidebar ? 70 : 248)" in source
-print("Expanded List preserved and true icon-only compact rail verified.")
+print("One fixed-width native sidebar; collapse only clips the viewport.")
