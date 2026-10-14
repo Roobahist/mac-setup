@@ -3,7 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 ARCH="${1:-$(uname -m)}"
-VERSION="${2:-0.3.1}"
+VERSION="${2:-0.4.0}"
 case "$ARCH" in arm64|x86_64) ;; *) echo "Unsupported architecture: $ARCH" >&2; exit 1 ;; esac
 if [[ ! "$VERSION" =~ ^[a-zA-Z0-9._-]+$ ]]; then echo "Invalid version" >&2; exit 1; fi
 
