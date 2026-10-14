@@ -30,6 +30,24 @@ final class WorkspaceConfigurationTests: XCTestCase {
         XCTAssertEqual(config.forSelectedTasks(["tomito"]), config)
     }
 
+    func testHiddenOptionalWorkspaceSurvivesVisibleEdits() throws {
+        let original = WorkspaceConfiguration.defaultLayout
+        var visible = original.forSelectedTasks(["aerospace-profile"])
+        XCTAssertFalse(visible.workspaces.contains { $0.id == "timer" })
+        visible.workspaces[0].name = "Development"
+        visible.workspaces[0].glyph = "terminal"
+
+        let merged = try original.mergingVisible(visible, selectedTasks: ["aerospace-profile"])
+        XCTAssertEqual(merged.workspaces.first?.name, "Development")
+        XCTAssertEqual(merged.workspaces.last?.id, "timer")
+        XCTAssertEqual(merged.workspaces.last?.requiresTask, "tomito")
+        XCTAssertTrue(merged.forSelectedTasks(["aerospace-profile"])
+            .workspaces.allSatisfy { $0.id != "timer" })
+
+        visible.workspaces.append(WorkspaceDefinition(id: "extra", name: "Extra", glyph: "star"))
+        XCTAssertThrowsError(try original.mergingVisible(visible, selectedTasks: ["aerospace-profile"]))
+    }
+
     func testRearrangeRenameDeleteAndAssignApps() throws {
         var config = WorkspaceConfiguration.defaultLayout
         config.workspaces.removeAll { $0.id == "music" || $0.id == "messages" }
