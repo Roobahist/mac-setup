@@ -100,6 +100,33 @@ final class WorkspaceConfigurationTests: XCTestCase {
         XCTAssertTrue(apps.contains { $0.bundleID == "com.example.testeditor" })
     }
 
+    func testEngineRespectsInstallerSelectionWhenGeneratingAeroSpace() throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: home) }
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+        let paths = Paths(home: home)
+        let engine = try Engine(paths: paths, runner: FakeRunner(), tools: { _ in nil })
+
+        engine.selectedWorkspaceTaskIDs = ["aerospace-profile", "sketchybar-profile"]
+        let first = try engine.apply(Catalog.task("aerospace-profile"))
+        let file = paths.config.appendingPathComponent("aerospace/aerospace.toml")
+        let withoutTomito = try String(contentsOf: file, encoding: .utf8)
+        XCTAssertFalse(withoutTomito.contains("workspace timer"))
+        XCTAssertFalse(withoutTomito.contains("com.tomito.tomito"))
+        XCTAssertFalse(withoutTomito.contains("alt-equal = 'workspace timer'"))
+
+        engine.selectedWorkspaceTaskIDs = ["tomito", "aerospace-profile", "sketchybar-profile"]
+        XCTAssertEqual(try engine.state(Catalog.task("aerospace-profile")), .ready)
+        let second = try engine.apply(Catalog.task("aerospace-profile"))
+        let withTomito = try String(contentsOf: file, encoding: .utf8)
+        XCTAssertTrue(withTomito.contains("workspace timer"))
+        XCTAssertTrue(withTomito.contains("com.tomito.tomito"))
+
+        try engine.journal.restore(second)
+        XCTAssertEqual(try String(contentsOf: file, encoding: .utf8), withoutTomito)
+        try engine.journal.restore(first)
+    }
+
     func testAppliedProfileCanBeReconfiguredAndRestored() throws {
         let home = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: home) }
