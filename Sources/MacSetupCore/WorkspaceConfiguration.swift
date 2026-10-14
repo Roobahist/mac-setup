@@ -199,10 +199,10 @@ public struct WorkspaceConfiguration: Codable, Equatable {
             copy.workspaces[index].apps.removeAll { bundle in
                 switch bundle {
                 case "com.tomito.tomito":
-                    return taskIDs.map { !$0.contains("tomito") } == true
+                    return !(taskIDs?.contains("tomito") ?? false)
                         && !(installedBundleIDs?.contains(bundle) ?? false)
                 case "md.obsidian":
-                    return taskIDs.map { !$0.contains("obsidian") } == true
+                    return !(taskIDs?.contains("obsidian") ?? false)
                         && !(installedBundleIDs?.contains(bundle) ?? false)
                 case "com.spotify.client":
                     return installedBundleIDs.map { !$0.contains(bundle) } ?? false

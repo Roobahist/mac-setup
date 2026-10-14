@@ -520,9 +520,9 @@ private struct SetupView: View {
                                 model.selectedWorkspace = i
                                 model.appSheet = true
                             } label: {
-                                Label("\(model.layout.forSelectedTasks(
+                                Label(String(model.layout.forSelectedTasks(
                                     model.scope == .full ? model.picker.selected : nil,
-                                    installedBundleIDs: installedIDs).workspaces[i].apps.count)",
+                                    installedBundleIDs: installedIDs).workspaces[i].apps.count),
                                     systemImage: "app.badge")
                             }.help("Assigned apps")
                             Picker("Key", selection: Binding(
