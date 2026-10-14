@@ -425,7 +425,7 @@ public struct WorkspaceConfiguration: Codable, Equatable {
         }
     }
 
-    public func sketchybarShell(from template: String) throws {
+    public func sketchybarShell(from template: String) throws -> String {
         try validate()
         let icons = workspaces.map { item in
             return "    \(item.id)) printf '%s\\n' \(Self.shellQuote(item.resolvedIcon.symbol)) ;;"
