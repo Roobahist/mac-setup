@@ -28,7 +28,7 @@ struct WorkspacePickerUI {
 
     init(layout: WorkspaceConfiguration, installed: [InstalledApplication],
          context: Context = .standalone,
-         maximumWorkspaces: Int = WorkspaceConfiguration.keys.count) {
+         maximumWorkspaces: Int = Int.max) {
         self.layout = layout
         self.initialLayout = layout
         self.installed = installed

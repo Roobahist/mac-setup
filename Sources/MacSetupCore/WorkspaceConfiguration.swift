@@ -107,13 +107,16 @@ public struct WorkspaceDefinition: Codable, Equatable {
     public var glyph: String
     public var apps: [String]
     public var requiresTask: String?
+    public var shortcuts: WorkspaceShortcuts?
 
-    public init(id: String, name: String, glyph: String, apps: [String] = [], requiresTask: String? = nil) {
+    public init(id: String, name: String, glyph: String, apps: [String] = [], requiresTask: String? = nil,
+                shortcuts: WorkspaceShortcuts? = nil) {
         self.id = id
         self.name = name
         self.glyph = glyph
         self.apps = apps
         self.requiresTask = requiresTask
+        self.shortcuts = shortcuts
     }
 }
 
@@ -122,7 +125,7 @@ public struct WorkspaceConfiguration: Codable, Equatable {
 
     public init(workspaces: [WorkspaceDefinition]) { self.workspaces = workspaces }
 
-    // The layout supports AeroSpace's familiar Option+key navigation.
+    // Default shortcuts follow the number row. Additional workspaces can use custom shortcuts.
     public static let keys = ["backtick", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "minus", "equal"]
     public static let font = "Hack Nerd Font:Bold:14.5"
     public static let referenceGlyphs: Set<String> = ["robot", "music", "chat", "notes", "clock"]
@@ -197,9 +200,13 @@ public struct WorkspaceConfiguration: Codable, Equatable {
         try data.write(to: Self.path(in: paths), options: .atomic)
     }
 
-    public func validate() throws {
-        guard !workspaces.isEmpty && workspaces.count <= Self.keys.count else {
-            throw SetupError("Choose 1 to \(Self.keys.count) workspaces.")
+    public func shortcuts(at index: Int) -> WorkspaceShortcuts {
+        workspaces[index].shortcuts ?? .defaultRow(at: index)
+    }
+
+    public func validate(aerospaceTemplate: String? = nil, checkingShortcutsFor workspaceID: String? = nil) throws {
+        guard !workspaces.isEmpty else {
+            throw SetupError("Keep at least one workspace.")
         }
         var names = Set<String>()
         var applications = Set<String>()
@@ -224,6 +231,32 @@ public struct WorkspaceConfiguration: Codable, Equatable {
                 }
             }
         }
+        var used: [String: (label: String, workspaceID: String?)] = [:]
+        if let aerospaceTemplate {
+            // Reserve bindings that survive workspace generation, using the actual template.
+            let remaining = try Self.replace(aerospaceTemplate, from: "# Workspaces\n", to: "# Resize\n", with: "")
+            var inMainMode = false
+            for line in remaining.components(separatedBy: .newlines) {
+                let line = line.trimmingCharacters(in: .whitespaces)
+                if line.hasPrefix("[") { inMainMode = line == "[mode.main.binding]" }
+                guard inMainMode, let equal = line.firstIndex(of: "=") else { continue }
+                let key = line[..<equal].trimmingCharacters(in: .whitespaces)
+                if let shortcut = WorkspaceShortcut.parse(key) {
+                    used[shortcut.binding] = ("an existing AeroSpace action", nil)
+                }
+            }
+        }
+        for (index, item) in workspaces.enumerated() {
+            let pair = shortcuts(at: index)
+            for (action, shortcut) in [("Switch to", pair.switchTo), ("Move window to", pair.moveWindow)] {
+                guard let shortcut else { continue }
+                try shortcut.validate()
+                if let owner = used[shortcut.binding], workspaceID == nil || item.id == workspaceID || owner.workspaceID == workspaceID {
+                    throw SetupError("\(shortcut.display) for \(action) \(item.name) is already used by \(owner.label). Choose another shortcut.")
+                }
+                used[shortcut.binding] = ("\(action) \(item.name)", item.id)
+            }
+        }
     }
 
     public static func symbol(for glyph: String) -> String? {
@@ -243,7 +276,7 @@ public struct WorkspaceConfiguration: Codable, Equatable {
     }
 
     public func aerospaceTOML(from template: String, geometry: DisplayGeometry = .current()) throws -> String {
-        try validate()
+        try validate(aerospaceTemplate: template)
         var result = geometry.applying(to: template)
         let ids = workspaces.map { "    \"\($0.id)\"," }.joined(separator: "\n")
         result = try Self.replace(result, from: "persistent-workspaces = [", to: "\n]\n",
@@ -251,23 +284,23 @@ public struct WorkspaceConfiguration: Codable, Equatable {
         let initial = workspaces.contains(where: { $0.id == "1" }) ? "1" : workspaces[0].id
         result = result.replacingOccurrences(of: "layout --workspace 1 --root tiles",
                                                with: "layout --workspace \(initial) --root tiles")
-        let shortcuts = workspaces.enumerated().map { index, item -> String in
-            let key = Self.keys[index]
-            return "alt-\(key) = 'workspace \(item.id)'"
+        let shortcuts = workspaces.enumerated().compactMap { index, item -> String? in
+            guard let shortcut = self.shortcuts(at: index).switchTo else { return nil }
+            return "\(shortcut.binding) = 'workspace \(item.id)'"
         }.joined(separator: "\n")
-        let moves = workspaces.enumerated().map { index, item -> String in
-            let key = Self.keys[index]
-            return "alt-shift-\(key) = ['move-node-to-workspace \(item.id)', 'exec-and-forget sketchybar --trigger aerospace_workspace_change']"
+        let moves = workspaces.enumerated().compactMap { index, item -> String? in
+            guard let shortcut = self.shortcuts(at: index).moveWindow else { return nil }
+            return "\(shortcut.binding) = ['move-node-to-workspace \(item.id)', 'exec-and-forget sketchybar --trigger aerospace_workspace_change']"
         }.joined(separator: "\n")
         let bindings = """
         # Workspaces
-        # Option + workspace key
+        # Default: Option + number-row key. Custom shortcuts are configured in Mac Setup.
         # ------------------------------------------------------------
 
         \(shortcuts)
 
         # Move window to workspace
-        # Option + Shift + workspace key
+        # Default: Option + Shift + number-row key. Each move shortcut can also be customized.
 
         \(moves)
 

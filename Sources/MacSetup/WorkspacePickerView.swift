@@ -116,13 +116,11 @@ struct WorkspacePickerView {
     }
 
     private func shortcut(at index: Int) -> String {
-        let key = WorkspaceConfiguration.keys[index]
-        switch key {
-        case "backtick": return "Alt+`"
-        case "minus": return "Alt+-"
-        case "equal": return "Alt+="
-        default: return "Alt+" + key
-        }
+        guard let shortcut = layout.shortcuts(at: index).switchTo else { return "None" }
+        let names = ["cmd": "Cmd", "ctrl": "Ctrl", "alt": "Alt", "shift": "Shift"]
+        let modifiers = WorkspaceShortcut.modifierNames.filter(shortcut.modifiers.contains).map { names[$0]! }
+        let key = ["backtick": "`", "minus": "-", "equal": "="][shortcut.key] ?? WorkspaceShortcut.keyLabel(shortcut.key)
+        return (modifiers + [key]).joined(separator: "+")
     }
 
     private func selectionRange(total: Int, limit: Int, cursor: Int) -> Range<Int> {
@@ -388,7 +386,7 @@ struct WorkspacePickerView {
         let saveState = modified ? "UNSAVED CHANGES" : "NO UNSAVED CHANGES"
         let header = SetupChrome.header(
             step: .workspaces,
-            summary: "WORKSPACE EDITOR   |   \(layout.workspaces.count) of \(maximumWorkspaces) editable slots",
+            summary: "WORKSPACE EDITOR   |   \(layout.workspaces.count) editable slots",
             context: "\(saveState)   |   \(guidedSetup ? "Keep existing layout or customize before review" : "Standalone configuration")",
             width: width
         )

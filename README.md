@@ -71,7 +71,8 @@ After opening **Mac Setup.app**, its window has four steps:
    menu-bar, workspace, launcher and keyboard problems. Expand a section to change
    individual tasks, or select another preset. Installed applications are kept.
 2. **Workspaces.** Preview the bar, change names and icons, reorder workspaces,
-   and assign installed apps. The displayed Option shortcut follows the order.
+   and assign installed apps. Use **Shortcuts…** beside any workspace to change its
+   switch and move-window combinations. The number row remains the default.
 3. **Review.** Read the selected changes before pressing Start setup once.
 4. **Set up & test.** Automatic tasks run in the app. Each guided task opens its
    relevant application and shows explicit choices, numbered checks, Check again,
@@ -113,6 +114,20 @@ Use the native controls to rename, reorder, delete or add workspaces; the Apps
 button shows installed applications with a searchable checklist. An app can be
 assigned to only one workspace. Assignments route new windows; they do not install
 or launch the application.
+
+There is no 13-workspace limit. The first 13 positions default to **Option +
+number-row key** for switching and **Option + Shift + that key** for moving a window,
+including backtick, minus and equals. Click **Shortcuts… → Custom** to choose a
+combination of Control, Option, Shift and Command with a letter, number, function
+key, navigation key or other supported key. Switch and move-window shortcuts are
+independent; either can be turned off. Custom shortcuts stay attached to their
+workspace when you reorder it, while default shortcuts follow the displayed order.
+
+Additional workspaces start without a shortcut once the number row is full. Give
+them a custom combination or click their SketchyBar icon to switch. Duplicate
+combinations and conflicts with the profile's other AeroSpace bindings are shown
+before you save or apply. For example, **Control + Option + R** can switch to a
+Research workspace and **Control + Option + Shift + R** can move a window there.
 
 Your choices are saved locally in
 `~/Library/Application Support/mac-setup/workspaces.json` when setup starts.

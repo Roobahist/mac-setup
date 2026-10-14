@@ -45,7 +45,9 @@ final class WorkspaceConfigurationTests: XCTestCase {
             .workspaces.allSatisfy { $0.id != "timer" })
 
         visible.workspaces.append(WorkspaceDefinition(id: "extra", name: "Extra", glyph: "star"))
-        XCTAssertThrowsError(try original.mergingVisible(visible, selectedTasks: ["aerospace-profile"]))
+        let expanded = try original.mergingVisible(visible, selectedTasks: ["aerospace-profile"])
+        XCTAssertEqual(expanded.workspaces.count, 14)
+        XCTAssertTrue(expanded.workspaces.contains { $0.id == "timer" })
     }
 
     func testRearrangeRenameDeleteAndAssignApps() throws {

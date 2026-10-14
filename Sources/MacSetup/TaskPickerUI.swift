@@ -288,12 +288,10 @@ struct TaskPickerUI {
                                               automatic: Bool) throws -> Bool {
         let stored = try WorkspaceConfiguration.load(from: engine.paths)
         let filtered = stored.forSelectedTasks(state.selected)
-        let hidden = stored.workspaces.count - filtered.workspaces.count
         var editor = WorkspacePickerUI(
             layout: filtered,
             installed: ApplicationDiscovery.scan(home: engine.paths.home),
-            context: automatic ? .setup : .standalone,
-            maximumWorkspaces: WorkspaceConfiguration.keys.count - hidden
+            context: automatic ? .setup : .standalone
         )
         switch editor.run(in: terminal) {
         case .saved(let changed):
