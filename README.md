@@ -48,6 +48,16 @@ Keyboard shortcuts have larger key-combination chips; the editor shows installed
 
 Vorssaint floating-point settings use a small numeric tolerance when verifying macOS `defaults` writes; strings, booleans, and meaningful numeric differences still require exact values. Appearance checklists only instruct users to configure Liquid Glass on supported macOS versions.
 
+### Login and native menu bar
+
+Our full, productivity and repair setups include **Start essential apps at login**. When selected, Mac Setup registers installed AeroSpace, Karabiner-Elements and Raycast under **System Settings > General > Login Items & Extensions > Open at Login**, without removing existing items or duplicating an already registered app. macOS may require permission for Mac Setup to automate System Events. Restoring the setup transaction removes only the login items created by that run.
+
+SketchyBar continues to start through its existing Homebrew user service. WallpaperAccentWatcher starts from its existing user LaunchAgent and may appear under **Allow in Background**, not **Open at Login**. Karabiner's drivers and helper services also retain their own system-managed startup and permission requirements. We never replace these with duplicate boot processes.
+
+On macOS 26 and later, setup includes the **Native menu bar background** check. In **System Settings > Menu Bar**, enable **Show menu bar background** so the auto-hidden native menu bar has its own blurred surface when it appears over SketchyBar. Apple has not documented a stable command-line preference for this switch, so Mac Setup links to the real system setting rather than writing an unverified key. This does not globally enable Reduce Transparency or change SketchyBar's palette.
+
+The public dotfiles are the source of truth for unrelated window rules. System Settings and Screen Continuity are tiled just as their source profile specifies. Mac Setup only substitutes generated workspace keys, app assignments, and host-specific layout geometry.
+
 ### Shortcut behavior
 
 All supported AeroSpace bindings in the bundled main-mode configuration are editable. Additional shortcuts may reuse available actions. Karabiner application shortcuts can use built-in app-opening scripts or a validated application bundle ID. Advanced stateful Karabiner rules, such as the Chrome chord remapping, remain preserved in the Portable profile and can be disabled or edited through a validated JSON editor. They cannot be represented faithfully as ordinary single-chord shortcuts. The Raycast launcher combination is editable and synchronized with its macOS preference.

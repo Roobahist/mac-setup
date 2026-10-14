@@ -7,6 +7,17 @@ final class WorkspaceConfigurationTests: XCTestCase {
         return try String(contentsOf: url, encoding: .utf8)
     }
 
+    func testGeneratedSystemSettingsRulesTileLikePublicDotfiles() throws {
+        let source = try String(contentsOf: Paths().profile.appendingPathComponent("aerospace/aerospace.toml"), encoding: .utf8)
+        let generated = try WorkspaceConfiguration.defaultLayout.aerospaceTOML(from: source)
+        for id in ["com.apple.systempreferences", "com.apple.ScreenContinuity"] {
+            let rule = "if = 'test %{app-bundle-id} = \(id)'\nrun = 'layout tiling'"
+            XCTAssertTrue(source.contains(rule), "The bundled profile must match the public dotfiles for \(id)")
+            XCTAssertTrue(generated.contains(rule), "Generation must not change the tiling rule for \(id)")
+            XCTAssertFalse(generated.contains("if = 'test %{app-bundle-id} = \(id)'\nrun = 'layout floating'"))
+        }
+    }
+
     func testOptionalAppsPreserveEmptyWorkspaces() throws {
         let config = WorkspaceConfiguration.defaultLayout
         try config.validate()
