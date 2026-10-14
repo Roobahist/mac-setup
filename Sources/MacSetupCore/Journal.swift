@@ -187,6 +187,23 @@ public final class Journal {
         }
     }
 
+    /// Reset one preference to its macOS default without deleting its domain.
+    /// A missing key is distinct from writing an arbitrary guessed default.
+    public func clearPreference(_ domain: String, _ key: String, transaction: String) throws {
+        guard let old = try preference(domain, key) else { return }
+        try add(SavedChange(kind: .preference, target: domain, key: key, backup: nil,
+                            before: try plistData(old), after: nil, restored: false),
+                to: transaction)
+        do {
+            try setPreference(domain, key, nil)
+        } catch {
+            throw SetupError("Cannot reset preference \\(domain) / \\(key): \\(error)")
+        }
+        guard try preference(domain, key) == nil else {
+            throw SetupError("Preference reset verification failed: \\(domain) / \\(key).")
+        }
+    }
+
     public func loginItemRegistered(_ path: String) throws -> Bool {
         try StartupLoginItems.query(path, runner: runner)
     }

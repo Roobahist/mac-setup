@@ -59,6 +59,10 @@ struct TweakControl: View {
                     Button("Undo") { restore(transaction) }.disabled(working)
                         .buttonStyle(.borderless)
                 }
+                if isStored {
+                    Button("System default") { reset() }.disabled(working)
+                        .help("Remove this setting override and use the macOS default")
+                }
                 Button("Apply") { apply() }.disabled(working || !changed)
                     .buttonStyle(.borderedProminent)
             }
@@ -108,14 +112,31 @@ struct TweakControl: View {
             DispatchQueue.main.async {
                 working = false
                 switch result {
-                case .success:
+                case .success(let warning):
                     lastTransaction = nil
                     load()
-                    status = "Previous setting restored."
+                    status = warning ?? "Previous setting restored."
                 case .failure(let error): status = "Could not restore: \(error)"
                 }
             }
         }
     }
+    private func reset() {
+        working = true
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result = Result { try service.resetToSystemDefault(tweak) }
+            DispatchQueue.main.async {
+                working = false
+                switch result {
+                case .success(let outcome):
+                    lastTransaction = outcome.transaction
+                    load()
+                    status = outcome.refreshWarning ?? "System default restored. Undo is available."
+                case .failure(let error): status = "Could not reset: \\(error)"
+                }
+            }
+        }
+    }
+
 }
 
