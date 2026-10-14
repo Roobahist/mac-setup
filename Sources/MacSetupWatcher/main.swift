@@ -1,7 +1,7 @@
 import Foundation
 import MacSetupCore
 
-// The bundled fallback is a user-level LaunchAgent, not a new login app.
+// The shared watcher is a user-level LaunchAgent, not a new login app.
 // It shares Mac Setup's wallpaper color calculation and never edits dotfiles.
 if CommandLine.arguments.contains("--self-check") {
     let paths = Paths()
@@ -15,7 +15,9 @@ if CommandLine.arguments.contains("--self-check") {
 
 do {
     let engine = try Engine()
-    try WallpaperWatcher.runBuiltIn(engine: engine)
+    let image = ProcessInfo.processInfo.environment["WALLPAPER_ACCENT_IMAGE"]
+        .flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0) }
+    try WallpaperWatcher.runBuiltIn(engine: engine, image: image)
 } catch {
     fputs("Wallpaper watcher could not start: \(error)\n", stderr)
     exit(1)

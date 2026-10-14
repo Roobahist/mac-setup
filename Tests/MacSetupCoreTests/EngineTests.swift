@@ -6,6 +6,7 @@ final class FakeRunner: CommandRunning {
     var git: [String: [String]] = [:]
     var calls: [[String]] = []
     var failWrites = false
+    var failWatcherStart = false
     var jobs = Set<String>()
     var disabledJobs = Set<String>()
     var managedPackages = Set<String>()
@@ -44,6 +45,9 @@ final class FakeRunner: CommandRunning {
             case "bootstrap":
                 let data = try Data(contentsOf: URL(fileURLWithPath: args[2]))
                 let values = try PropertyListSerialization.propertyList(from: data, format: nil) as! [String: Any]
+                if failWatcherStart && values["Label"] as? String == WallpaperWatcher.replacementLabel {
+                    return CommandResult(status: 1, output: Data("simulated bootstrap failure".utf8))
+                }
                 jobs.insert(values["Label"] as! String)
             default: XCTFail("Unexpected launchctl command")
             }
@@ -449,28 +453,70 @@ final class EngineTests: XCTestCase {
         return binary
     }
 
-    func testExistingWallpaperAppIsRegisteredAndRestoredWithoutReplacingIt() throws {
+    func legacyWatcherPlist(image: String? = nil) throws -> URL {
         let binary = try existingWatcher()
-        let id = try engine.apply(Catalog.task("wallpaper-watcher"))
-        XCTAssertEqual(try engine.state(Catalog.task("wallpaper-watcher")), .done)
-        let plist = home.appendingPathComponent("Library/LaunchAgents/" + WallpaperWatcher.label + ".plist")
-        let values = try PropertyListSerialization.propertyList(from: Data(contentsOf: plist), format: nil) as! [String: Any]
-        XCTAssertEqual(values["ProgramArguments"] as? [String], [binary.path])
-        try engine.journal.restore(id)
-        XCTAssertFalse(runner.jobs.contains(WallpaperWatcher.label))
-        XCTAssertFalse(Journal.exists(plist))
-        XCTAssertEqual(try String(contentsOf: binary), "existing app")
-        XCTAssertFalse(Journal.exists(paths.state.appendingPathComponent("watcher-runtime")))
+        var values: [String: Any] = ["Label": WallpaperWatcher.label,
+                                    "ProgramArguments": [binary.path], "RunAtLoad": true]
+        if let image { values["EnvironmentVariables"] = ["WALLPAPER_ACCENT_IMAGE": image] }
+        let plist = home.appendingPathComponent("Library/LaunchAgents/\(WallpaperWatcher.label).plist")
+        try FileManager.default.createDirectory(at: plist.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try PropertyListSerialization.data(fromPropertyList: values, format: .xml, options: 0).write(to: plist)
+        return plist
     }
 
-    func testRunningExistingWatcherIsPreserved() throws {
-        _ = try existingWatcher()
-        let plist = try write("Library/LaunchAgents/" + WallpaperWatcher.label + ".plist", "personal launch configuration")
+    func testRunningLegacyWatcherMigratesAndRestoresWithoutReplacingApp() throws {
+        let legacy = try legacyWatcherPlist(image: "/tmp/pinned-wallpaper.jpg")
+        let original = try Data(contentsOf: legacy)
+        let helper = try bundledWatcher()
         runner.jobs.insert(WallpaperWatcher.label)
+        let task = try Catalog.task("wallpaper-watcher")
+        XCTAssertEqual(try engine.state(task), .ready)
+        let id = try engine.apply(task)
+        XCTAssertFalse(Journal.exists(legacy))
+        XCTAssertEqual(runner.jobs, [WallpaperWatcher.replacementLabel])
+        let plist = home.appendingPathComponent("Library/LaunchAgents/\(WallpaperWatcher.replacementLabel).plist")
+        let values = try PropertyListSerialization.propertyList(from: Data(contentsOf: plist), format: nil) as! [String: Any]
+        XCTAssertEqual(values["ProgramArguments"] as? [String], [helper.path])
+        XCTAssertEqual((values["EnvironmentVariables"] as? [String: String])?["WALLPAPER_ACCENT_IMAGE"], "/tmp/pinned-wallpaper.jpg")
+        let stop = runner.calls.firstIndex { $0.dropFirst().first == "bootout" }!
+        let start = runner.calls.firstIndex { $0.dropFirst().first == "bootstrap" }!
+        XCTAssertLessThan(stop, start)
+        XCTAssertEqual(try engine.state(task), .done)
+        try engine.journal.restore(id)
+        XCTAssertEqual(try Data(contentsOf: legacy), original)
+        XCTAssertEqual(runner.jobs, [WallpaperWatcher.label])
+        XCTAssertFalse(Journal.exists(plist))
+        let binary = home.appendingPathComponent("Applications/WallpaperAccentWatcher.app/Contents/MacOS/WallpaperAccentWatcher")
+        XCTAssertEqual(try String(contentsOf: binary), "existing app")
+    }
+
+    func testMigrationAddsCacheSupportWithoutReplacingPersonalPaletteAndRestoresIt() throws {
+        let colors = try write("sketchybar-personal/colors.sh", "export BAR_COLOR=0xff123456\nexport HIGHLIGHT_COLOR=0xffABCDEF\n")
+        let linked = paths.config.appendingPathComponent("sketchybar/plugins/colors.sh")
+        try FileManager.default.createDirectory(at: linked.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: linked, withDestinationURL: colors)
+        let before = try Data(contentsOf: colors)
+        _ = try legacyWatcherPlist()
+        _ = try bundledWatcher()
         let id = try engine.apply(Catalog.task("wallpaper-watcher"))
-        XCTAssertEqual(try String(contentsOf: plist), "personal launch configuration")
-        XCTAssertTrue(engine.journal.transactions.first { $0.id == id }!.changes.isEmpty)
-        XCTAssertFalse(runner.calls.contains { ["bootout", "bootstrap", "enable"].contains($0.dropFirst().first ?? "") })
+        let updated = try String(contentsOf: colors)
+        XCTAssertTrue(updated.hasPrefix(String(decoding: before, as: UTF8.self)))
+        XCTAssertTrue(updated.contains("sketchybar/highlight-color"))
+        XCTAssertEqual(try FileManager.default.destinationOfSymbolicLink(atPath: linked.path), colors.path)
+        _ = try engine.apply(Catalog.task("wallpaper-watcher"))
+        XCTAssertEqual(try String(contentsOf: colors), updated)
+        try engine.journal.restore(id)
+        XCTAssertEqual(try Data(contentsOf: colors), before)
+    }
+
+    func testStoppedLegacyWatcherMigratesAndRestoreLeavesItStopped() throws {
+        let legacy = try legacyWatcherPlist()
+        _ = try bundledWatcher()
+        let id = try engine.apply(Catalog.task("wallpaper-watcher"))
+        XCTAssertFalse(Journal.exists(legacy))
+        try engine.journal.restore(id)
+        XCTAssertTrue(Journal.exists(legacy))
+        XCTAssertTrue(runner.jobs.isEmpty)
     }
 
     func bundledWatcher() throws -> URL {
@@ -500,25 +546,20 @@ final class EngineTests: XCTestCase {
         XCTAssertTrue(Journal.exists(helper))
     }
 
-    func testExistingWatcherTakesPrecedenceOverBundledHelper() throws {
-        let installed = try existingWatcher()
-        _ = try bundledWatcher()
-        let label = WallpaperWatcher.label
+    func testExistingAppNeverSelectsAnotherRuntime() throws {
+        _ = try existingWatcher()
+        let helper = try bundledWatcher()
+        XCTAssertEqual(try WallpaperWatcher.source(paths: paths).executable, helper)
         _ = try engine.apply(Catalog.task("wallpaper-watcher"))
-        let plist = home.appendingPathComponent("Library/LaunchAgents/\(label).plist")
-        let dictionary = try PropertyListSerialization.propertyList(
-            from: Data(contentsOf: plist), format: nil) as! [String: Any]
-        XCTAssertEqual(dictionary["ProgramArguments"] as? [String], [installed.path])
-        XCTAssertFalse(runner.jobs.contains(WallpaperWatcher.replacementLabel))
+        XCTAssertEqual(runner.jobs, [WallpaperWatcher.replacementLabel])
     }
 
-    func testBundledWatcherKeepsExistingAppSessionRunning() throws {
+    func testMigrationWithoutLegacyPlistDoesNotStopUnrecoverableService() throws {
         _ = try bundledWatcher()
         runner.jobs.insert(WallpaperWatcher.label)
-        let record = try engine.apply(Catalog.task("wallpaper-watcher"))
-        XCTAssertTrue(runner.jobs.contains(WallpaperWatcher.label))
-        XCTAssertFalse(runner.jobs.contains(WallpaperWatcher.replacementLabel))
-        XCTAssertTrue(engine.journal.transactions.first { $0.id == record }!.changes.isEmpty)
+        XCTAssertThrowsError(try engine.apply(Catalog.task("wallpaper-watcher")))
+        XCTAssertEqual(runner.jobs, [WallpaperWatcher.label])
+        XCTAssertFalse(runner.calls.contains { $0.dropFirst().first == "bootout" })
     }
 
     func testBundledWatcherCanBeDisabledAndEnabled() throws {
@@ -531,27 +572,61 @@ final class EngineTests: XCTestCase {
         XCTAssertTrue(runner.jobs.contains(WallpaperWatcher.replacementLabel))
     }
 
-    func testMissingHelperFailsAndAnActiveWatcherIsNeverReplaced() throws {
-        // A corrupt or incomplete Mac Setup installation should still fail
-        // with an actionable message rather than a false success.
+    func testMissingHelperNeverStopsWorkingLegacyWatcher() throws {
+        let plist = try legacyWatcherPlist()
+        let before = try Data(contentsOf: plist)
+        runner.jobs.insert(WallpaperWatcher.label)
+        XCTAssertEqual(try engine.state(Catalog.task("wallpaper-watcher")), .blocked)
         XCTAssertThrowsError(try engine.apply(Catalog.task("wallpaper-watcher")))
-        _ = try existingWatcher()
-        runner.jobs.insert(WallpaperWatcher.replacementLabel)
-        let record = try engine.apply(Catalog.task("wallpaper-watcher"))
-        XCTAssertTrue(runner.jobs.contains(WallpaperWatcher.replacementLabel))
-        XCTAssertFalse(runner.jobs.contains(WallpaperWatcher.label))
-        XCTAssertTrue(engine.journal.transactions.first { $0.id == record }!.changes.isEmpty)
+        XCTAssertEqual(try Data(contentsOf: plist), before)
+        XCTAssertEqual(runner.jobs, [WallpaperWatcher.label])
+        XCTAssertFalse(runner.calls.contains { $0.dropFirst().first == "bootout" })
     }
 
-    func testWallpaperWatcherCanBeDisabledAndEnabled() throws {
-        _ = try existingWatcher()
-        _ = try engine.apply(Catalog.task("wallpaper-watcher"))
-        try WallpaperWatcher.setEnabled(false, engine: engine)
-        XCTAssertTrue(runner.disabledJobs.contains(WallpaperWatcher.label))
-        XCTAssertFalse(runner.jobs.contains(WallpaperWatcher.label))
+    func testFailedSharedStartupCanRestoreLegacyService() throws {
+        let legacy = try legacyWatcherPlist()
+        let original = try Data(contentsOf: legacy)
+        _ = try bundledWatcher()
+        runner.jobs.insert(WallpaperWatcher.label)
+        runner.failWatcherStart = true
+        XCTAssertThrowsError(try engine.apply(Catalog.task("wallpaper-watcher")))
+        XCTAssertTrue(runner.jobs.isEmpty)
+        let recovery = engine.journal.transactions.last!
+        XCTAssertFalse(recovery.complete)
+        try engine.journal.restore(recovery.id)
+        XCTAssertEqual(try Data(contentsOf: legacy), original)
+        XCTAssertEqual(runner.jobs, [WallpaperWatcher.label])
+    }
+
+    func testEnableMigratesAndRepeatedEnableRestartsSharedRuntime() throws {
+        _ = try legacyWatcherPlist()
+        _ = try bundledWatcher()
+        runner.jobs.insert(WallpaperWatcher.label)
         try WallpaperWatcher.setEnabled(true, engine: engine)
-        XCTAssertFalse(runner.disabledJobs.contains(WallpaperWatcher.label))
-        XCTAssertTrue(runner.jobs.contains(WallpaperWatcher.label))
+        XCTAssertEqual(runner.jobs, [WallpaperWatcher.replacementLabel])
+        runner.calls.removeAll()
+        try WallpaperWatcher.setEnabled(true, engine: engine)
+        XCTAssertEqual(runner.jobs, [WallpaperWatcher.replacementLabel])
+        XCTAssertEqual(runner.calls.filter { $0.dropFirst().first == "bootout" }.count, 1)
+        XCTAssertEqual(runner.calls.filter { $0.dropFirst().first == "bootstrap" }.count, 1)
+    }
+
+    func testDisableStopsBothServicesDuringPartialMigration() throws {
+        runner.jobs = [WallpaperWatcher.label, WallpaperWatcher.replacementLabel]
+        try WallpaperWatcher.setEnabled(false, engine: engine)
+        XCTAssertTrue(runner.jobs.isEmpty)
+        XCTAssertEqual(runner.disabledJobs, [WallpaperWatcher.label, WallpaperWatcher.replacementLabel])
+    }
+
+    func testStaleLegacyEntryIsRemovedEvenWithSharedWatcherRunning() throws {
+        let legacy = try legacyWatcherPlist()
+        _ = try bundledWatcher()
+        _ = try engine.apply(Catalog.task("wallpaper-watcher"))
+        try Data("stale".utf8).write(to: legacy)
+        XCTAssertEqual(try engine.state(Catalog.task("wallpaper-watcher")), .ready)
+        _ = try engine.apply(Catalog.task("wallpaper-watcher"))
+        XCTAssertFalse(Journal.exists(legacy))
+        XCTAssertEqual(runner.jobs, [WallpaperWatcher.replacementLabel])
     }
 
     func testWatcherPermissionGuideOpensSettingsWithoutRandomFinderWindow() throws {

@@ -213,10 +213,10 @@ public final class Journal {
         try runner.run("/bin/launchctl", ["print", "gui/\(getuid())/\(label)"]).status == 0
     }
 
-    public func suspendLaunchAgent(_ label: String, plist: URL, transaction: String) throws {
+    public func suspendLaunchAgent(_ label: String, plist: URL, transaction: String, reload: Bool = true) throws {
         let old = try launchAgentLoaded(label)
         try add(SavedChange(kind: .launchAgent, target: label, key: plist.path, backup: nil,
-            before: try plistData(old), after: try plistData(true), restored: false), to: transaction)
+            before: try plistData(old), after: try plistData(reload), restored: false), to: transaction)
         if old { try stopLaunchAgent(label) }
     }
 
