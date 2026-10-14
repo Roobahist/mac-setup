@@ -45,6 +45,7 @@ struct ControlCenterView: View {
     @LocalViewState private var activeFeature: String?
     @LocalViewState private var compactSidebar = false
     @LocalViewState private var guidedStep: Int?
+    @LocalViewState private var expandedFeatureCategories = Set<String>()
 
     init(model: SetupModel, initialDestination: ControlDestination = .home,
          startGuided: Bool = false, hasPreparedSelection: Bool = false) {
@@ -56,8 +57,9 @@ struct ControlCenterView: View {
         _guidedStep = LocalViewState(initialValue: startGuided ? 0 : nil)
     }
 
+    // Navigation order matches the guided walkthrough exactly after Overview.
     private let customization: [ControlDestination] = [
-        .home, .appearance, .dock, .menuBar, .finder, .workspaces, .shortcuts, .apps
+        .home, .apps, .shortcuts, .workspaces, .appearance, .dock, .menuBar, .finder
     ]
 
     var body: some View {
@@ -76,6 +78,10 @@ struct ControlCenterView: View {
                         total: GuidedTourStep.steps.count,
                         canGoBack: index > 0,
                         canAdvance: model.page != .running && model.page != .guide,
+                        hasUnappliedEdits: (GuidedTourStep.steps[index].destination == .workspaces
+                            && model.workspaceHasDraftChanges)
+                            || (GuidedTourStep.steps[index].destination == .shortcuts
+                                && model.shortcutsHaveDraftChanges),
                         onBack: { showGuidedStep(index - 1) },
                         onSkip: { showGuidedStep(index + 1) },
                         onNext: { showGuidedStep(index + 1) },
@@ -439,59 +445,136 @@ struct ControlCenterView: View {
                 SetupView(model: model, embedded: true, onReturn: resetFeature)
             } else {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
+                    VStack(alignment: .leading, spacing: 18) {
                         Text("Apps & Features").font(.system(size: 27, weight: .semibold))
-                        Text("Set up only what you need. Installed components are detected without rerunning setup.")
+                        Text("Choose a ready-made setup or select entire categories. You don't need to open each feature individually.")
                             .font(.callout).foregroundStyle(.secondary)
-                        if hasPreparedSelection {
-                            VStack(alignment: .leading, spacing: 12) {
-                                Label("Prepared setup selection", systemImage: "list.bullet.clipboard")
-                                    .font(.headline)
-                                Text("\(model.picker.selectedCount) tasks were selected by the command that opened Mac Setup. Review them here before applying anything.")
-                                    .font(.callout).foregroundStyle(.secondary)
-                                Button("Review selected setup") {
-                                    model.scope = .full
-                                    model.review()
-                                    if model.page == .review { activeFeature = "prepared-setup" }
-                                }
-                                .buttonStyle(.borderedProminent)
-                                .disabled(model.busy || model.picker.selectedCount == 0)
-                                if !model.message.isEmpty {
-                                    Text(model.message).font(.caption).foregroundStyle(.orange)
-                                }
-                            }
-                            .padding(18)
-                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+                        featureBatchControls
+                        TextField("Find a feature", text: $model.search)
+                            .textFieldStyle(.roundedBorder)
+                        ForEach(model.picker.categories.dropFirst(), id: \.self) { category in
+                            featureCategory(category)
                         }
-                        ForEach(Array(Set(Catalog.tasks.map(\.category))).sorted(), id: \.self) { category in
-                            VStack(alignment: .leading, spacing: 10) {
-                                Text(category).font(.headline)
-                                ForEach(Catalog.tasks.filter { $0.category == category }, id: \.id) { task in
-                                    HStack(alignment: .top, spacing: 12) {
-                                        Image(systemName: model.states[task.id] == TaskState.done.rawValue
-                                              ? "checkmark.circle" : "square.stack.3d.up")
-                                            .foregroundStyle(.secondary).frame(width: 24)
-                                        VStack(alignment: .leading, spacing: 4) {
-                                            Text(task.title).fontWeight(.medium)
-                                            Text(task.summary).font(.caption).foregroundStyle(.secondary)
-                                            Text(model.states[task.id] ?? "Checking...")
-                                                .font(.caption2).foregroundStyle(.secondary)
-                                        }
-                                        Spacer(minLength: 10)
-                                        Button("Configure") { openFeature(task) }
-                                            .disabled(model.busy)
-                                    }
-                                    .padding(14)
-                                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-                                }
-                            }
-                        }
-                        Text("App removal is not automatic. Mac Setup only offers reversible preference and profile changes where it can verify them.")
+                        Text("Nothing is installed by selecting a checkbox. Review the selected tasks and confirm before anything runs. Dependencies are included automatically.")
                             .font(.caption).foregroundStyle(.secondary)
-                    }.padding(28).frame(maxWidth: 900, alignment: .leading).frame(maxWidth: .infinity)
+                    }
+                    .padding(28)
+                    .frame(maxWidth: 900, alignment: .leading)
+                    .frame(maxWidth: .infinity)
                 }
             }
         }
+    }
+
+    private var featureBatchControls: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                Menu {
+                    ForEach(SetupPreset.allCases, id: \.self) { preset in
+                        Button(preset.title) { model.picker.choose(preset) }
+                    }
+                    Divider()
+                    Button("Select all (including optional)") { model.picker.selectAll() }
+                    Button("Clear selection") { model.picker.clearSelection() }
+                } label: {
+                    Label("Choose a setup", systemImage: "square.stack.3d.up")
+                }
+                .disabled(model.busy)
+                Spacer()
+                Text("\(model.picker.selectedCount) of \(Catalog.tasks.count) selected")
+                    .font(.callout.monospacedDigit()).foregroundStyle(.secondary)
+            }
+            if let preset = model.picker.preset {
+                Text("\(preset.title): \(preset.summary)")
+                    .font(.callout).foregroundStyle(.secondary)
+            } else {
+                Text("Custom selection. Required dependencies are added automatically.")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+            HStack(spacing: 12) {
+                Button("Review & apply selected features") { reviewSelectedFeatures() }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(model.busy || model.picker.selectedCount == 0)
+                Text("Review first. No automatic installation.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            if !model.message.isEmpty {
+                Text(model.message).font(.caption).foregroundStyle(.orange)
+            }
+        }
+        .padding(18)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+    }
+
+    private func featureCategory(_ category: String) -> some View {
+        let tasks = Catalog.tasks.filter { $0.category == category }
+        let selectedCount = tasks.filter { model.picker.selected.contains($0.id) }.count
+        let expanded = expandedFeatureCategories.contains(category)
+            || !model.search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 12) {
+                Button {
+                    if expandedFeatureCategories.contains(category) {
+                        expandedFeatureCategories.remove(category)
+                    } else {
+                        expandedFeatureCategories.insert(category)
+                    }
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                            .frame(width: 16)
+                        Text(category).font(.headline)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                Text("\(selectedCount)/\(tasks.count)")
+                    .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                Button(selectedCount == tasks.count ? "Clear group" : "Select group") {
+                    model.picker.selectCategory(category, enabled: selectedCount != tasks.count)
+                }
+                .disabled(model.busy)
+                .buttonStyle(.borderless)
+            }
+            .padding(15)
+            if expanded {
+                Divider()
+                ForEach(tasks.filter {
+                    model.search.isEmpty || [$0.title, $0.summary, $0.id]
+                        .contains { $0.localizedCaseInsensitiveContains(model.search) }
+                }, id: \.id) { task in
+                    HStack(alignment: .top, spacing: 12) {
+                        Toggle(isOn: Binding(
+                            get: { model.picker.selected.contains(task.id) },
+                            set: { _ in model.picker.toggle(task.id) })) {
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text(task.title).fontWeight(.medium)
+                                Text(task.summary)
+                                    .font(.callout).foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Text(model.states[task.id] ?? "Checking...")
+                                    .font(.caption2).foregroundStyle(.secondary)
+                            }
+                        }
+                        .toggleStyle(.checkbox)
+                        .disabled(model.busy)
+                        Spacer(minLength: 8)
+                        Text(task.guided ? "Approval" : "Automatic")
+                            .font(.caption2).foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, 16).padding(.vertical, 9)
+                }
+            }
+        }
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 13))
+    }
+
+    private func reviewSelectedFeatures() {
+        guard model.picker.selectedCount > 0 else { return }
+        model.scope = .full
+        model.review()
+        if model.page == .review { activeFeature = "batch-selection" }
     }
 
     private func openFeature(_ task: SetupTask) {
