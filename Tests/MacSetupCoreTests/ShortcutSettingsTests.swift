@@ -10,6 +10,20 @@ final class ShortcutSettingsTests: XCTestCase {
         .defaults(aerospaceTemplate: try aerospaceTemplate())
     }
 
+    func testWorkspaceValidationIgnoresInvalidKarabinerAction() throws {
+        let config = WorkspaceConfiguration.defaultLayout
+        let template = try String(contentsOf:
+            Paths().profile.appendingPathComponent("aerospace/aerospace.toml"),
+            encoding: .utf8)
+        var settings = try ShortcutSettings.load(from: Paths(), aerospaceTemplate: template)
+        settings.entries.append(ManagedShortcut(id: "bad-app", provider: .karabiner,
+            action: "open:", shortcut: WorkspaceShortcut(key: "f19", modifiers: ["ctrl"]),
+            enabled: false))
+        // This unrelated editor error is reported only in Keyboard Shortcuts.
+        XCTAssertThrowsError(try settings.validate(workspaces: config, aerospaceTemplate: template))
+        XCTAssertNoThrow(try settings.validateWorkspaceBindings(config, aerospaceTemplate: template))
+    }
+
     func testAllProvidersArePopulatedAndDefaultsDoNotConflict() throws {
         let settings = try settings()
         XCTAssertTrue(settings.entries.contains { $0.provider == .aerospace && $0.action == "'fullscreen'" })

@@ -53,6 +53,20 @@ final class WorkspaceConfigurationTests: XCTestCase {
         XCTAssertTrue(merged.workspaces.contains { $0.id == "timer" })
     }
 
+    func testReorderingKeepsWorkspaceHotkeys() {
+        var layout = WorkspaceConfiguration.defaultLayout
+        let oldKeys = Dictionary(uniqueKeysWithValues: layout.workspaces.enumerated().map {
+            ($0.element.id, layout.shortcuts(at: $0.offset).switchTo?.key ?? "")
+        })
+        let first = layout.workspaces[0].id
+        layout.insertWorkspace(first, at: 3)
+        XCTAssertEqual(layout.workspaces[2].id, first)
+        for (index, workspace) in layout.workspaces.enumerated() {
+            XCTAssertEqual(layout.shortcuts(at: index).switchTo?.key ?? "",
+                           oldKeys[workspace.id], workspace.name)
+        }
+    }
+
     func testReorderingChangesGeneratedWorkspaceOrderBeforeSaving() throws {
         let original = WorkspaceConfiguration.defaultLayout
         var draft = original

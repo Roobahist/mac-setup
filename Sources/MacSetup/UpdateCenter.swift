@@ -11,7 +11,7 @@ struct UpdateCenter: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                Text("Updates").font(.system(size: 27, weight: .semibold))
+                Text("Updates").font(SetupDesign.pageTitle)
                 Text("Get new controls and improvements from verified GitHub releases.")
                     .foregroundStyle(.secondary)
                 VStack(alignment: .leading, spacing: 14) {
@@ -40,7 +40,7 @@ struct UpdateCenter: View {
                 Text("Updates are installed into versioned directories. Restart Mac Setup to use newly installed features. Previous installation versions remain available for recovery.")
                     .font(.callout).foregroundStyle(.secondary)
             }
-            .padding(28).frame(maxWidth: 850, alignment: .leading)
+            .padding(SetupDesign.pagePadding).frame(maxWidth: SetupDesign.pageWidth, alignment: .leading)
                 .frame(maxWidth: .infinity)
         }
         .onAppear(perform: check)

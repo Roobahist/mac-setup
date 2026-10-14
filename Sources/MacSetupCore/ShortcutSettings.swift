@@ -190,6 +190,29 @@ public struct ShortcutSettings: Codable, Equatable {
         }
     }
 
+    /// Workspace editing must not be blocked by unrelated malformed Karabiner
+    /// actions or advanced rules. Check the layout and actual enabled key chords
+    /// only. The full shortcut validation still runs when shortcuts are applied.
+    public func validateWorkspaceBindings(_ workspaces: WorkspaceConfiguration,
+                                          aerospaceTemplate: String) throws {
+        try workspaces.validate(aerospaceTemplate: aerospaceTemplateApplying(to: aerospaceTemplate))
+        var active: [String: String] = [:]
+        for entry in entries where entry.enabled {
+            // A malformed app action is not a workspace-editing error, but its
+            // valid hotkey still conflicts with the workspace's hotkeys.
+            guard (try? entry.shortcut.validate()) != nil else { continue }
+            active[entry.shortcut.binding] = Self.actionTitle(entry.action, provider: entry.provider)
+        }
+        for (index, workspace) in workspaces.workspaces.enumerated() {
+            let pair = workspaces.shortcuts(at: index)
+            for chord in [pair.switchTo, pair.moveWindow].compactMap({ $0 }) {
+                if let owner = active[chord.binding] {
+                    throw SetupError("\(chord.display) conflicts with \(owner) and workspace \(workspace.name).")
+                }
+            }
+        }
+    }
+
     public func validate(workspaces: WorkspaceConfiguration, aerospaceTemplate: String) throws {
         let availableActions = Set(Self.bundledAeroSpaceBindings(aerospaceTemplate).map { $0.1 })
         let uniqueIDs = Set(entries.map(\.id))

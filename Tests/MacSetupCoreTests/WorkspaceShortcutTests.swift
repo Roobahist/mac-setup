@@ -31,11 +31,22 @@ final class WorkspaceShortcutTests: XCTestCase {
     func testInsertionMovesCardWithoutReplacingIt() throws {
         var config = WorkspaceConfiguration.defaultLayout
         let original = config.workspaces
+        let originalKeys = config.workspaces.indices.map {
+            config.shortcuts(at: $0).switchTo?.key ?? ""
+        }
         config.insertWorkspace("chatgpt", at: 3)
         XCTAssertEqual(config.workspaces.count, original.count)
-        XCTAssertEqual(config.workspaces[2], original[0])
+        XCTAssertEqual(config.workspaces[2].id, original[0].id)
+        XCTAssertEqual(config.workspaces[2].name, original[0].name)
+        XCTAssertEqual(config.shortcuts(at: 2).switchTo?.key, originalKeys[0])
         config.insertWorkspace("chatgpt", at: 0)
-        XCTAssertEqual(config.workspaces, original)
+        XCTAssertEqual(config.workspaces.map(\.id), original.map(\.id))
+        for (i, item) in config.workspaces.enumerated() {
+            XCTAssertEqual(item.name, original[i].name)
+            XCTAssertEqual(item.glyph, original[i].glyph)
+            XCTAssertEqual(item.apps, original[i].apps)
+            XCTAssertEqual(config.shortcuts(at: i).switchTo?.key ?? "", originalKeys[i])
+        }
     }
 
     func testLegacyShortcutJSONUsesSharedModifiers() throws {

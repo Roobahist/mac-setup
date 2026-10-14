@@ -96,7 +96,7 @@ struct GuidedTourBanner: View {
             }
         }
         .padding(18)
-        .frame(maxWidth: 920, alignment: .leading)
+        .frame(maxWidth: SetupDesign.pageWidth, alignment: .leading)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
         .overlay(RoundedRectangle(cornerRadius: 14)
             .stroke(Color(nsColor: .separatorColor).opacity(0.4), lineWidth: 1))
