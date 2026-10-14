@@ -656,23 +656,34 @@ public final class Engine {
         }
     }
     private func installWallpaperWatcher(transaction: String, image: URL?) throws {
-        guard WallpaperWatcher.executable(paths: paths) != nil else {
-            throw SetupError("Install your existing WallpaperAccentWatcher.app in ~/Applications or /Applications first. mac-setup does not install a replacement watcher.")
+        // A running watcher wins. Never install a second service alongside it,
+        // even if the other runtime becomes available after initial setup.
+        if try WallpaperWatcher.runningLabel(journal: journal) != nil { return }
+        let chosen = try WallpaperWatcher.source(paths: paths)
+        let other = chosen.label == WallpaperWatcher.label
+            ? WallpaperWatcher.replacementLabel : WallpaperWatcher.label
+        guard try !journal.launchAgentLoaded(other) else {
+            throw SetupError("Another wallpaper watcher is already active. Stop it before registering a second watcher.")
         }
-        guard !(try journal.launchAgentLoaded(WallpaperWatcher.replacementLabel)) else {
-            throw SetupError("Stop the mac-setup replacement watcher before using WallpaperAccentWatcher.")
-        }
-        if try journal.launchAgentLoaded(WallpaperWatcher.label) { return }
+
         let extractor = paths.config.appendingPathComponent("unsplash/get_wallpaper_accent.py")
         if !Journal.exists(extractor) {
-            try journal.write(extractor, data: Data(contentsOf: paths.profile.appendingPathComponent("unsplash/get_wallpaper_accent.py")), transaction: transaction)
+            try journal.write(extractor,
+                              data: Data(contentsOf: paths.profile.appendingPathComponent("unsplash/get_wallpaper_accent.py")),
+                              transaction: transaction)
         }
-        let plist = paths.home.appendingPathComponent("Library/LaunchAgents/" + WallpaperWatcher.label + ".plist")
-        try journal.suspendLaunchAgent(WallpaperWatcher.label, plist: plist, transaction: transaction)
-        if !Journal.exists(plist) || image != nil {
-            try journal.write(plist, data: WallpaperWatcher.launchPlist(paths: paths, image: image), transaction: transaction)
+        let plist = paths.home.appendingPathComponent("Library/LaunchAgents/\(chosen.label).plist")
+        let proposed = try WallpaperWatcher.launchPlist(source: chosen, paths: paths, image: image)
+        try journal.suspendLaunchAgent(chosen.label, plist: plist, transaction: transaction)
+
+        // A stale service might still refer to a deleted app. Preserve its
+        // original plist in the recovery journal before making a repair.
+        if !Journal.exists(plist) || (try Data(contentsOf: plist)) != proposed {
+            try journal.write(plist, data: proposed, transaction: transaction)
         }
         try WallpaperWatcher.setEnabled(true, engine: self)
-        guard try journal.launchAgentLoaded(WallpaperWatcher.label) else { throw SetupError("WallpaperAccentWatcher registration could not be verified.") }
+        guard try journal.launchAgentLoaded(chosen.label) else {
+            throw SetupError("Wallpaper watcher registration could not be verified. Inspect mac-setup watcher-status.")
+        }
     }
 }
