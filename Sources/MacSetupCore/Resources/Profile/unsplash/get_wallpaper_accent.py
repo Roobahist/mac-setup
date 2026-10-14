@@ -19,6 +19,25 @@ from pathlib import Path
 
 
 MAGICK = shutil.which("magick") or "magick"
+MAGICK_STAGE_TIMEOUT = 25
+PREPARE_TIMEOUT = 35
+
+
+def prepare_image(image_data: bytes) -> bytes:
+    """Decode the source once to avoid repeatedly processing a huge wallpaper."""
+    result = subprocess.run(
+        [MAGICK, "-", "-auto-orient", "-resize", "1600x1600>", "png:-"],
+        input=image_data,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=True,
+        timeout=PREPARE_TIMEOUT,
+    )
+    if not result.stdout:
+        raise ValueError("ImageMagick produced an empty normalized wallpaper")
+    return result.stdout
+
+
 @dataclass(frozen=True)
 class Swatch:
     fraction: float
@@ -33,11 +52,14 @@ class Swatch:
 
 def run_magick(image_data: bytes, *arguments: str) -> str:
     command = [MAGICK, "-", "-auto-orient", *arguments]
-    return subprocess.check_output(
+    return subprocess.run(
         command,
         input=image_data,
+        stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-    ).decode("utf-8", errors="strict").strip()
+        check=True,
+        timeout=MAGICK_STAGE_TIMEOUT,
+    ).stdout.decode("utf-8", errors="strict").strip()
 
 
 def relative_luminance(red: float, green: float, blue: float) -> float:
@@ -616,8 +638,11 @@ def main() -> int:
         image_data = sys.stdin.buffer.read() if sys.argv[1] == "-" else Path(sys.argv[1]).read_bytes()
         if not image_data:
             raise ValueError("image input is empty")
-        print(accent(image_data))
+        print(accent(prepare_image(image_data)))
         return 0
+    except subprocess.TimeoutExpired as error:
+        print(f"accent extraction timed out in ImageMagick ({error.timeout}s); try a smaller wallpaper image", file=sys.stderr)
+        return 1
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
         print(f"accent extraction failed: {error}", file=sys.stderr)
         return 1

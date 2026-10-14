@@ -624,7 +624,13 @@ public final class Engine {
         let bytes: Data
         do { bytes = try Data(contentsOf: wallpaper) }
         catch { throw SetupError("Cannot read the wallpaper. Use --image with a local copy you can access. No privacy permissions are changed automatically.") }
-        let result = try runner.checked(python, [paths.profile.appendingPathComponent("unsplash/get_wallpaper_accent.py").path, "-"], input: bytes)
+        let extractor = paths.profile.appendingPathComponent("unsplash/get_wallpaper_accent.py").path
+        // Huge compressed wallpapers need a larger, but still bounded, budget.
+        // Ordinary setup commands retain their existing timeout.
+        let result = try runner.runTimed(python, [extractor, "-"], timeout: 120, input: bytes)
+        guard result.status == 0 else {
+            throw SetupError("Wallpaper accent extraction failed (exit \(result.status)): \(result.text). Check ImageMagick and the wallpaper file, then retry.")
+        }
         let color = result.text
         guard color.range(of: "^#[0-9A-Fa-f]{6}$", options: .regularExpression) != nil else { throw SetupError("Accent extractor returned an invalid color.") }
         let envCache = ProcessInfo.processInfo.environment["XDG_CACHE_HOME"]
