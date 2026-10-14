@@ -218,6 +218,21 @@ public struct ShortcutSettings: Codable, Equatable {
             }
         }
 
+        let overrides = advancedKarabiner ?? []
+        guard Set(overrides.map(\.id)).count == overrides.count else {
+            throw SetupError("Advanced Karabiner rule names must be unique.")
+        }
+        for rule in overrides {
+            guard let data = rule.json.data(using: .utf8),
+                  let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  parsed["description"] as? String == rule.id,
+                  let manipulators = parsed["manipulators"] as? [[String: Any]],
+                  !manipulators.isEmpty,
+                  manipulators.allSatisfy({ $0["from"] is [String: Any] && $0["to"] != nil }) else {
+                throw SetupError("Invalid advanced Karabiner rule '\(rule.id)'.")
+            }
+        }
+
         // The dynamically generated AeroSpace bindings must also be checked
         // against workspace destinations before a profile can be applied.
         try workspaces.validate(aerospaceTemplate: aerospaceTemplateApplying(to: aerospaceTemplate))
@@ -264,6 +279,19 @@ public struct ShortcutSettings: Codable, Equatable {
         let scriptNames = Set(Self.scripts.map { $0.name })
         rules.removeAll { scriptNames.contains($0["description"] as? String ?? "") ||
             ($0["description"] as? String) == "Mac Setup: Custom shortcuts" }
+        let overridesByName = Dictionary(uniqueKeysWithValues: (advancedKarabiner ?? []).map { ($0.id, $0) })
+        rules = try rules.compactMap { original -> [String: Any]? in
+            guard let name = original["description"] as? String,
+                  let override = overridesByName[name] else { return original }
+            guard override.enabled else { return nil }
+            guard let data = override.json.data(using: .utf8),
+                  let replacement = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  replacement["description"] as? String == name,
+                  replacement["manipulators"] is [[String: Any]] else {
+                throw SetupError("Invalid advanced Karabiner rule: \(name)")
+            }
+            return replacement
+        }
         let manipulators: [[String: Any]] = try entries.filter {
             $0.provider == .karabiner && $0.enabled
         }.map { entry in
