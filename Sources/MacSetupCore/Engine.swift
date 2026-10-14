@@ -128,15 +128,19 @@ public final class Engine {
             for name in directories {
                 lines.append("Merge bundled files into \(paths.config.appendingPathComponent(name).path). Existing unrelated files are preserved.")
             }
-            lines.append("Portable application profiles can be linked from dot-files. AeroSpace and SketchyBar are rendered as local, backed-up copies so personal workspace selections never change your Git checkout.")
+            lines.append("Portable application profiles can be linked from dot-files. AeroSpace, SketchyBar and Karabiner are rendered as local, backed-up copies so personal shortcuts never alter your Git checkout.")
             lines.append("Existing directories are backed up. Unrelated symlinks are never overwritten.")
         case let .preferences(preferences, restart):
-            lines += preferences.map { "\($0.domain) / \($0.key) → \($0.value)" }
+            if task.id == "raycast-profile" {
+                lines.append("com.raycast.macos / raycastGlobalHotkey: \(try shortcutSettings().raycastHotkey)")
+            } else {
+                lines += preferences.map { "\($0.domain) / \($0.key) → \($0.value)" }
+            }
             if let restart { lines.append("Restart \(restart) after saving preferences. Finish active Finder file operations first.") }
             lines.append("Verification checks stored preferences; confirm the visible result on this macOS version.")
         case .vorssaint:
             lines.append("Merge \(try vorssaintPreferences().count) portable settings into com.vorssaint.utils. Quit Vorssaint first; launch it afterwards.")
-            lines.append("No shelf items, snippets, bookmarks, command usage, device IDs or account data are included. Unpersisted defaults require the app's native export.")
+            lines.append("The bundled native Vorssaint export is included. Personal snippets, private bookmarks, and device-specific preferences are omitted.")
         case .gitIgnore:
             lines.append("Append missing macOS rules to the currently configured ignore file, or ~/.gitignore_global if none is configured.")
         case .atuinShell: lines.append("Append the managed zsh block to \(shellRC().path). An existing Atuin initialization is preserved.")
