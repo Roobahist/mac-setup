@@ -135,12 +135,12 @@ def verify_glyph_columns(data: bytes) -> None:
         id_col = header.index("ID", glyph_col + len("GLYPH"))
         apps_col = header.index("APPS", id_col + len("ID"))
         for shortcut, glyph, workspace_id, count in (
-            ("Alt+" + chr(96), "robot", "chatgpt", "2"),
-            ("Alt+1", "1", "1", "0"),
-            ("Alt+9", "music", "music", "1"),
-            ("Alt+0", "chat", "messages", "3"),
-            ("Alt+-", "notes", "notes", "1"),
-            ("Alt+=", "clock", "timer", "1"),
+            ("Alt+" + chr(96), "U+100D3D", "chatgpt", "2"),
+            ("Alt+1", "U+0031", "1", "0"),
+            ("Alt+9", "U+10046C", "music", "1"),
+            ("Alt+0", "U+100332", "messages", "3"),
+            ("Alt+-", "U+10022B", "notes", "1"),
+            ("Alt+=", "U+10042F", "timer", "1"),
         ):
             line = next((line for line in rows if shortcut in line and line.index(shortcut) < glyph_col), None)
             assert line is not None, f"Missing workspace {shortcut} with fallback width {fallback_width}"
@@ -210,13 +210,23 @@ try:
     assert "􀴽".encode() in workspace_screen, "Expected actual reference SF Pro icon preview"
     assert b"Pomodoro" in workspace_screen, "Tomito workspace must be in default layout"
     assert b"APP RULES" in workspace_screen
-    assert b"robot" in workspace_screen, "Glyph name must be readable without Nerd Font"
+    assert b"U+100D3D" in workspace_screen, "Glyph code point must be readable without the selected font"
     verify_glyph_columns(workspace_screen)
     assert b"\x1b[1;38;5;231;48;5;24m" in workspace_screen, "Selection has no highlight"
     os.write(master, b"g")
-    read_until(lambda b: b"Type to filter glyph" in active_screen(b))
-    os.write(master, b"clock")
-    read_until(lambda b: b"Search: clock" in active_screen(b))
+    read_until(lambda b: b"Tab changes the font" in active_screen(b))
+    os.write(master, b"\t")
+    read_until(lambda b: b"INSTALLED FONTS" in active_screen(b))
+    os.write(master, b"helvetica")
+    read_until(lambda b: b"Search: helvetica" in active_screen(b))
+    os.write(master, b"\r")
+    read_until(lambda b: b"Font: Helvetica" in active_screen(b))
+    os.write(master, "Ω".encode())
+    read_until(lambda b: "Search: Ω".encode() in active_screen(b))
+    os.write(master, b"\x1b")
+    read_until(lambda b: "Search: Ω".encode() not in active_screen(b))
+    os.write(master, b"u+0041")
+    read_until(lambda b: b"Search: u+0041" in active_screen(b) and b"U+0041" in active_screen(b))
     os.write(master, b"\r")
     read_until(lambda b: b"G Glyph" in active_screen(b)
                and b"UNSAVED CHANGES" in active_screen(b))

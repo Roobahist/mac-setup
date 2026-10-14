@@ -25,6 +25,9 @@ struct WorkspacePickerUI {
     private var query = ""
     private var editing = ""
     private var message = ""
+    private var glyphFont: GlyphFont
+    private var glyphs: [FontGlyph] = []
+    private var fonts: [GlyphFont] = []
 
     init(layout: WorkspaceConfiguration, installed: [InstalledApplication],
          context: Context = .standalone,
@@ -34,6 +37,7 @@ struct WorkspacePickerUI {
         self.installed = installed
         self.context = context
         self.maximumWorkspaces = maximumWorkspaces
+        glyphFont = layout.workspaces[0].resolvedIcon.font
     }
 
     mutating func run(in terminal: RawTerminal) -> Outcome {
@@ -94,6 +98,10 @@ struct WorkspacePickerUI {
                         editing = layout.workspaces[selected].name
                         page = .editName
                     case "g":
+                        fonts = FontGlyphCatalog.fonts()
+                        glyphFont = layout.workspaces[selected].resolvedIcon.font
+                        do { glyphs = try FontGlyphCatalog.glyphs(in: glyphFont) }
+                        catch { glyphs = []; message = String(describing: error) + " Press Tab to choose a font." }
                         page = .glyphs; query = ""; resultCursor = 0
                     case "p":
                         page = .apps; query = ""; resultCursor = 0
@@ -135,15 +143,17 @@ struct WorkspacePickerUI {
                 default: break
                 }
             case .glyphs:
-                let matches = WorkspaceGlyph.matching(query)
+                let matches = FontGlyphCatalog.matching(glyphs, query: query)
                 switch key {
                 case .up: resultCursor = max(0, resultCursor - 1)
                 case .down: resultCursor = min(max(0, matches.count - 1), resultCursor + 1)
                 case .enter:
                     if !matches.isEmpty {
-                        layout.workspaces[selected].glyph = matches[resultCursor].name
+                        layout.workspaces[selected].icon = matches[resultCursor].selection
                         page = .workspaces
                     }
+                case .tab:
+                    page = .fonts; query = ""; resultCursor = 0
                 case .backspace:
                     if !query.isEmpty { query.removeLast(); resultCursor = 0 }
                 case .space: query.append(" "); resultCursor = 0
@@ -153,6 +163,29 @@ struct WorkspacePickerUI {
                 case .character(let c):
                     if c == "/" && query.isEmpty { break }
                     query.append(c); resultCursor = 0
+                default: break
+                }
+            case .fonts:
+                let words = query.split(whereSeparator: \.isWhitespace)
+                let matches = fonts.filter { font in words.allSatisfy { font.title.localizedCaseInsensitiveContains($0) || font.id.localizedCaseInsensitiveContains($0) } }
+                switch key {
+                case .up: resultCursor = max(0, resultCursor - 1)
+                case .down: resultCursor = min(max(0, matches.count - 1), resultCursor + 1)
+                case .enter:
+                    if let font = matches.indices.contains(resultCursor) ? matches[resultCursor] : nil {
+                        do {
+                            glyphs = try FontGlyphCatalog.glyphs(in: font); glyphFont = font
+                            page = .glyphs; query = ""; resultCursor = 0
+                        } catch { message = String(describing: error) }
+                    }
+                case .tab: page = .glyphs; query = ""; resultCursor = 0
+                case .backspace:
+                    if !query.isEmpty { query.removeLast(); resultCursor = 0 }
+                case .space: query.append(" "); resultCursor = 0
+                case .escape:
+                    if query.isEmpty { page = .glyphs }
+                    else { query = ""; resultCursor = 0 }
+                case .character(let c): query.append(c); resultCursor = 0
                 default: break
                 }
             case .apps:
@@ -239,6 +272,9 @@ struct WorkspacePickerUI {
         WorkspacePickerView(
             layout: layout,
             installed: installed,
+            glyphFont: glyphFont,
+            glyphs: glyphs,
+            fonts: fonts,
             page: page,
             selected: selected,
             resultCursor: resultCursor,

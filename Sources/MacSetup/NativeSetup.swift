@@ -261,6 +261,9 @@ private final class SetupModel: ObservableObject {
 private struct SetupView: View {
     @ObservedObject var model: SetupModel
     @LocalViewState private var shortcutWorkspaceID: String?
+    @LocalViewState private var glyphWorkspaceID: String?
+    @LocalViewState private var draggingWorkspaceID: String?
+    @LocalViewState private var dropTargetWorkspaceID: String?
 
     private var previewTime: String {
         let formatter = DateFormatter()
@@ -275,11 +278,16 @@ private struct SetupView: View {
         }
     }
 
+    private var visibleWorkspaceIDs: [String] {
+        visibleWorkspaceIndices.map { model.layout.workspaces[$0].id }
+    }
+
     private func moveWorkspace(_ i: Int, by direction: Int) {
         guard let position = visibleWorkspaceIndices.firstIndex(of: i) else { return }
         let destination = position + direction
         guard visibleWorkspaceIndices.indices.contains(destination) else { return }
-        model.layout.workspaces.swapAt(i, visibleWorkspaceIndices[destination])
+        model.layout.moveWorkspace(model.layout.workspaces[i].id,
+            to: model.layout.workspaces[visibleWorkspaceIndices[destination]].id, selectedTasks: model.picker.selected)
     }
 
     private var step: Int {
@@ -329,6 +337,11 @@ private struct SetupView: View {
         .font(.system(size: 15))
         .frame(minWidth: 820, minHeight: 660)
         .sheet(isPresented: $model.appSheet) { appAssignments }
+        .sheet(isPresented: Binding(get: { glyphWorkspaceID != nil }, set: { if !$0 { glyphWorkspaceID = nil } })) {
+            if let i = model.layout.workspaces.firstIndex(where: { $0.id == glyphWorkspaceID }) {
+                GlyphPicker(workspace: model.layout.workspaces[i]) { model.layout.workspaces[i].icon = $0 }
+            }
+        }
         .sheet(isPresented: Binding(get: { shortcutWorkspaceID != nil }, set: { if !$0 { shortcutWorkspaceID = nil } })) {
             if let i = model.layout.workspaces.firstIndex(where: { $0.id == shortcutWorkspaceID }),
                let position = visibleWorkspaceIndices.firstIndex(of: i) {
@@ -378,26 +391,42 @@ private struct SetupView: View {
     private var workspaces: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Your workspace bar").font(.title2.bold())
-            Text("The default is Option plus a number-row key to switch, and Option+Shift to move a window. Use Shortcuts to choose other keys and modifiers. Add as many workspaces as you need.")
+            Text("Drag a workspace by its handle to reorder it. Use Glyph to browse fonts and search their characters. The default shortcuts use Option plus the number row; choose Shortcuts to change them.")
             ScrollView(.horizontal) {
             HStack(spacing: 0) {
                 ForEach(model.layout.forSelectedTasks(model.picker.selected).workspaces, id: \.id) { workspace in
-                    Text(WorkspaceConfiguration.symbol(for: workspace.glyph) ?? workspace.name)
-                        .font(.custom(WorkspaceConfiguration.fontFamily(for: workspace.glyph), size: 14.5))
-                        .fontWeight(WorkspaceConfiguration.referenceGlyphs.contains(workspace.glyph) ? .regular : .bold)
+                    Text(workspace.resolvedIcon.symbol)
+                        .font(.custom(workspace.resolvedIcon.font.postScriptName, size: 14.5))
                         .frame(width: 21).help(workspace.name)
                 }
                 Spacer(); Text(previewTime).font(.custom("Hack Nerd Font Mono", size: 14).weight(.bold)).frame(width: 400, alignment: .trailing)
             }.padding(.horizontal, 20).frame(height: CGFloat(DisplayGeometry.current().previewHeight))
              .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
             }
-            ForEach(visibleWorkspaceIndices, id: \.self) { i in
+            ForEach(visibleWorkspaceIDs, id: \.self) { id in
+                if let i = model.layout.workspaces.firstIndex(where: { $0.id == id }) {
                 VStack(alignment: .leading, spacing: 8) {
                 HStack {
+                    Image(systemName: "line.3.horizontal").frame(width: 20, height: 28)
+                        .foregroundStyle(.secondary).help("Drag to reorder \(model.layout.workspaces[i].name)")
+                        .accessibilityLabel("Drag to reorder \(model.layout.workspaces[i].name)")
+                        .onDrag {
+                            draggingWorkspaceID = id
+                            dropTargetWorkspaceID = nil
+                            let provider = NSItemProvider()
+                            provider.registerDataRepresentation(forTypeIdentifier: workspaceDragType.identifier, visibility: .ownProcess) { completion in
+                                completion(Data(id.utf8), nil); return nil
+                            }
+                            return provider
+                        }
                     TextField("Name", text: $model.layout.workspaces[i].name).frame(width: 130).accessibilityLabel("Workspace name")
-                    Picker("Icon", selection: $model.layout.workspaces[i].glyph) {
-                        ForEach(WorkspaceGlyph.all, id: \.name) { glyph in Text(glyph.name.capitalized).tag(glyph.name) }
-                    }.frame(width: 150)
+                    Button { glyphWorkspaceID = id } label: {
+                        HStack {
+                            Text(model.layout.workspaces[i].resolvedIcon.symbol)
+                                .font(.custom(model.layout.workspaces[i].resolvedIcon.font.postScriptName, size: 18))
+                            Text("Glyph…")
+                        }
+                    }.accessibilityLabel("Glyph for \(model.layout.workspaces[i].name)")
                     Button("Apps (\(model.layout.workspaces[i].apps.count))") { model.selectedWorkspace = i; model.appSheet = true }
                     Button("Shortcuts…") { shortcutWorkspaceID = model.layout.workspaces[i].id }.accessibilityLabel("Shortcuts for \(model.layout.workspaces[i].name)")
                     Spacer()
@@ -408,7 +437,15 @@ private struct SetupView: View {
                 let pair = model.layout.workspaces[i].shortcuts ?? .defaultRow(at: visibleWorkspaceIndices.firstIndex(of: i)!)
                 Text("Switch: \(pair.switchTo?.display ?? "None")    Move window: \(pair.moveWindow?.display ?? "None")")
                     .font(.system(size: 13, design: .monospaced)).foregroundStyle(.secondary)
+                let icon = model.layout.workspaces[i].resolvedIcon
+                Text("\(FontGlyphCatalog.metadata(icon)?.name ?? icon.codePoint) · \(icon.font.title)")
+                    .font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1)
                 }.padding(12).background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(dropTargetWorkspaceID == id ? Color.accentColor : .clear))
+                 .onDrop(of: [workspaceDragType], delegate: WorkspaceDropDelegate(targetID: id,
+                    selectedTasks: model.picker.selected, layout: $model.layout, draggingID: $draggingWorkspaceID,
+                    dropTargetID: $dropTargetWorkspaceID))
+                }
             }
             Button("Add workspace") {
                 var number = 1

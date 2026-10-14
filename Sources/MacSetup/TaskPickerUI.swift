@@ -77,6 +77,22 @@ final class RawTerminal {
                let scalar = UnicodeScalar(Int(byte)) {
                 return .character(Character(scalar))
             }
+            let count: Int
+            switch byte {
+            case 0xC2...0xDF: count = 2
+            case 0xE0...0xEF: count = 3
+            case 0xF0...0xF4: count = 4
+            default: return .idle
+            }
+            var bytes = [byte]
+            for _ in 1..<count {
+                guard let next = readByte(120) else { return .idle }
+                guard next & 0xC0 == 0x80 else { pendingByte = next; return .idle }
+                bytes.append(next)
+            }
+            if let text = String(bytes: bytes, encoding: .utf8), let character = text.first {
+                return .character(character)
+            }
             return .idle
         }
     }

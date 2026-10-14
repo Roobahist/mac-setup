@@ -70,7 +70,7 @@ After opening **Mac Setup.app**, its window has four steps:
 1. **Choose features.** Repair is selected by default and targets the reported Dock,
    menu-bar, workspace, launcher and keyboard problems. Expand a section to change
    individual tasks, or select another preset. Installed applications are kept.
-2. **Workspaces.** Preview the bar, change names and icons, reorder workspaces,
+2. **Workspaces.** Preview the bar, change names and glyphs, drag handles to reorder workspaces,
    and assign installed apps. Use **Shortcuts…** beside any workspace to change its
    switch and move-window combinations. The number row remains the default.
 3. **Review.** Read the selected changes before pressing Start setup once.
@@ -110,10 +110,30 @@ applies automatic tasks only and leaves guided tasks pending. Read-only `plan` a
 ## Customize workspaces
 
 Workspace configuration is Step 2 whenever AeroSpace configuration is selected.
-Use the native controls to rename, reorder, delete or add workspaces; the Apps
+Use the native controls to rename, drag to reorder, delete or add workspaces; the Apps
 button shows installed applications with a searchable checklist. An app can be
 assigned to only one workspace. Assignments route new windows; they do not install
 or launch the application.
+
+Click **Glyph…** beside a workspace to open the searchable font browser. Choose
+any installed font face, then search its embedded glyph names, Unicode character
+names, `U+`/hex codes, or paste a character. The grid previews each result in that
+font. **Icons and symbols only** is an optional filter; turn it off to see all usable
+Unicode-mapped characters. The selected font and character are saved per workspace
+and used by both the native preview and SketchyBar. A custom font must also be
+installed on any Mac where you apply that saved layout.
+
+Glyph names come from Core Text's font metadata, with Unicode names/code points
+when names are unavailable. They are not hand-written workspace labels. For
+example, the reference AI symbol's SF Pro name is `uni100D3D.medium`, not “robot.”
+Some fonts omit descriptive names; glyphs without a Unicode mapping cannot be
+used as SketchyBar text. The legacy terminal glyph browser uses the same catalogue:
+press **G** to browse glyphs and **Tab** to search/change fonts. Terminal previews
+use the terminal's own font; the native browser previews the selected face.
+
+Drag a row by its handle to reorder it. Move buttons remain available for keyboard
+and accessibility use. Glyphs, fonts, app assignments and custom shortcuts travel
+with the workspace; number-row defaults follow its displayed position.
 
 There is no 13-workspace limit. The first 13 positions default to **Option +
 number-row key** for switching and **Option + Shift + that key** for moving a window,
@@ -133,9 +153,10 @@ Your choices are saved locally in
 `~/Library/Application Support/mac-setup/workspaces.json` when setup starts.
 The optional timer workspace is emitted only when Tomito is selected. AeroSpace and
 SketchyBar are generated as backed-up local copies rather than changes to a public
-Git checkout. Glyph mappings have one definition. The five default symbols exactly match the
-reference Mac’s SF Pro characters, while numbers and additional glyphs use Hack Nerd
-Font at 14.5 points in 21-point slots. The native preview uses those same fonts and sizes.
+Git checkout. Existing layouts keep their original symbols and fonts. The five
+reference symbols use SF Pro and the default numbers use Hack Nerd Font Bold, at
+14.5 points in 21-point slots. Other selections use their chosen font face at the
+same size; the native preview matches those choices.
 The bar refreshes after application switching and wake, with a periodic recovery
 check for missed workspace events.
 
