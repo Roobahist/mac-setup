@@ -42,7 +42,7 @@ These paths apply only the relevant provider profiles, rather than restarting th
 
 ### Shortcut behavior
 
-All supported AeroSpace bindings in the bundled main-mode configuration are editable. Additional shortcuts may reuse available actions. Karabiner application shortcuts can use built-in app-opening scripts or a validated application bundle ID. Advanced stateful Karabiner rules, such as the Chrome chord remapping, remain preserved in the Portable profile but are not interchangeable with ordinary one-chord hotkeys. The Raycast launcher combination is editable and synchronized with its macOS preference.
+All supported AeroSpace bindings in the bundled main-mode configuration are editable. Additional shortcuts may reuse available actions. Karabiner application shortcuts can use built-in app-opening scripts or a validated application bundle ID. Advanced stateful Karabiner rules, such as the Chrome chord remapping, remain preserved in the Portable profile and can be disabled or edited through a validated JSON editor. They cannot be represented faithfully as ordinary single-chord shortcuts. The Raycast launcher combination is editable and synchronized with its macOS preference.
 
 The shortcut editor checks for duplicate combinations across all three providers and workspace destinations, and rejects collisions with the generated AeroSpace settings. Supported shortcut choices are stored in `~/Library/Application Support/mac-setup/shortcuts.json` before profiles are applied. To change only shortcuts, run `mac-setup shortcuts`.
 

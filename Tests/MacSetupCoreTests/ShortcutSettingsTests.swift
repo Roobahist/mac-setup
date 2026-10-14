@@ -77,6 +77,29 @@ final class ShortcutSettingsTests: XCTestCase {
         XCTAssertFalse(settings.usesSpotlightKey)
     }
 
+    func testAdvancedKarabinerRuleCanBeDisabledAndEdited() throws {
+        let file = Paths().profile.appendingPathComponent("karabiner/karabiner.json")
+        let data = try Data(contentsOf: file)
+        let advanced = ShortcutSettings.bundledAdvancedKarabinerRules(from: data)
+        let original = try XCTUnwrap(advanced.first(where: { $0.id == "Chrome" }))
+        var settings = try settings()
+        var disabled = original
+        disabled.enabled = false
+        settings.updateAdvancedRule(disabled)
+        try settings.validate(workspaces: .defaultLayout, aerospaceTemplate: aerospaceTemplate())
+        let suppressed = try settings.karabinerData(from: data)
+        let suppressedText = String(decoding: suppressed, as: UTF8.self)
+        XCTAssertFalse(suppressedText.contains("\"description\" : \"Chrome\""))
+
+        var invalid = original
+        invalid.json = "{\"description\":\"Chrome\",\"manipulators\":[]}"
+        settings.updateAdvancedRule(invalid)
+        XCTAssertThrowsError(try settings.validate(workspaces: .defaultLayout,
+                                                   aerospaceTemplate: aerospaceTemplate()))
+        settings.updateAdvancedRule(original)
+        try settings.validate(workspaces: .defaultLayout, aerospaceTemplate: aerospaceTemplate())
+    }
+
     func testShortcutPersistenceAndUnsupportedKarabinerAction() throws {
         let home = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: home) }
