@@ -13,6 +13,7 @@ import subprocess
 import sys
 import termios
 import time
+import unicodedata
 
 if len(sys.argv) != 2:
     raise SystemExit("Usage: python3 scripts/test-interactive-picker.py /path/to/mac-setup")
@@ -48,6 +49,98 @@ def read_until(predicate, timeout=8.0):
 
 def active_screen(data: bytes) -> bytes:
     return data.rsplit(b"\x1b[H\x1b[2J", 1)[-1]
+
+
+def rendered_terminal_rows(data: bytes, private_use_width: int) -> list[str]:
+    """Reconstruct cursor movements under different Nerd Font fallback widths.
+
+    This small emulator only implements the escape codes used by the picker.
+    It checks column positions rather than assuming a private-use glyph is
+    always one terminal cell wide.
+    """
+    output = data.decode("utf-8", "replace")
+    rows: list[str] = []
+    row: dict[int, str] = {}
+    column = 0
+    saved_column = 0
+    index = 0
+
+    def finish_row() -> None:
+        rows.append("".join(row.get(position, " ") for position in range(max(row, default=-1) + 1)))
+
+    while index < len(output):
+        char = output[index]
+        if char == "\x1b":
+            if index + 1 < len(output) and output[index + 1] in ("7", "8"):
+                if output[index + 1] == "7":
+                    saved_column = column
+                else:
+                    column = saved_column
+                index += 2
+                continue
+            if index + 1 < len(output) and output[index + 1] == "[":
+                end = index + 2
+                while end < len(output) and not ("@" <= output[end] <= "~"):
+                    end += 1
+                if end == len(output):
+                    break
+                code = output[end]
+                params = output[index + 2:end]
+                if code == "G":
+                    column = max(0, int(params or "1") - 1)
+                elif code == "H":
+                    column = 0
+                index = end + 1
+                continue
+        if char == "\r":
+            column = 0
+        elif char == "\n":
+            finish_row()
+            row = {}
+            column = 0
+        elif char >= " ":
+            scalar = ord(char)
+            private_use = 0xE000 <= scalar <= 0xF8FF or 0xF0000 <= scalar <= 0x10FFFD
+            width = (private_use_width if private_use else
+                     0 if unicodedata.combining(char) else
+                     2 if unicodedata.east_asian_width(char) in ("F", "W") else 1)
+            if width:
+                row[column] = char
+                for offset in range(1, width):
+                    row[column + offset] = " "
+                column += width
+        index += 1
+    return rows
+
+
+def verify_glyph_columns(data: bytes) -> None:
+    # Terminal fallback boxes may consume two cells even when wcwidth reports
+    # one. The ASCII columns after the glyph must not move in either case.
+    for fallback_width in (1, 2):
+        rows = rendered_terminal_rows(data, private_use_width=fallback_width)
+        header = next(line for line in rows if "SHORTCUT" in line and "GLYPH" in line)
+        glyph_col = header.index("GLYPH")
+        id_col = header.index("ID", glyph_col + len("GLYPH"))
+        apps_col = header.index("APPS", id_col + len("ID"))
+        for shortcut, glyph, workspace_id, count in (
+            ("Alt+" + chr(96), "robot", "chatgpt", "2"),
+            ("Alt+1", "1", "1", "0"),
+            ("Alt+9", "music", "music", "1"),
+            ("Alt+0", "chat", "messages", "3"),
+            ("Alt+-", "notes", "notes", "1"),
+            ("Alt+=", "clock", "timer", "1"),
+        ):
+            line = next((line for line in rows if shortcut in line and line.index(shortcut) < glyph_col), None)
+            assert line is not None, f"Missing workspace {shortcut} with fallback width {fallback_width}"
+            assert line[glyph_col:].startswith(glyph), (
+                f"{shortcut} glyph name moved for fallback width {fallback_width}: {line!r}"
+            )
+            assert line[id_col:].startswith(workspace_id), (
+                f"{shortcut} ID moved for fallback width {fallback_width}: {line!r}"
+            )
+            assert line[apps_col:].startswith(count), (
+                f"{shortcut} app count moved for fallback width {fallback_width}: {line!r}"
+            )
 
 try:
     read_until(lambda b: b"MAC SETUP" in b and b"Homebrew" in b)
@@ -103,6 +196,7 @@ try:
     assert b"Pomodoro" in workspace_screen, "Tomito workspace must be in default layout"
     assert b"APP RULES" in workspace_screen
     assert b"robot" in workspace_screen, "Glyph name must be readable without Nerd Font"
+    verify_glyph_columns(workspace_screen)
     assert b"\x1b[1;38;5;231;48;5;24m" in workspace_screen, "Selection has no highlight"
     os.write(master, b"g")
     read_until(lambda b: b"Type to filter glyph" in active_screen(b))
