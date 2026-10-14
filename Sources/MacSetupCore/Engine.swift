@@ -8,6 +8,9 @@ public final class Engine {
     public let runner: CommandRunning
     public let journal: Journal
     public let dotfiles: LinkedDotfiles
+    /// Optional task choices captured from the setup checklist. A nil value
+    /// retains all saved workspaces for standalone profile reapplication.
+    public var selectedWorkspaceTaskIDs: Set<String>?
     private var brewRefreshed = false
     private let tools: (String) -> String?
 
@@ -358,11 +361,13 @@ public final class Engine {
         // Render user-specific workspace settings without writing into public dotfiles.
         if file.lastPathComponent == "aerospace.toml",
            file.deletingLastPathComponent().lastPathComponent == "aerospace" {
-            return Data(try WorkspaceConfiguration.load(from: paths).aerospaceTOML(from: original).utf8)
+            return Data(try WorkspaceConfiguration.load(from: paths)
+                .forSelectedTasks(selectedWorkspaceTaskIDs).aerospaceTOML(from: original).utf8)
         }
         if file.lastPathComponent == "sketchybarrc",
            file.deletingLastPathComponent().lastPathComponent == "sketchybar" {
-            return Data(try WorkspaceConfiguration.load(from: paths).sketchybarShell(from: original).utf8)
+            return Data(try WorkspaceConfiguration.load(from: paths)
+                .forSelectedTasks(selectedWorkspaceTaskIDs).sketchybarShell(from: original).utf8)
         }
         // Alacritty's import path is resolved against the recipient's configuration directory.
         if file.lastPathComponent == "alacritty.toml" {
