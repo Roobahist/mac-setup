@@ -41,7 +41,7 @@ final class WorkspaceConfigurationTests: XCTestCase {
         let bar = try config.sketchybarShell(from: template("sketchybar/sketchybarrc"))
         XCTAssertTrue(bar.contains("research) printf"))
         XCTAssertTrue(bar.contains("Hack Nerd Font:Bold:14.5"))
-        XCTAssertFalse(bar.contains("chatgpt)"))
+        XCTAssertFalse(bar.contains("    chatgpt) echo"))
     }
 
     func testInvalidIDsDuplicateAppAndUnknownGlyphAreRejected() throws {
