@@ -119,17 +119,21 @@ public final class Journal {
         try replace(target, with: temp, transaction: transaction)
     }
 
-    public func preference(_ domain: String, _ key: String) throws -> Any? {
+    /// Read a preference domain once, including for large exported app snapshots.
+    public func preferences(_ domain: String) throws -> [String: Any] {
         let result = try runner.run("/usr/bin/defaults", ["export", domain, "-"])
         if result.status != 0 {
-            // Missing domains are normal. Other errors must not masquerade as absence.
-            if result.text.contains("does not exist") || result.text.contains("not found") { return nil }
+            if result.text.contains("does not exist") || result.text.contains("not found") { return [:] }
             throw SetupError("Cannot read preferences for \(domain): \(result.text)")
         }
         guard let values = try PropertyListSerialization.propertyList(from: result.output, format: nil) as? [String: Any] else {
             throw SetupError("Cannot decode preferences for \(domain).")
         }
-        return values[key]
+        return values
+    }
+
+    public func preference(_ domain: String, _ key: String) throws -> Any? {
+        try preferences(domain)[key]
     }
 
     private func setPreference(_ domain: String, _ key: String, _ value: Any?) throws {

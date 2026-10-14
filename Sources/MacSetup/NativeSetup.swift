@@ -10,6 +10,9 @@ private final class SetupModel: ObservableObject {
     @Published var picker = TaskPickerState(preset: .repair)
     @Published var states: [String: String] = [:]
     @Published var layout = WorkspaceConfiguration.defaultLayout
+    @Published var shortcuts = ShortcutSettings(entries: [])
+    let aerospaceTemplate: String
+    let karabinerTemplate: Data
     @Published var apps: [InstalledApplication] = []
     @Published var index = 0
     @Published var tasks: [SetupTask] = []
@@ -26,7 +29,6 @@ private final class SetupModel: ObservableObject {
     @Published var selectedWorkspace = 0
     @Published var appSheet = false
     @Published var appSearch = ""
-    @Published var shortcutsConfirmed = false
     @Published var runLog = ""
     var scope: SetupScope = .full
     private let worker = DispatchQueue(label: "mac-setup.native", qos: .userInitiated)
@@ -38,6 +40,9 @@ private final class SetupModel: ObservableObject {
     init(ids: [String]?, preset: SetupPreset?) throws {
         engine = try Engine(runner: runner)
         engine.deferRestarts = true
+        aerospaceTemplate = try String(contentsOf: engine.paths.profile.appendingPathComponent("aerospace/aerospace.toml"), encoding: .utf8)
+        karabinerTemplate = try Data(contentsOf: engine.paths.profile.appendingPathComponent("karabiner/karabiner.json"))
+        shortcuts = try ShortcutSettings.load(from: engine.paths, aerospaceTemplate: aerospaceTemplate)
         layout = try WorkspaceConfiguration.load(from: engine.paths)
         guideProgress = try GuideProgress.load(from: engine.paths)
         apps = ApplicationDiscovery.scan(home: engine.paths.home)
@@ -85,7 +90,6 @@ private final class SetupModel: ObservableObject {
     func openEditor(_ selected: SetupScope) {
         scope = selected
         message = ""
-        shortcutsConfirmed = selected == .workspaces
         page = selected == .workspaces ? .workspaces : .shortcuts
     }
 
@@ -96,7 +100,7 @@ private final class SetupModel: ObservableObject {
             switch scope {
             case .full: chosen = picker.orderedSelection
             case .workspaces: chosen = ["aerospace-profile", "sketchybar-profile", "sketchybar-start"]
-            case .shortcuts: chosen = ["aerospace-profile"]
+            case .shortcuts: chosen = ["aerospace-profile", "karabiner-profile", "raycast-profile"]
             }
             tasks = try Catalog.ordered(chosen, includingDependencies: false)
             message = ""
@@ -110,9 +114,7 @@ private final class SetupModel: ObservableObject {
 
     func workspaceError(in layout: WorkspaceConfiguration, shortcutWorkspaceID: String? = nil) -> String? {
         do {
-            try layout.validate(checkingShortcutsFor: shortcutWorkspaceID)
-            let template = try String(contentsOf: engine.paths.profile.appendingPathComponent("aerospace/aerospace.toml"), encoding: .utf8)
-            try layout.forSelectedTasks(picker.selected).validate(aerospaceTemplate: template, checkingShortcutsFor: shortcutWorkspaceID)
+            try shortcuts.validate(workspaces: layout, aerospaceTemplate: aerospaceTemplate)
             return nil
         } catch { return String(describing: error) }
     }
@@ -120,6 +122,8 @@ private final class SetupModel: ObservableObject {
     func start() {
         do {
             setupLock = try SetupLock(paths: engine.paths)
+            if let error = workspaceError(in: layout) { throw SetupError(error) }
+            try shortcuts.save(to: engine.paths)
             try layout.save(to: engine.paths)
             engine.selectedWorkspaceTaskIDs = scope == .full ? picker.selected : nil
             index = 0; results = [:]; runLog = ""
@@ -285,7 +289,13 @@ private final class SetupModel: ObservableObject {
         do { try engine.openGuideSettings(task) } catch { message = String(describing: error) }
     }
 
-    func returnToFeatures() { setupLock = nil; page = .features; refreshInventory() }
+    func returnToFeatures() {
+        setupLock = nil
+        scope = .full
+        message = ""
+        page = .features
+        refreshInventory()
+    }
 
     func sendInput() { runner.send(response); response = "" }
 }
@@ -295,6 +305,7 @@ private struct SetupView: View {
     @LocalViewState private var glyphWorkspaceID: String?
     @LocalViewState private var workspaceDragSession = UUID().uuidString
     @LocalViewState private var dropTargetWorkspaceID: String?
+    @LocalViewState private var expandedTaskCategories = Set<String>()
 
     private var previewTime: String {
         let formatter = DateFormatter()
@@ -331,11 +342,13 @@ private struct SetupView: View {
                     Text("Apps, workspaces, and the checks that make them work.").foregroundStyle(.secondary)
                 }
                 Spacer()
-                Text(model.scope == .full ? "Step \(step) of 5" : "Edit settings").font(.headline)
+                Text("Mac Setup").font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.secondary)
             }.padding(24)
             HStack(spacing: 24) {
                 ForEach(Array(["Choose features", "Shortcuts", "Workspaces", "Review", "Set up & test"].enumerated()), id: \.offset) { index, name in
-                    Label(name, systemImage: index + 1 < step ? "checkmark.circle.fill" : "\(index + 1).circle")
+                    Label(name, systemImage: model.scope == .full && index + 1 < step
+                          ? "checkmark.circle.fill" : "\(index + 1).circle")
                         .foregroundStyle(index + 1 == step ? Color.accentColor : Color.secondary)
                 }
             }.padding(.horizontal, 24).padding(.bottom, 20)
@@ -386,81 +399,78 @@ private struct SetupView: View {
             }
             TextField("Find a feature", text: $model.search).textFieldStyle(.roundedBorder)
             ForEach(model.picker.categories.dropFirst(), id: \.self) { category in
-                DisclosureGroup("\(category) · \(Catalog.tasks.filter { $0.category == category && model.picker.selected.contains($0.id) }.count) selected") {
-                    VStack(alignment: .leading, spacing: 12) {
-                    ForEach(Catalog.tasks.filter { $0.category == category && (model.search.isEmpty || ($0.title + " " + $0.summary).localizedCaseInsensitiveContains(model.search)) }, id: \.id) { task in
-                        HStack(alignment: .top) {
-                            Toggle(isOn: Binding(get: { model.picker.selected.contains(task.id) }, set: { _ in model.picker.toggle(task.id) })) {
-                                VStack(alignment: .leading, spacing: 5) {
-                                    Text(task.title).fontWeight(.medium)
-                                    Text(task.summary).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                                }
-                            }.toggleStyle(.checkbox).disabled(model.busy)
-                            Spacer(minLength: 16)
-                            Text(task.guided ? "You test" : "Automatic").font(.caption).foregroundStyle(.secondary).frame(width: 80)
+                let selectedCount = Catalog.tasks.filter {
+                    $0.category == category && model.picker.selected.contains($0.id)
+                }.count
+                VStack(alignment: .leading, spacing: 0) {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.16)) {
+                            if expandedTaskCategories.contains(category) {
+                                expandedTaskCategories.remove(category)
+                            } else {
+                                expandedTaskCategories.insert(category)
+                            }
                         }
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 12, weight: .semibold))
+                                .rotationEffect(.degrees(expandedTaskCategories.contains(category) ? 90 : 0))
+                                .frame(width: 16)
+                            Text(category).font(.system(size: 15, weight: .medium))
+                            Spacer(minLength: 12)
+                            Text("\(selectedCount) selected")
+                                .font(.system(size: 13))
+                                .foregroundStyle(.secondary)
+                        }
+                        .contentShape(Rectangle())
+                        .frame(maxWidth: .infinity, minHeight: 56)
+                        .padding(.horizontal, 18)
                     }
-                    }.padding(.top, 14)
-                }.padding(18).background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(category), \(selectedCount) selected")
+                    .accessibilityHint(expandedTaskCategories.contains(category) ? "Collapse group" : "Expand group")
+
+                    if expandedTaskCategories.contains(category) {
+                        Divider().padding(.horizontal, 18)
+                        VStack(alignment: .leading, spacing: 14) {
+                            ForEach(Catalog.tasks.filter { $0.category == category &&
+                                (model.search.isEmpty ||
+                                 ($0.title + " " + $0.summary)
+                                    .localizedCaseInsensitiveContains(model.search)) }, id: \.id) { task in
+                                HStack(alignment: .top, spacing: 18) {
+                                    Toggle(isOn: Binding(
+                                        get: { model.picker.selected.contains(task.id) },
+                                        set: { _ in model.picker.toggle(task.id) })) {
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text(task.title).fontWeight(.medium)
+                                            Text(task.summary).font(.callout).foregroundStyle(.secondary)
+                                                .fixedSize(horizontal: false, vertical: true)
+                                        }
+                                    }.toggleStyle(.checkbox).disabled(model.busy)
+                                    Spacer(minLength: 8)
+                                    Text(task.guided ? "User approval" : "Automatic")
+                                        .font(.caption).foregroundStyle(.secondary)
+                                        .frame(width: 102, alignment: .trailing)
+                                }
+                            }
+                        }.padding(18)
+                    }
+                }
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
             }
             Text(model.picker.preset?.summary ?? "Custom selection. Open a section to change its tasks.").foregroundStyle(.secondary)
         }
     }
 
     private var shortcuts: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Text("Keyboard shortcuts").font(.title2.bold())
-            Text("Confirm the shared key combinations before editing your workspace layout. Each workspace only chooses its destination key.")
-                .foregroundStyle(.secondary)
-
-            VStack(alignment: .leading, spacing: 18) {
-                Text("AeroSpace  ·  Workspace navigation").font(.headline)
-                HStack(spacing: 24) {
-                    shortcutModifiers(title: "Switch workspace", modifiers: $model.layout.keymap.switchModifiers)
-                    shortcutModifiers(title: "Move window to workspace", modifiers: $model.layout.keymap.moveModifiers)
-                }
-                Text("The same letter or number is used for both actions. Only the modifiers differ.")
-                    .foregroundStyle(.secondary)
-            }.padding(20).frame(maxWidth: .infinity, alignment: .leading)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Other configured shortcuts").font(.headline)
-                shortcutSummary("AeroSpace", "Focus window: ⌥ Arrows  ·  Move window: ⌥⌃ Arrows  ·  Resize: ⌥⇧ Arrows  ·  Balance: ⌥⇧ B")
-                shortcutSummary("Karabiner", "App launch shortcuts come from the Portable profile, including ⌥ Return for Alacritty, ⌥ E for Finder and ⌥ V for VS Code.")
-                shortcutSummary("Raycast", "⌘ Space opens Raycast. Spotlight's conflicting shortcut is backed up before it is disabled.")
-            }.padding(20).frame(maxWidth: .infinity, alignment: .leading)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-            Text("Workspace modifiers are editable here. Other shortcuts shown above are currently managed by their respective profiles.")
-                .font(.callout).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 16) {
+            ShortcutStudio(settings: $model.shortcuts, layout: $model.layout,
+                           apps: model.apps, aerospaceTemplate: model.aerospaceTemplate,
+                           karabinerTemplate: model.karabinerTemplate)
             if let error = model.workspaceError(in: model.layout) {
-                Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
-            }
-            Toggle("I have reviewed these key combinations", isOn: $model.shortcutsConfirmed)
-                .toggleStyle(.checkbox)
-        }
-    }
-
-    private func shortcutSummary(_ provider: String, _ summary: String) -> some View {
-        HStack(alignment: .top, spacing: 16) {
-            Text(provider).fontWeight(.medium).frame(width: 100, alignment: .leading)
-            Text(summary).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    private func shortcutModifiers(title: String, modifiers: Binding<[String]>) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title).fontWeight(.medium)
-            HStack(spacing: 14) {
-                ForEach(["ctrl", "alt", "shift", "cmd"], id: \.self) { modifier in
-                    Toggle(["ctrl": "Control", "alt": "Option", "shift": "Shift", "cmd": "Command"][modifier]!,
-                           isOn: Binding(get: { modifiers.wrappedValue.contains(modifier) }, set: { on in
-                        if on && !modifiers.wrappedValue.contains(modifier) {
-                            modifiers.wrappedValue.append(modifier)
-                        } else if !on { modifiers.wrappedValue.removeAll { $0 == modifier } }
-                        model.shortcutsConfirmed = false
-                    })).toggleStyle(.checkbox)
-                }
+                Label(error, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.red).font(.callout)
             }
         }
     }
@@ -470,124 +480,175 @@ private struct SetupView: View {
     }
 
     private var workspaces: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 14) {
             HStack {
                 Text("Workspaces").font(.title2.bold())
                 Spacer()
-                Button("Edit global shortcuts") { model.page = .shortcuts }
+                Button("Edit shortcuts") { model.page = .shortcuts }
                     .buttonStyle(.borderless)
             }
-            Text("Drag any card to insert it at another position. Each card keeps its name, icon, apps and destination key.")
+            Text("Drag a card to reorder it. Edit its name, symbol, assigned apps, and destination key.")
                 .foregroundStyle(.secondary)
-            HStack(spacing: 0) {
-                ForEach(model.layout.forSelectedTasks(
-                    model.scope == .full ? model.picker.selected : nil,
-                    installedBundleIDs: installedIDs).workspaces, id: \.id) { workspace in
-                    Text(workspace.resolvedIcon.symbol)
-                        .font(.custom(workspace.resolvedIcon.font.postScriptName, size: 15))
-                        .frame(width: 24).help(workspace.name)
-                }
-                Spacer(minLength: 16)
-                Text(previewTime).font(.system(size: 14, weight: .semibold, design: .monospaced))
-            }
-            .padding(.horizontal, 18).frame(maxWidth: .infinity)
-            .frame(height: CGFloat(DisplayGeometry.current().previewHeight))
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
 
-            VStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("MENU BAR PREVIEW")
+                    .font(.system(size: 11, weight: .semibold))
+                    .tracking(1.2).foregroundStyle(.tertiary)
+                HStack(spacing: 0) {
+                    ForEach(model.layout.forSelectedTasks(
+                        model.scope == .full ? model.picker.selected : nil,
+                        installedBundleIDs: installedIDs).workspaces, id: \.id) { workspace in
+                        Text(workspace.resolvedIcon.symbol)
+                            .font(.custom(workspace.resolvedIcon.font.postScriptName, size: 15))
+                            .frame(width: 27).help(workspace.name)
+                    }
+                    Spacer(minLength: 12)
+                    Text(previewTime).font(.system(size: 13, weight: .semibold, design: .monospaced))
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 16)
+                .frame(maxWidth: .infinity)
+                .frame(height: CGFloat(DisplayGeometry.current().previewHeight))
+                .background(Color.black.opacity(0.92), in: RoundedRectangle(cornerRadius: 10))
+                .overlay(RoundedRectangle(cornerRadius: 10)
+                    .stroke(Color.white.opacity(0.16), lineWidth: 0.75))
+                .shadow(color: .black.opacity(0.22), radius: 12, y: 6)
+            }.padding(.bottom, 10)
+
+            VStack(spacing: 9) {
                 ForEach(visibleWorkspaceIDs, id: \.self) { id in
-                    if let i = model.layout.workspaces.firstIndex(where: { $0.id == id }) {
-                        let workspace = model.layout.workspaces[i]
-                        HStack(spacing: 14) {
-                            Image(systemName: "circle.grid.2x3.fill")
-                                .foregroundStyle(.tertiary).font(.system(size: 17))
-                                .help("Drag this card to reorder")
-                            TextField("Workspace name", text: $model.layout.workspaces[i].name)
-                                .textFieldStyle(.plain).fontWeight(.medium)
-                                .frame(minWidth: 120, maxWidth: .infinity, alignment: .leading)
-                            Button { glyphWorkspaceID = id } label: {
-                                let icon = model.layout.workspaces[i].resolvedIcon
-                                if icon.symbol == "?" {
-                                    Text("Glyph")
-                                } else {
-                                    Text(icon.symbol)
-                                        .font(.custom(icon.font.postScriptName, size: 20))
-                                        .frame(minWidth: 28)
-                                }
-                            }.accessibilityLabel("Select icon for \(workspace.name)")
-                                .help("Change icon")
-                            Button {
-                                model.selectedWorkspace = i
-                                model.appSheet = true
-                            } label: {
-                                Label(String(model.layout.forSelectedTasks(
-                                    model.scope == .full ? model.picker.selected : nil,
-                                    installedBundleIDs: installedIDs).workspaces[i].apps.count),
-                                    systemImage: "app.badge")
-                            }.help("Assigned apps")
-                            Picker("Key", selection: Binding(
-                                get: {
-                                    workspace.shortcutKey ?? workspace.shortcuts?.switchTo?.key
-                                        ?? (WorkspaceConfiguration.keys.indices.contains(i) ? WorkspaceConfiguration.keys[i] : "")
-                                },
-                                set: {
-                                    model.layout.workspaces[i].shortcutKey = $0
-                                    model.layout.workspaces[i].shortcuts = nil
-                                })) {
-                                Text("None").tag("")
-                                ForEach(workspaceKeys, id: \.self) { key in
-                                    Text(WorkspaceShortcut.keyLabel(key)).tag(key)
-                                }
-                            }.labelsHidden().frame(width: 92).help("Destination key for both workspace actions")
-                            Button { model.layout.workspaces.remove(at: i) } label: {
-                                Image(systemName: "xmark")
-                            }.buttonStyle(.borderless).disabled(model.layout.workspaces.count == 1)
-                                .help("Remove workspace").accessibilityLabel("Remove workspace")
-                        }
-                        .buttonStyle(.bordered)
-                        .padding(.horizontal, 16).padding(.vertical, 12)
-                        .frame(maxWidth: .infinity)
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
-                        .overlay(alignment: .top) {
-                            if dropTargetWorkspaceID == id {
-                                Capsule().fill(Color.accentColor).frame(height: 3).padding(.horizontal, 8)
-                            }
-                        }
-                        .draggable("mac-setup-workspace:\(workspaceDragSession):\(id)") {
-                            HStack(spacing: 16) {
-                                Image(systemName: "circle.grid.2x3.fill").foregroundStyle(.secondary)
-                                Text(workspace.resolvedIcon.symbol)
-                                    .font(.custom(workspace.resolvedIcon.font.postScriptName, size: 20))
-                                Text(workspace.name).fontWeight(.medium)
-                                Spacer()
-                                Text("\(workspace.apps.count) apps").foregroundStyle(.secondary)
-                            }.padding(18).frame(width: 520)
-                                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
-                        }
-                        .dropDestination(for: String.self) { items, location in
-                            let prefix = "mac-setup-workspace:\(workspaceDragSession):"
-                            guard items.count == 1, let value = items.first, value.hasPrefix(prefix) else { return false }
-                            let sourceID = String(value.dropFirst(prefix.count))
-                            guard visibleWorkspaceIDs.contains(sourceID) else { return false }
-                            model.layout.insertWorkspace(sourceID, at: location.y > 30 ? i + 1 : i)
-                            dropTargetWorkspaceID = nil
-                            return true
-                        } isTargeted: { targeted in
-                            if targeted { dropTargetWorkspaceID = id }
-                            else if dropTargetWorkspaceID == id { dropTargetWorkspaceID = nil }
-                        }
+                    if let index = model.layout.workspaces.firstIndex(where: { $0.id == id }) {
+                        workspaceCard(at: index)
                     }
                 }
             }
-            Button { 
+            Button {
                 var number = 1
                 while model.layout.workspaces.contains(where: { $0.id == "custom\(number)" }) { number += 1 }
-                model.layout.workspaces.append(.init(id: "custom\(number)", name: "Workspace \(number)", glyph: "star", shortcutKey: ""))
+                model.layout.workspaces.append(.init(id: "custom\(number)", name: "Workspace \(number)",
+                                                      glyph: "star", shortcutKey: ""))
             } label: { Label("Add workspace", systemImage: "plus") }
+                .padding(.top, 4)
             if let error = model.workspaceError(in: model.layout) {
-                Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
+                Label(error, systemImage: "exclamationmark.triangle")
+                    .font(.callout).foregroundStyle(.orange)
+                    .padding(.vertical, 8)
             }
-            if !model.message.isEmpty { Text(model.message).foregroundStyle(.red) }
+            if !model.message.isEmpty {
+                Text(model.message).font(.callout).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func workspaceCard(at i: Int) -> some View {
+        let item = model.layout.workspaces[i]
+        let icon = item.resolvedIcon
+        return HStack(spacing: 12) {
+            Label("Drag", systemImage: "circle.grid.3x3.fill")
+                .labelStyle(.titleAndIcon)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.secondary)
+                .frame(width: 64, height: 40)
+                .help("Drag this card to insert it at another position")
+                .accessibilityLabel("Drag workspace \(item.name)")
+            TextField("Workspace name", text: $model.layout.workspaces[i].name)
+                .textFieldStyle(.plain)
+                .font(.system(size: 15, weight: .medium))
+                .padding(.leading, 4)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityLabel("Workspace name")
+            Button { glyphWorkspaceID = item.id } label: {
+                Group {
+                    if icon.symbol == "?" {
+                        Text("Glyph").font(.system(size: 12, weight: .medium))
+                    } else {
+                        Text(icon.symbol).font(.custom(icon.font.postScriptName, size: 21))
+                    }
+                }
+                .frame(width: 44, height: 38)
+                .contentShape(Rectangle())
+            }
+            .help("Select workspace symbol")
+            .accessibilityLabel("Select symbol for \(item.name)")
+            Button {
+                model.selectedWorkspace = i
+                model.appSheet = true
+            } label: {
+                HStack(spacing: 7) {
+                    Image(systemName: "square.grid.2x2.fill").font(.system(size: 17))
+                    Text(String(model.layout.forSelectedTasks(
+                        model.scope == .full ? model.picker.selected : nil,
+                        installedBundleIDs: installedIDs).workspaces[i].apps.count))
+                        .font(.system(size: 14, weight: .medium, design: .rounded))
+                }.frame(width: 86, height: 38)
+            }.help("Edit applications assigned to \(item.name)")
+                .accessibilityLabel("Applications for \(item.name)")
+            Picker("Key", selection: Binding(
+                get: {
+                    item.shortcutKey ?? item.shortcuts?.switchTo?.key
+                        ?? (WorkspaceConfiguration.keys.indices.contains(i) ? WorkspaceConfiguration.keys[i] : "")
+                },
+                set: { key in
+                    model.layout.workspaces[i].shortcutKey = key
+                    model.layout.workspaces[i].shortcuts = nil
+                })) {
+                Text("No key").tag("")
+                ForEach(workspaceKeys, id: \.self) { key in
+                    Text(WorkspaceShortcut.keyLabel(key)).tag(key)
+                }
+            }.pickerStyle(.menu)
+                .labelsHidden()
+                .frame(width: 104, height: 38)
+                .help("Key for switching to and moving a window to \(item.name)")
+            Button { model.layout.workspaces.remove(at: i) } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 14, weight: .medium))
+                    .frame(width: 40, height: 38)
+            }
+            .disabled(model.layout.workspaces.count == 1)
+            .help("Remove workspace")
+            .accessibilityLabel("Remove workspace \(item.name)")
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.regular)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 13))
+        .overlay(alignment: .top) {
+            if dropTargetWorkspaceID == item.id {
+                Capsule()
+                    .fill(Color.accentColor)
+                    .frame(height: 2)
+                    .padding(.horizontal, 5)
+            }
+        }
+        .contentShape(RoundedRectangle(cornerRadius: 13))
+        .draggable("mac-setup-workspace:\(workspaceDragSession):\(item.id)") {
+            HStack(spacing: 13) {
+                Image(systemName: "circle.grid.3x3.fill").foregroundStyle(.secondary)
+                Text(icon.symbol).font(.custom(icon.font.postScriptName, size: 20))
+                Text(item.name).fontWeight(.medium)
+                Spacer()
+                Label("\(item.apps.count)", systemImage: "square.grid.2x2.fill")
+                    .foregroundStyle(.secondary)
+            }
+            .padding(17)
+            .frame(width: 510)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 13))
+        }
+        .dropDestination(for: String.self) { dragged, location in
+            let prefix = "mac-setup-workspace:\(workspaceDragSession):"
+            guard dragged.count == 1, let value = dragged.first,
+                  value.hasPrefix(prefix) else { return false }
+            let source = String(value.dropFirst(prefix.count))
+            guard visibleWorkspaceIDs.contains(source) else { return false }
+            model.layout.insertWorkspace(source, at: location.y > 29 ? i + 1 : i)
+            dropTargetWorkspaceID = nil
+            return true
+        } isTargeted: { hovering in
+            if hovering { dropTargetWorkspaceID = item.id }
+            else if dropTargetWorkspaceID == item.id { dropTargetWorkspaceID = nil }
         }
     }
 
@@ -715,7 +776,6 @@ private struct SetupView: View {
                 Spacer()
                 Button("Continue") {
                     model.scope = .full
-                    model.shortcutsConfirmed = false
                     if model.picker.selected.contains("aerospace-profile")
                         || model.picker.selected.contains("karabiner-profile")
                         || model.picker.selected.contains("raycast-profile") {
@@ -723,15 +783,18 @@ private struct SetupView: View {
                     } else { model.review() }
                 }.disabled(model.busy || model.picker.selectedCount == 0).keyboardShortcut(.defaultAction)
             case .shortcuts:
-                Button("Back") { model.page = .features }; Spacer()
+                Button("Back") { model.returnToFeatures() }; Spacer()
                 Button("Continue") {
                     if model.scope == .shortcuts { model.review() }
                     else if model.picker.selected.contains("aerospace-profile") { model.page = .workspaces }
                     else { model.review() }
-                }.disabled(!model.shortcutsConfirmed || model.workspaceError(in: model.layout) != nil)
+                }.disabled(model.workspaceError(in: model.layout) != nil)
                     .keyboardShortcut(.defaultAction)
             case .workspaces:
-                Button("Back") { model.page = model.scope == .full ? .shortcuts : .features }; Spacer()
+                Button("Back") {
+                    if model.scope == .full { model.page = .shortcuts }
+                    else { model.returnToFeatures() }
+                }; Spacer()
                 Button("Review changes") { model.review() }.keyboardShortcut(.defaultAction)
             case .review:
                 Button("Back") { model.page = model.scope == .workspaces ? .workspaces : .shortcuts }; Spacer()

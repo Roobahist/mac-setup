@@ -25,9 +25,16 @@ for profile in karabiner["profiles"]:
     assert sum(rule.get("enabled") is False for rule in rules) == 1
     assert any(rule.get("enabled") is False and rule["description"].startswith("Example (disabled)") for rule in rules)
 
-vorssaint = plistlib.loads((root / "vorssaint/preferences.plist").read_bytes())
+vorssaint_export = plistlib.loads((root / "vorssaint/preferences.plist").read_bytes())
+if "settings" in vorssaint_export:
+    assert vorssaint_export.get("vorssaintBackupVersion") == 1
+    assert isinstance(vorssaint_export.get("vorssaintBackupAppVersion"), str)
+    vorssaint = vorssaint_export["settings"]
+else:
+    vorssaint = vorssaint_export
 for forbidden in ["shelfItems", "textSnippets", "commandBarUsage", "commandBarQueryHabitKey", "notchDownloadsFolderBookmark", "appVolumes", "NSOSPLastRootDirectory"]:
     assert forbidden not in vorssaint, f"Private Vorssaint field: {forbidden}"
-assert all(isinstance(value, (bool, int, float, str)) for value in vorssaint.values())
+assert len(vorssaint) > 700, "Bundled Vorssaint snapshot is incomplete"
+assert all(isinstance(value, (bool, int, float, str, bytes, list, dict)) for value in vorssaint.values())
 assert vorssaint["autoQuitEnabled"] is True
 print("Public profile checks passed. These checks do not replace a full secret review.")
