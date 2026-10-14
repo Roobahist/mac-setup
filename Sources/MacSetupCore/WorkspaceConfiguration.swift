@@ -203,7 +203,8 @@ public struct WorkspaceConfiguration: Codable, Equatable {
               let endRange = original.range(of: end, range: startRange.upperBound..<original.endIndex) else {
             throw SetupError("Unsupported profile version: expected template markers were not found.")
         }
-        return String(original[..<startRange.lowerBound]) + replacement
+        let separator = end.hasPrefix("\n") || replacement.hasSuffix("\n") ? "" : "\n"
+        return String(original[..<startRange.lowerBound]) + replacement + separator
             + String(original[endRange.lowerBound...])
     }
 
