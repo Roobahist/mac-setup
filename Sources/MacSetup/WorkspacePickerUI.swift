@@ -18,6 +18,7 @@ struct WorkspacePickerUI {
     private let initialLayout: WorkspaceConfiguration
     private let installed: [InstalledApplication]
     private let context: Context
+    private let maximumWorkspaces: Int
     private var page: Page = .workspaces
     private var selected = 0
     private var resultCursor = 0
@@ -26,11 +27,13 @@ struct WorkspacePickerUI {
     private var message = ""
 
     init(layout: WorkspaceConfiguration, installed: [InstalledApplication],
-         context: Context = .standalone) {
+         context: Context = .standalone,
+         maximumWorkspaces: Int = WorkspaceConfiguration.keys.count) {
         self.layout = layout
         self.initialLayout = layout
         self.installed = installed
         self.context = context
+        self.maximumWorkspaces = maximumWorkspaces
     }
 
     mutating func run(in terminal: RawTerminal) -> Outcome {
@@ -69,8 +72,8 @@ struct WorkspacePickerUI {
                         do { try layout.validate(); return .saved(layout) }
                         catch { message = String(describing: error) }
                     case "a":
-                        guard layout.workspaces.count < WorkspaceConfiguration.keys.count else {
-                            message = "All 13 keyboard shortcuts are in use."; break
+                        guard layout.workspaces.count < maximumWorkspaces else {
+                            message = "All available workspace slots are in use. Optional disabled workspaces are preserved."; break
                         }
                         var id = "workspace"
                         var index = 2
@@ -244,6 +247,7 @@ struct WorkspacePickerUI {
             message: message,
             modified: layout != initialLayout,
             guidedSetup: context == .setup,
+            maximumWorkspaces: maximumWorkspaces,
             width: width,
             height: height
         ).render()
