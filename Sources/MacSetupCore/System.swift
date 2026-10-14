@@ -32,7 +32,8 @@ public extension CommandRunning {
 }
 
 public struct ProcessRunner: CommandRunning {
-    public init() {}
+    private let timeout: TimeInterval
+    public init(timeout: TimeInterval = 20) { self.timeout = timeout }
     public func run(_ executable: String, _ arguments: [String], interactive: Bool, input: Data?) throws -> CommandResult {
         let process = Process()
         var interactiveStatusFile: URL?
@@ -93,6 +94,15 @@ public struct ProcessRunner: CommandRunning {
             if childGroup != foregroundGroup { _ = kill(-childGroup, SIGCONT) }
             process.waitUntilExit()
         } else {
+            let deadline = Date().addingTimeInterval(timeout)
+            while process.isRunning && Date() < deadline { Thread.sleep(forTimeInterval: 0.05) }
+            if process.isRunning {
+                process.terminate()
+                Thread.sleep(forTimeInterval: 0.1)
+                if process.isRunning { _ = kill(process.processIdentifier, SIGKILL) }
+                process.waitUntilExit()
+                throw SetupError("\(URL(fileURLWithPath: executable).lastPathComponent) did not respond within \(Int(timeout)) seconds. Open the app and retry this check.")
+            }
             process.waitUntilExit()
         }
         defer {
@@ -120,7 +130,8 @@ public struct Paths {
             config = URL(fileURLWithPath: xdg)
         } else { config = home.appendingPathComponent(".config") }
         state = home.appendingPathComponent("Library/Application Support/mac-setup")
-        self.profile = profile ?? Bundle.module.url(forResource: "Profile", withExtension: nil)!
+        self.profile = profile ?? Bundle.main.url(forResource: "Profile", withExtension: nil)
+            ?? Bundle.module.url(forResource: "Profile", withExtension: nil)!
     }
 }
 

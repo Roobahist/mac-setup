@@ -24,7 +24,7 @@ fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 36, 132, 0, 0))
 env = dict(os.environ, TERM="xterm-256color")
 env.pop("NO_COLOR", None)  # This test asserts ANSI highlighting regardless of the caller.
 process = subprocess.Popen(
-    [str(executable)],
+    [str(executable), "terminal"],
     stdin=slave,
     stdout=slave,
     stderr=slave,
@@ -207,7 +207,7 @@ try:
     assert b"SELECTED WORKSPACE" in workspace_screen, "Wide view should show inspector"
     assert b"SHORTCUT" in workspace_screen and b"GLYPH" in workspace_screen
     assert b"ICON" in workspace_screen, "Glyph preview column should always be present"
-    assert "󰚩".encode() in workspace_screen, "Expected actual Hack Nerd Font icon preview"
+    assert "􀴽".encode() in workspace_screen, "Expected actual reference SF Pro icon preview"
     assert b"Pomodoro" in workspace_screen, "Tomito workspace must be in default layout"
     assert b"APP RULES" in workspace_screen
     assert b"robot" in workspace_screen, "Glyph name must be readable without Nerd Font"

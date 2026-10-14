@@ -50,14 +50,14 @@ public enum Catalog {
         SetupTask("dotfiles-linked", "Tools", "Link public dotfiles",
                   "Clone the public dot-files repository. Only selected application profiles are linked later. Requires Git.",
                   action: .linkedDotfiles),
-        SetupTask("fonts", "Tools", "Interface and terminal fonts", "Install Hack Nerd Font and JetBrains Mono.", dependencies: ["homebrew"], action: .install(packages: ["font-hack-nerd-font", "font-jetbrains-mono"], cask: true, app: nil)),
+        SetupTask("fonts", "Tools", "Interface and terminal fonts", "Install SF Pro for the reference workspace symbols, Hack Nerd Font, and JetBrains Mono.", dependencies: ["homebrew"], action: .install(packages: ["font-sf-pro", "font-hack-nerd-font", "font-jetbrains-mono"], cask: true, app: nil)),
         SetupTask("aerospace", "Window management", "AeroSpace", "Install the tiling window manager.", dependencies: ["homebrew"], action: .install(packages: ["nikitabobko/tap/aerospace"], cask: true, app: "AeroSpace")),
         SetupTask("aerospace-profile", "Window management", "AeroSpace configuration", "Apply workspace names, key bindings, app rules and SketchyBar integration. Replaces the AeroSpace config folder after backup.", dependencies: ["aerospace"], action: .profile(["aerospace"])),
         SetupTask("mission-control", "Window management", "Mission Control workspace settings", "Keep Space order fixed and enable separate Spaces per display. Log out and back in for the display setting to take effect.", dependencies: ["aerospace-profile"], action: .preferences([
             Preference("com.apple.dock", "mru-spaces", false),
             Preference("com.apple.spaces", "spans-displays", false)
         ], restart: "Dock")),
-        SetupTask("aerospace-access", "Window management", "AeroSpace access and launch", "Grant Accessibility, then verify that AeroSpace can list workspaces.", dependencies: ["aerospace-profile", "mission-control"], action: .guide(url: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility", app: "AeroSpace", instructions: [
+        SetupTask("aerospace-access", "Window management", "AeroSpace access and launch", "Grant Accessibility, then verify that AeroSpace can list workspaces.", dependencies: ["aerospace-profile"], action: .guide(url: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility", app: "AeroSpace", instructions: [
             "In Privacy & Security > Accessibility, add AeroSpace.app if it is missing and enable it.",
             "Launch AeroSpace. Resolve any config errors in its own UI. The profile uses config-version 2 and requires a version supporting it.",
             "The mission-control task applies Space order and separate-display preferences automatically. Log out and back in before testing if those preferences changed."
@@ -71,22 +71,28 @@ public enum Catalog {
         SetupTask("vorssaint", "Apps", "Vorssaint", "Install the modular macOS utility (Apple silicon, macOS 14+).", dependencies: ["homebrew"], action: .install(packages: ["vorssaint"], cask: true, app: "Vorssaint")),
         SetupTask("vorssaint-profile", "Apps", "Vorssaint preferences", "Apply the portable preference snapshot, including quit-on-last-window. Quit Vorssaint first. Private snippets, shelf contents and machine state are excluded.", dependencies: ["vorssaint"], action: .vorssaint),
         SetupTask("vorssaint-access", "Apps", "Vorssaint access and remaining settings", "Finish permissions and settings that cannot be transferred as public preferences.", dependencies: ["vorssaint-profile"], action: .guide(url: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility", app: "Vorssaint", instructions: [
-            "Launch Vorssaint and complete its onboarding. Grant only permissions requested by the features you enable.",
+            "If Welcome appears, choose individual features. Keep Quit on close enabled. Keep App Switcher disabled so native Command+Tab can follow AeroSpace workspaces. Leave optional recording, microphone and disk access features off.",
             "Check Quit on close and select the apps it should affect. Test by closing an app's last window.",
-            "Use Vorssaint's native Settings export/import for a full personal transfer, including defaults not persisted to disk. Review any export before sharing; never publish snippets or personal content.",
+            "In Privacy & Security > Accessibility, enable Vorssaint for Quit on close. Return to Vorssaint and enable Launch at login.",
             "Enable launch at login in Vorssaint itself. The captured profile merges portable stored settings; it does not overwrite another Mac's private content or register login items."
         ])),
         SetupTask("raycast", "Apps", "Raycast", "Install Raycast. Account setup and personal extensions stay local.", dependencies: ["homebrew"], action: .install(packages: ["raycast"], cask: true, app: "Raycast")),
-        SetupTask("raycast-access", "Apps", "Raycast setup", "Set the launcher shortcut and authorize the extensions you use.", dependencies: ["raycast"], action: .guide(url: nil, app: "Raycast", instructions: [
-            "Complete Raycast onboarding and choose your launcher shortcut.",
-            "Resolve the Spotlight shortcut conflict if necessary. Grant the permissions requested by your selected extensions.",
-            "Enable launch at login in Raycast Settings if desired."
+        SetupTask("raycast-profile", "Apps", "Raycast launcher shortcut", "Use Command+Space for Raycast and release the same shortcut from Spotlight. Existing Spotlight settings are backed up.", dependencies: ["raycast"], action: .preferences([
+            Preference("com.raycast.macos", "raycastGlobalHotkey", "Command-49")
+        ], restart: nil)),
+        SetupTask("raycast-access", "Apps", "Raycast setup", "Set the launcher shortcut and authorize the extensions you use.", dependencies: ["raycast-profile"], action: .guide(url: "x-apple.systempreferences:com.apple.Keyboard-Settings.extension", app: "Raycast", instructions: [
+            "If Raycast shows Welcome, continue with local setup. Skip account sign-in, AI, and extension suggestions if offered. Those are optional.",
+            "Open Raycast Settings > General. Raycast Hotkey should be Command+Space; if onboarding changed it, click that field and press Command+Space. Setup disables Spotlight’s conflicting Show Spotlight search shortcut automatically.",
+            "In Raycast Settings > General, enable Launch Raycast at login. Close Settings and press Command+Space: Raycast must appear instead of Spotlight before you mark this step complete."
         ])),
         SetupTask("karabiner", "Apps", "Karabiner-Elements", "Install the keyboard remapping tool.", dependencies: ["homebrew"], action: .install(packages: ["karabiner-elements"], cask: true, app: "Karabiner-Elements")),
         SetupTask("karabiner-profile", "Apps", "Karabiner configuration", "Apply portable application shortcuts. Replaces the Karabiner config folder after backup; one optional generic key-sequence example is disabled.", dependencies: ["karabiner"], action: .profile(["karabiner"])),
-        SetupTask("karabiner-access", "Apps", "Karabiner permissions", "Use Karabiner's own setup assistant for its helper permissions and driver approval.", dependencies: ["karabiner-profile"], action: .guide(url: "https://karabiner-elements.pqrs.org/docs/getting-started/installation/", app: "Karabiner-Elements", instructions: [
-            "Follow every permission and driver-approval step shown by Karabiner-Elements. The exact helper names and panes depend on its version.",
-            "Do not grant permissions to mac-setup as a substitute for Karabiner's helpers.",
+        SetupTask("karabiner-access", "Apps", "Karabiner permissions", "Use Karabiner's own setup assistant for its helper permissions and driver approval.", dependencies: ["karabiner-profile"], action: .guide(url: "x-apple.systempreferences:com.apple.LoginItems-Settings.extension", app: "Karabiner-Elements", instructions: [
+            "Background services: in System Settings > General > Login Items & Extensions, allow the Karabiner background services shown by its assistant. Keep the privileged core service and the user agent enabled.",
+            "Driver Extension: in General > Login Items & Extensions > Driver Extensions, allow org.pqrs.Karabiner-DriverKit-VirtualHIDDevice. This is required even after installing Karabiner; without it the remappings do not work.",
+            "Accessibility: in Privacy & Security > Accessibility, enable the Karabiner core service requested by its assistant. Approval for Mac Setup does not approve Karabiner.",
+            "Input Monitoring: enable the Karabiner helper requested by its assistant under Privacy & Security > Input Monitoring if Karabiner still asks for it. Return to Karabiner after each approval.",
+            "In Karabiner, select the Portable profile and the virtual keyboard layout matching your physical keyboard. Click Check again here; the step stays pending until the services, driver, virtual keyboard and permissions are ready.",
             "Test Option+Return for Alacritty, Option+E for Finder, and Option+V for Visual Studio Code. Install those target apps if needed."
         ])),
         SetupTask("alacritty", "Terminal", "Alacritty", "Install the terminal used by the keyboard shortcuts.", dependencies: ["homebrew"], action: .install(packages: ["alacritty"], cask: true, app: "Alacritty")),
@@ -96,8 +102,8 @@ public enum Catalog {
         SetupTask("atuin-shell", "Terminal", "Enable Atuin in zsh", "Append one managed initialization block to .zshrc. Open a new shell afterwards.", dependencies: ["atuin-profile"], action: .atuinShell),
         SetupTask("git-ignore", "Terminal", "Global Git ignore", "Preserve existing rules and append standard macOS ignores. Save the previous Git setting.", action: .gitIgnore),
         SetupTask("dark-mode", "Appearance", "Dark mode", "Set dark appearance. A logout may be needed for every app to refresh.", action: .preferences([Preference("NSGlobalDomain", "AppleInterfaceStyle", "Dark")], restart: nil)),
-        SetupTask("dock-hide", "Appearance", "Hide Dock with a long delay", "Enable auto-hide, set a five-second reveal delay, and hide recent apps. The undocumented delay setting may vary by macOS version.", action: .preferences([
-            Preference("com.apple.dock", "autohide", true), Preference("com.apple.dock", "autohide-delay", 5.0), Preference("com.apple.dock", "show-recents", false)
+        SetupTask("dock-hide", "Appearance", "Hide Dock; reveal after one second", "Hide the Dock until the pointer reaches the bottom edge. Reveal after about one second.", action: .preferences([
+            Preference("com.apple.dock", "autohide", true), Preference("com.apple.dock", "orientation", "bottom"), Preference("com.apple.dock", "autohide-time-modifier", 0.25), Preference("com.apple.dock", "autohide-delay", 1.0), Preference("com.apple.dock", "show-recents", false)
         ], restart: "Dock")),
         SetupTask("dock-minimal", "Appearance", "Clear pinned Dock items", "Remove pinned app and folder tiles after backup. Running apps, Finder and Trash can still appear.", action: .preferences([
             Preference("com.apple.dock", "persistent-apps", [String]()), Preference("com.apple.dock", "persistent-others", [String]()), Preference("com.apple.dock", "show-recents", false)
@@ -124,8 +130,9 @@ public enum Catalog {
         ])),
         SetupTask("menu-bar", "Appearance", "Hide the system menu bar", "Set menu-bar auto-hide to Always. Log out and back in if the visible menu bar has not refreshed.", action: .preferences([
             Preference("NSGlobalDomain", "_HIHideMenuBar", true),
-            Preference("NSGlobalDomain", "AppleMenuBarVisibleInFullscreen", false)
-        ], restart: nil)),
+            Preference("NSGlobalDomain", "AppleMenuBarVisibleInFullscreen", false),
+            Preference("NSGlobalDomain", "AppleMenuBarVisibleInDesktop", false)
+        ], restart: "SystemUIServer")),
         SetupTask("trackpad", "Appearance", "Two-finger secondary click", "Enable two-finger right-click and disable corner secondary clicks for built-in and Bluetooth trackpads. Tap-to-click is preserved; a logout may be needed.", action: .preferences([
             Preference("com.apple.AppleMultitouchTrackpad", "TrackpadRightClick", true),
             Preference("com.apple.AppleMultitouchTrackpad", "TrackpadCornerSecondaryClick", 0),
@@ -143,9 +150,9 @@ public enum Catalog {
         SetupTask("wallpaper-watcher", "Appearance", "Automatic wallpaper color updates", "Use the existing WallpaperAccentWatcher.app and its user-level login service. No replacement watcher is installed.", dependencies: ["wallpaper-tools", "sketchybar-start"], action: .wallpaperWatcher),
         SetupTask("wallpaper-access", "Appearance", "WallpaperAccentWatcher permissions and test", "Approve wallpaper access for WallpaperAccentWatcher itself, then verify automatic color changes.", dependencies: ["wallpaper-watcher"], action: .guide(url: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles", app: nil, instructions: [
             "Change to another static wallpaper and check that the focused SketchyBar workspace changes color after a few seconds.",
-            "Run mac-setup watcher-status to see registration and recent logs. A running job alone does not prove wallpaper access.",
-            "Open Privacy & Security > Full Disk Access. Drag the revealed WallpaperAccentWatcher.app into the list and enable its switch if your wallpaper provider stores files in a protected container. Approve the macOS authentication prompt yourself; permission given to Terminal or mac-setup does not authorize this app.",
-            "Run mac-setup watcher-stop, then mac-setup watcher-enable after approving access. Change the wallpaper and use watcher-status to confirm an event=apply result=focused-updated-once log entry and the visible accent change. Do not confirm this task until the test succeeds.",
+            "If the accent does not change, open permission settings below. Add WallpaperAccentWatcher.app from Applications (or your user Applications folder) and enable it when your wallpaper provider needs protected-file access.",
+            "Approve the macOS authentication prompt yourself; permission given to Mac Setup does not authorize WallpaperAccentWatcher.",
+            "Quit and reopen WallpaperAccentWatcher after approving access. Change the wallpaper again and mark this task complete only after you see the accent update.",
             "Do not run another wallpaper watcher alongside WallpaperAccentWatcher. Permissions are never granted automatically."
         ]))
     ]

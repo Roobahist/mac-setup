@@ -2,12 +2,13 @@ import Foundation
 
 /// Selection policy shared by the terminal UI and scripted presets.
 public enum SetupPreset: String, CaseIterable {
-    case minimal, productivity, developer, complete
+    case repair, minimal, productivity, developer, complete
 
     public var title: String { rawValue.capitalized }
 
     public var summary: String {
         switch self {
+        case .repair: return "Repair the workspace bar, Dock, launcher and keyboard setup"
         case .complete: return "All setup tasks, including permissions and checks"
         case .minimal: return "Homebrew, fonts, dark mode, and Git ignores"
         case .productivity: return "Windows, applications, and macOS appearance"
@@ -18,6 +19,11 @@ public enum SetupPreset: String, CaseIterable {
     public func ids(in tasks: [SetupTask]) -> Set<String> {
         let ids: Set<String>
         switch self {
+        case .repair:
+            ids = ["fonts", "tomito", "aerospace-profile", "mission-control", "aerospace-access",
+                   "sketchybar-profile", "sketchybar-start", "vorssaint-profile", "vorssaint-access",
+                   "raycast-profile", "raycast-access", "karabiner-profile", "karabiner-access",
+                   "alacritty-profile", "dock-hide", "menu-bar"]
         case .complete:
             ids = Set(tasks.map(\.id))
         case .minimal:

@@ -437,11 +437,10 @@ final class EngineTests: XCTestCase {
         XCTAssertTrue(runner.jobs.contains(WallpaperWatcher.label))
     }
 
-    func testWatcherPermissionGuideRevealsTheAppAndSettings() throws {
-        let binary = try existingWatcher()
+    func testWatcherPermissionGuideOpensSettingsWithoutRandomFinderWindow() throws {
+        _ = try existingWatcher()
         try engine.openGuide(Catalog.task("wallpaper-access"))
-        let app = binary.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        XCTAssertTrue(runner.calls.contains(["/usr/bin/open", "-R", app.path]))
+        XCTAssertFalse(runner.calls.contains { $0.first == "/usr/bin/open" && $0.contains("-R") })
         XCTAssertTrue(runner.calls.contains(["/usr/bin/open", "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"]))
         XCTAssertFalse(runner.calls.contains { $0[0].contains("tcc") || $0[0] == "/bin/launchctl" })
     }

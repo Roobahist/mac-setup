@@ -2,6 +2,12 @@
 
 PLUGIN_DIR="$CONFIG_DIR/plugins"
 source "$PLUGIN_DIR/colors.sh"
+# AppKit supplies logical point heights for this host and its notch.
+BAR_HEIGHT=22
+NOTCH_HEIGHT=0
+if [ -x "$PLUGIN_DIR/mac-setup-display" ]; then
+  read -r BAR_HEIGHT NOTCH_HEIGHT < <("$PLUGIN_DIR/mac-setup-display" sizes)
+fi
 
 
 ##### Bar Appearance #####
@@ -10,12 +16,16 @@ source "$PLUGIN_DIR/colors.sh"
 # rendering issue, and this bar intentionally uses a large blur radius.
 sketchybar --bar \
   position=top \
-  height=30 \
+  height="$BAR_HEIGHT" \
+  notch_display_height="$NOTCH_HEIGHT" \
+  y_offset=0 \
+  notch_offset=0 \
+  margin=0 \
   blur_radius=50 \
   shadow=off \
   color="$BAR_COLOR" \
   display=all \
-  topmost=off \
+  topmost=window \
   hidden=off
 
 
@@ -203,9 +213,10 @@ sketchybar \
   --add item workspace_observer left \
   --set workspace_observer \
     drawing=off \
+    update_freq=2 \
     updates=on \
     script="/bin/bash '$PLUGIN_DIR/aerospace.sh'$WORKSPACE_ARGS" \
-  --subscribe workspace_observer aerospace_workspace_change
+  --subscribe workspace_observer aerospace_workspace_change front_app_switched system_woke
 
 
 ##### Clock #####
@@ -252,4 +263,13 @@ if [ -n "$INITIAL_FOCUSED_WORKSPACE" ]; then
     > "$HOME/.cache/sketchybar/focused-workspace"
   sketchybar --trigger aerospace_workspace_change \
     FOCUSED="$INITIAL_FOCUSED_WORKSPACE"
+fi
+
+##### Host Display Geometry #####
+sketchybar --add item display_geometry left \
+  --set display_geometry drawing=off updates=on update_freq=15 \
+    script="/bin/bash '$PLUGIN_DIR/geometry.sh'" \
+  --subscribe display_geometry display_change system_woke
+if [ -x "$PLUGIN_DIR/mac-setup-display" ]; then
+  /bin/bash "$PLUGIN_DIR/geometry.sh"
 fi

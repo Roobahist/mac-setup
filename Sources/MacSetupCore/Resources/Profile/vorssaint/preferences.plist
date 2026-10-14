@@ -345,7 +345,7 @@
 	<key>snippetLibraryEnabled</key>
 	<true/>
 	<key>switcherEnabled</key>
-	<true/>
+	<false/>
 	<key>switcherIconRowMode</key>
 	<true/>
 	<key>switcherMergeTabs</key>
