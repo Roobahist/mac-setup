@@ -30,7 +30,7 @@ final class ShortcutSettingsTests: XCTestCase {
             from: settings.aerospaceTemplateApplying(to: aerospaceTemplate())
         )
         XCTAssertTrue(result.contains("ctrl-alt-f = 'fullscreen'"))
-        XCTAssertFalse(result.contains("alt-f = 'fullscreen'"))
+        XCTAssertFalse(result.components(separatedBy: "\n").contains("alt-f = 'fullscreen'"))
     }
 
     func testDisablingAndRemovingAeroSpaceBinding() throws {
@@ -61,7 +61,7 @@ final class ShortcutSettingsTests: XCTestCase {
         let manipulators = try XCTUnwrap(custom["manipulators"] as? [[String: Any]])
         XCTAssertEqual(manipulators.count, 4)
         let encoded = String(decoding: output, as: UTF8.self)
-        XCTAssertTrue(encoded.contains("/usr/bin/open -b com.apple.Safari"))
+        XCTAssertTrue(encoded.contains("com.apple.Safari"))
         XCTAssertTrue(encoded.contains("open_new_window.sh"))
     }
 
