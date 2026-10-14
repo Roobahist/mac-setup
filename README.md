@@ -6,7 +6,7 @@ The portable configurations come from [dot-files](https://github.com/Roobahist/d
 
 ## Start here: install and open the app
 
-macOS 13+ is required. Building from source requires Swift 5.9+ and a compatible Apple developer toolchain. On newer SwiftUI SDKs, full Xcode is required because standalone Command Line Tools may lack the SwiftUIMacros compiler plugin. Vorssaint requires Apple silicon and macOS 14+.
+macOS 13+ is required. Building from source requires Swift 5.9+ with compatible Apple Command Line Tools or Xcode. Full Xcode is not required for the Mac Setup source build. Vorssaint requires Apple silicon and macOS 14+.
 
 Run the installer as your normal macOS user, without `sudo`:
 
@@ -19,18 +19,21 @@ open "$HOME/Applications/Mac Setup.app"
 
 The installer creates `~/Applications/Mac Setup.app` as a link to the managed bundle in `~/.local/lib/mac-setup/current`. Reopen it from Finder to make later adjustments. To rebuild after a source update, run `git pull && bash install.sh`.
 
-### Building with Xcode 27 and newer SwiftUI SDKs
+### SwiftUI compatibility with Command Line Tools
 
-SwiftUI now implements `@State` as a compiler macro when building against the latest SDKs. Some standalone Command Line Tools installations expose the newer SwiftUI headers without the `SwiftUIMacros` compiler plugin, resulting in `plugin for module 'SwiftUIMacros' not found`, missing `$binding` errors, and spurious immutable-`self` errors.
+The macOS 27 / Xcode 27 SwiftUI SDK also declares `@State` as a compiler macro. Some standalone Apple Command Line Tools installations do not ship its `SwiftUIMacros` implementation, so using `@State` directly results in a missing-plugin error followed by misleading binding and immutable-`self` errors.
 
-`bash install.sh` automatically uses `/Applications/Xcode.app/Contents/Developer` for the build when full Xcode is present but Command Line Tools are selected. This override applies only to the build, not the system-wide developer setting. Older, compatible Command Line Tools installations continue to work. If your Xcode is installed in a nonstandard location, select it for this invocation explicitly:
+Mac Setup uses `@LocalViewState`, an alias for the existing `SwiftUI.State<Value>` **property wrapper**, in its native views. The property wrapper works with both older SwiftUI SDKs and newer SDKs where the macro is unavailable. This preserves the project's previous build-from-source support with Command Line Tools. The views use value-type state, so this workaround does not change their model initialization behavior.
+
+The build script respects your `xcode-select` or `DEVELOPER_DIR` selection, does not require or automatically switch to Xcode, and keeps its normal isolated build caches.
 
 ```sh
 xcode-select -p
-DEVELOPER_DIR="/path/to/Xcode.app/Contents/Developer" bash install.sh
+git pull origin main
+bash install.sh
 ```
 
-If the toolchain has the macro/plugin mismatch and full Xcode is absent, the build script stops with a specific diagnostic instead of emitting dozens of unrelated SwiftUI errors. Install full Xcode or use a compatible prebuilt release.
+If you maintain these views, use `@LocalViewState` for new local state, not direct `@State`. CI checks for accidental reintroductions and compiles with Xcode 27; it also attempts a standalone Command Line Tools build on runners where those tools are installed.
 
 ## Everyday customization
 

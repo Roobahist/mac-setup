@@ -10,8 +10,8 @@ struct ShortcutStudio: View {
     let apps: [InstalledApplication]
     let aerospaceTemplate: String
     let karabinerTemplate: Data
-    @State private var editing: ManagedShortcut?
-    @State private var editingAdvanced: AdvancedKarabinerRule?
+    @LocalViewState private var editing: ManagedShortcut?
+    @LocalViewState private var editingAdvanced: AdvancedKarabinerRule?
 
     private var advancedTemplates: [AdvancedKarabinerRule] {
         ShortcutSettings.bundledAdvancedKarabinerRules(from: karabinerTemplate)
@@ -272,10 +272,10 @@ private struct ShortcutItemEditor: View {
     let save: (ManagedShortcut) -> Void
     let cancel: () -> Void
 
-    @State private var draft: ManagedShortcut
-    @State private var selectedAction: String
-    @State private var bundleID: String
-    @State private var error = ""
+    @LocalViewState private var draft: ManagedShortcut
+    @LocalViewState private var selectedAction: String
+    @LocalViewState private var bundleID: String
+    @LocalViewState private var error = ""
 
     init(item: ManagedShortcut, aerospaceActions: [(title: String, action: String)],
          apps: [InstalledApplication], validate: @escaping (ManagedShortcut) -> String?,
@@ -285,9 +285,9 @@ private struct ShortcutItemEditor: View {
         self.validate = validate
         self.save = save
         self.cancel = cancel
-        _draft = State(initialValue: item)
-        _selectedAction = State(initialValue: item.action.hasPrefix("open:") ? "open-app" : item.action)
-        _bundleID = State(initialValue: item.action.hasPrefix("open:") ? String(item.action.dropFirst(5)) : "")
+        _draft = LocalViewState(initialValue: item)
+        _selectedAction = LocalViewState(initialValue: item.action.hasPrefix("open:") ? "open-app" : item.action)
+        _bundleID = LocalViewState(initialValue: item.action.hasPrefix("open:") ? String(item.action.dropFirst(5)) : "")
     }
 
     private var candidate: ManagedShortcut {
@@ -391,8 +391,8 @@ private struct AdvancedKarabinerEditor: View {
     let validate: (AdvancedKarabinerRule) -> String?
     let save: (AdvancedKarabinerRule) -> Void
     let cancel: () -> Void
-    @State private var value: AdvancedKarabinerRule
-    @State private var message = ""
+    @LocalViewState private var value: AdvancedKarabinerRule
+    @LocalViewState private var message = ""
 
     init(item: AdvancedKarabinerRule,
          validate: @escaping (AdvancedKarabinerRule) -> String?,
@@ -401,7 +401,7 @@ private struct AdvancedKarabinerEditor: View {
         self.validate = validate
         self.save = save
         self.cancel = cancel
-        _value = State(initialValue: item)
+        _value = LocalViewState(initialValue: item)
     }
 
     var body: some View {

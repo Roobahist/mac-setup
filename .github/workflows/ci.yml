@@ -13,6 +13,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Check SwiftUI property wrapper compatibility
+        run: python3 scripts/check-swiftui-state.py
       - name: Test with isolated homes and fake system commands
         run: swift test --build-system native
       - name: Smoke-test CLI commands
@@ -41,8 +43,8 @@ jobs:
             dist/*.sha256
           retention-days: 7
 
-  # Xcode 27 changes SwiftUI @State into a macro. Check against its real
-  # compiler and SDK rather than relying solely on the macOS 15 runner.
+  # Build against the Xcode 27 SwiftUI SDK as well as the older CI image.
+  # When CLT is installed on the runner, also compile without Xcode selected.
   xcode-27-compat:
     runs-on: xcode-27
     steps:
@@ -54,3 +56,13 @@ jobs:
           swift test --build-system native
       - name: Build native app bundle
         run: bash scripts/package.sh arm64 preview
+      - name: Build with standalone Command Line Tools when available
+        shell: bash
+        run: |
+          if [[ -x /Library/Developer/CommandLineTools/usr/bin/swiftc ]]; then
+            echo "Testing without Xcode using standalone Command Line Tools"
+            DEVELOPER_DIR=/Library/Developer/CommandLineTools \
+              MAC_SETUP_BUILD_DIR=.build/clt bash scripts/build.sh -c release
+          else
+            echo "::notice::Standalone Command Line Tools are absent from this runner; source lint and Xcode 27 compilation still run."
+          fi

@@ -4,10 +4,10 @@ import MacSetupCore
 
 struct DesktopAccentControls: View {
     let engine: Engine
-    @State private var watcherEnabled = false
-    @State private var selectedColor = Color.purple
-    @State private var working = false
-    @State private var status = ""
+    @LocalViewState private var watcherEnabled = false
+    @LocalViewState private var selectedColor = Color.purple
+    @LocalViewState private var working = false
+    @LocalViewState private var status = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {

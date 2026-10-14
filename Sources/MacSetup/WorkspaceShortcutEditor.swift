@@ -1,9 +1,6 @@
 import SwiftUI
 import MacSetupCore
 
-// Use the property wrapper, including with SDKs that also export a State macro.
-typealias LocalViewState<Value> = SwiftUI.State<Value>
-
 struct WorkspaceShortcutEditor: View {
     let name: String
     let defaults: WorkspaceShortcuts
@@ -24,12 +21,12 @@ struct WorkspaceShortcutEditor: View {
         self.validate = validate
         self.save = save
         let pair = workspace.shortcuts ?? defaults
-        _mode = State(initialValue: workspace.shortcuts == nil ? 0 :
+        _mode = LocalViewState(initialValue: workspace.shortcuts == nil ? 0 :
             pair.switchTo == nil && pair.moveWindow == nil ? 2 : 1)
-        _switchEnabled = State(initialValue: pair.switchTo != nil || workspace.shortcuts == nil)
-        _moveEnabled = State(initialValue: pair.moveWindow != nil || workspace.shortcuts == nil)
-        _switchShortcut = State(initialValue: pair.switchTo ?? .init(key: "a", modifiers: ["ctrl", "alt"]))
-        _moveShortcut = State(initialValue: pair.moveWindow ?? .init(key: "a", modifiers: ["ctrl", "alt", "shift"]))
+        _switchEnabled = LocalViewState(initialValue: pair.switchTo != nil || workspace.shortcuts == nil)
+        _moveEnabled = LocalViewState(initialValue: pair.moveWindow != nil || workspace.shortcuts == nil)
+        _switchShortcut = LocalViewState(initialValue: pair.switchTo ?? .init(key: "a", modifiers: ["ctrl", "alt"]))
+        _moveShortcut = LocalViewState(initialValue: pair.moveWindow ?? .init(key: "a", modifiers: ["ctrl", "alt", "shift"]))
     }
 
     private var value: WorkspaceShortcuts? {
