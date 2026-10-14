@@ -100,7 +100,7 @@ try:
     assert b"SHORTCUT" in workspace_screen and b"GLYPH" in workspace_screen
     assert b"APP RULES" in workspace_screen
     assert b"robot" in workspace_screen, "Glyph name must be readable without Nerd Font"
-    assert b"\\x1b[1;38;5;231;48;5;24m" in workspace_screen, "Selection has no highlight"
+    assert b"\x1b[1;38;5;231;48;5;24m" in workspace_screen, "Selection has no highlight"
     os.write(master, b"g")
     read_until(lambda b: b"Type to filter glyph" in active_screen(b))
     os.write(master, b"clock")
