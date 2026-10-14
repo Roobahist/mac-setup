@@ -64,9 +64,13 @@ struct ControlCenterView: View {
 
     var body: some View {
         HStack(spacing: 0) {
+            // Render one full-width sidebar in both modes. Only the outside
+            // viewport gets narrower. This preserves the *same* native rows,
+            // icon positions, hover areas, selection highlights and spacing.
             sidebar
-                .frame(width: compactSidebar ? 70 : 248)
-                // Retain the original native, translucent sidebar styling.
+                .frame(width: 248, alignment: .leading)
+                .frame(width: compactSidebar ? 70 : 248, alignment: .leading)
+                .clipped()
                 .background(.regularMaterial)
             Divider()
             VStack(spacing: 0) {
@@ -143,6 +147,9 @@ struct ControlCenterView: View {
     // Expanded and collapsed sidebar use identical rows, icon sizes, and
     // leading offsets. Collapsing only removes their titles.
     private var sidebar: some View {
+        // The sidebar NEVER changes its internal geometry when collapsed.
+        // It is always 248pt wide; the parent only masks everything after
+        // 70pt. Exactly one native List supplies both navigation modes.
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 12) {
                 Button {
@@ -157,135 +164,93 @@ struct ControlCenterView: View {
                 .help(compactSidebar ? "Expand sidebar" : "Collapse sidebar")
                 .accessibilityLabel(compactSidebar ? "Expand sidebar" : "Collapse sidebar")
 
-                if !compactSidebar {
-                    HStack(spacing: 9) {
-                        Image(systemName: "slider.horizontal.3")
-                            .font(.system(size: 19, weight: .medium))
-                            .foregroundStyle(Color.accentColor)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Mac Setup").font(.headline)
-                            Text("Your Mac, your way")
-                                .font(.caption).foregroundStyle(.secondary)
-                        }
+                HStack(spacing: 9) {
+                    Image(systemName: "slider.horizontal.3")
+                        .font(.system(size: 19, weight: .medium))
+                        .foregroundStyle(Color.accentColor)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Mac Setup").font(.headline)
+                        Text("Your Mac, your way")
+                            .font(.caption).foregroundStyle(.secondary)
                     }
                 }
+                // Preserve header layout while hiding decorative branding
+                // in the cropped view. The collapse button never moves.
+                .opacity(compactSidebar ? 0 : 1)
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, compactSidebar ? 20 : 14)
+            .padding(.horizontal, 14)
             .padding(.top, 19)
             .padding(.bottom, 12)
 
-            if compactSidebar {
-                Button {
-                    compactSidebar = false
-                } label: {
-                    Image(systemName: "magnifyingglass")
-                        .font(.system(size: 17))
-                        .frame(width: 30, height: 34)
-                }
-                .buttonStyle(.plain)
-                .help("Expand sidebar to search settings")
-                .accessibilityLabel("Expand sidebar to search settings")
-                .padding(.horizontal, 20)
-            } else {
-                TextField("Search settings", text: $query)
-                    .textFieldStyle(.roundedBorder)
-                    .padding(.horizontal, 12)
-                    .accessibilityLabel("Search settings and features")
-            }
-
-            if compactSidebar {
-                // This is an actual icon rail, not a narrow List with cropped labels.
-                // Expanded mode below remains the original native macOS sidebar.
-                ScrollView {
-                    VStack(spacing: 4) {
-                        ForEach(customization) { item in compactRow(item) }
-                        Divider()
-                            .padding(.vertical, 8)
-                        Button(action: beginGuided) {
-                            Image(systemName: ControlDestination.guidedSetup.symbol)
-                                .font(.system(size: 19))
-                                .frame(width: 50, height: 43)
-                                .background(guidedStep != nil
-                                    ? Color.primary.opacity(0.16) : Color.clear,
-                                    in: RoundedRectangle(cornerRadius: 10))
+            // Search keeps its normal full-width layout too. Only the
+            // magnifier is exposed within the narrow viewport.
+            TextField("Search settings", text: $query)
+                .textFieldStyle(.roundedBorder)
+                .padding(.horizontal, 12)
+                .opacity(compactSidebar ? 0 : 1)
+                .overlay(alignment: .leading) {
+                    if compactSidebar {
+                        Button { compactSidebar = false } label: {
+                            Image(systemName: "magnifyingglass")
+                                .font(.system(size: 17))
+                                .frame(width: 32, height: 28)
                         }
                         .buttonStyle(.plain)
-                        .foregroundStyle(Color.accentColor)
-                        .help("Guided Setup")
-                        .accessibilityLabel("Guided Setup")
-                        compactRow(.updates)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 10)
-                }
-            } else {
-                List(selection: $destination) {
-                    Section {
-                        ForEach(customization) { item in
-                            sidebarLabel(item).tag(item)
-                        }
-                    } header: {
-                        Text("Customize")
-                            .opacity(compactSidebar ? 0 : 1)
-                            .accessibilityHidden(compactSidebar)
-                    }
-
-                    Section {
-                        Button(action: beginGuided) {
-                            sidebarLabel(.guidedSetup)
-                                .foregroundStyle(guidedStep != nil
-                                    ? Color.accentColor : Color.primary)
-                        }
-                        .buttonStyle(.plain)
-                        .help("Walk through the existing customization sections")
-                        .accessibilityLabel("Guided Setup")
-
-                        sidebarLabel(.updates).tag(ControlDestination.updates)
-                    } header: {
-                        Text("Mac Setup")
-                            .opacity(compactSidebar ? 0 : 1)
-                            .accessibilityHidden(compactSidebar)
+                        .padding(.leading, 19)
+                        .help("Expand sidebar to search settings")
+                        .accessibilityLabel("Expand sidebar to search settings")
                     }
                 }
-                .listStyle(.sidebar)
-                .scrollContentBackground(.hidden)
+                .accessibilityLabel("Search settings and features")
+
+            List(selection: $destination) {
+                Section {
+                    ForEach(customization) { item in
+                        Label(item.title, systemImage: item.symbol).tag(item)
+                    }
+                } header: {
+                    Text("Customize")
+                        .opacity(compactSidebar ? 0 : 1)
+                        .accessibilityHidden(compactSidebar)
+                }
+
+                Section {
+                    Button(action: beginGuided) {
+                        Label(ControlDestination.guidedSetup.title,
+                              systemImage: ControlDestination.guidedSetup.symbol)
+                            .foregroundStyle(guidedStep != nil
+                                ? Color.accentColor : Color.primary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Walk through the existing customization sections")
+                    .accessibilityLabel("Guided Setup")
+
+                    Label(ControlDestination.updates.title,
+                          systemImage: ControlDestination.updates.symbol)
+                        .tag(ControlDestination.updates)
+                } header: {
+                    Text("Mac Setup")
+                        .opacity(compactSidebar ? 0 : 1)
+                        .accessibilityHidden(compactSidebar)
+                }
             }
+            .listStyle(.sidebar)
+            .scrollContentBackground(.hidden)
 
-            if !compactSidebar {
-                HStack(spacing: 8) {
-                    Text("Version \(MacSetupVersion.installed)")
-                    Spacer(minLength: 0)
-                    Circle().fill(model.busy ? Color.orange : Color.green)
-                        .frame(width: 7, height: 7)
-                        .accessibilityLabel(model.busy ? "Checking or applying settings" : "Ready")
-                }
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 16)
-                .padding(.bottom, 12)
+            HStack(spacing: 8) {
+                Text("Version \(MacSetupVersion.installed)")
+                Spacer(minLength: 0)
+                Circle().fill(model.busy ? Color.orange : Color.green)
+                    .frame(width: 7, height: 7)
+                    .accessibilityLabel(model.busy ? "Checking or applying settings" : "Ready")
             }
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 12)
+            .opacity(compactSidebar ? 0 : 1)
         }
-    }
-
-    // This is used only by the expanded native List. Compact mode never
-    // attempts to squeeze a text-bearing List row into the icon rail.
-    private func sidebarLabel(_ item: ControlDestination) -> some View {
-        Label(item.title, systemImage: item.symbol)
-    }
-
-    private func compactRow(_ item: ControlDestination) -> some View {
-        Button { selectDestination(item) } label: {
-            Image(systemName: item.symbol)
-                .font(.system(size: 19))
-                .frame(width: 50, height: 43)
-                .background(destination == item ? Color.primary.opacity(0.16) : Color.clear,
-                            in: RoundedRectangle(cornerRadius: 10))
-                .foregroundStyle(Color.accentColor)
-        }
-        .buttonStyle(.plain)
-        .help(item.title)
-        .accessibilityLabel(item.title)
     }
 
     private func selectDestination(_ item: ControlDestination) {
