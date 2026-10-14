@@ -16,7 +16,7 @@ cp "$BIN_DIR/mac-setup" "$DEST/mac-setup"
 cp "$BIN_DIR/mac-setup-display" "$DEST/mac-setup-display"
 cp "$BIN_DIR/mac-setup-wallpaper-watcher" "$DEST/mac-setup-wallpaper-watcher"
 cp -R "$BIN_DIR/MacSetup_MacSetupCore.bundle" "$DEST/"
-bash scripts/app-bundle.sh "$BIN_DIR" "$DEST/Mac Setup.app"
+MAC_SETUP_RELEASE_VERSION="$VERSION" bash scripts/app-bundle.sh "$BIN_DIR" "$DEST/Mac Setup.app"
 cp scripts/install.sh README.md LICENSE NOTICE.md "$DEST/"
 chmod +x "$DEST/mac-setup" "$DEST/install.sh"
 # Ad-hoc signing meets Apple silicon's local executable requirement. It is
