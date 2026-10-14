@@ -28,7 +28,6 @@ private final class SetupModel: ObservableObject {
     @Published var selectedWorkspace = 0
     @Published var appSheet = false
     @Published var appSearch = ""
-    @Published var shortcutsConfirmed = false
     @Published var runLog = ""
     var scope: SetupScope = .full
     private let worker = DispatchQueue(label: "mac-setup.native", qos: .userInitiated)
@@ -89,7 +88,6 @@ private final class SetupModel: ObservableObject {
     func openEditor(_ selected: SetupScope) {
         scope = selected
         message = ""
-        shortcutsConfirmed = selected == .workspaces
         page = selected == .workspaces ? .workspaces : .shortcuts
     }
 
@@ -289,7 +287,13 @@ private final class SetupModel: ObservableObject {
         do { try engine.openGuideSettings(task) } catch { message = String(describing: error) }
     }
 
-    func returnToFeatures() { setupLock = nil; page = .features; refreshInventory() }
+    func returnToFeatures() {
+        setupLock = nil
+        scope = .full
+        message = ""
+        page = .features
+        refreshInventory()
+    }
 
     func sendInput() { runner.send(response); response = "" }
 }
@@ -299,6 +303,7 @@ private struct SetupView: View {
     @LocalViewState private var glyphWorkspaceID: String?
     @LocalViewState private var workspaceDragSession = UUID().uuidString
     @LocalViewState private var dropTargetWorkspaceID: String?
+    @LocalViewState private var expandedTaskCategories = Set<String>()
 
     private var previewTime: String {
         let formatter = DateFormatter()
@@ -335,11 +340,13 @@ private struct SetupView: View {
                     Text("Apps, workspaces, and the checks that make them work.").foregroundStyle(.secondary)
                 }
                 Spacer()
-                Text(model.scope == .full ? "Step \(step) of 5" : "Edit settings").font(.headline)
+                Text("Mac Setup").font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.secondary)
             }.padding(24)
             HStack(spacing: 24) {
                 ForEach(Array(["Choose features", "Shortcuts", "Workspaces", "Review", "Set up & test"].enumerated()), id: \.offset) { index, name in
-                    Label(name, systemImage: index + 1 < step ? "checkmark.circle.fill" : "\(index + 1).circle")
+                    Label(name, systemImage: model.scope == .full && index + 1 < step
+                          ? "checkmark.circle.fill" : "\(index + 1).circle")
                         .foregroundStyle(index + 1 == step ? Color.accentColor : Color.secondary)
                 }
             }.padding(.horizontal, 24).padding(.bottom, 20)
@@ -390,22 +397,65 @@ private struct SetupView: View {
             }
             TextField("Find a feature", text: $model.search).textFieldStyle(.roundedBorder)
             ForEach(model.picker.categories.dropFirst(), id: \.self) { category in
-                DisclosureGroup("\(category) · \(Catalog.tasks.filter { $0.category == category && model.picker.selected.contains($0.id) }.count) selected") {
-                    VStack(alignment: .leading, spacing: 12) {
-                    ForEach(Catalog.tasks.filter { $0.category == category && (model.search.isEmpty || ($0.title + " " + $0.summary).localizedCaseInsensitiveContains(model.search)) }, id: \.id) { task in
-                        HStack(alignment: .top) {
-                            Toggle(isOn: Binding(get: { model.picker.selected.contains(task.id) }, set: { _ in model.picker.toggle(task.id) })) {
-                                VStack(alignment: .leading, spacing: 5) {
-                                    Text(task.title).fontWeight(.medium)
-                                    Text(task.summary).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                                }
-                            }.toggleStyle(.checkbox).disabled(model.busy)
-                            Spacer(minLength: 16)
-                            Text(task.guided ? "You test" : "Automatic").font(.caption).foregroundStyle(.secondary).frame(width: 80)
+                let selectedCount = Catalog.tasks.filter {
+                    $0.category == category && model.picker.selected.contains($0.id)
+                }.count
+                VStack(alignment: .leading, spacing: 0) {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.16)) {
+                            if expandedTaskCategories.contains(category) {
+                                expandedTaskCategories.remove(category)
+                            } else {
+                                expandedTaskCategories.insert(category)
+                            }
                         }
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 12, weight: .semibold))
+                                .rotationEffect(.degrees(expandedTaskCategories.contains(category) ? 90 : 0))
+                                .frame(width: 16)
+                            Text(category).font(.system(size: 15, weight: .medium))
+                            Spacer(minLength: 12)
+                            Text("\(selectedCount) selected")
+                                .font(.system(size: 13))
+                                .foregroundStyle(.secondary)
+                        }
+                        .contentShape(Rectangle())
+                        .frame(maxWidth: .infinity, minHeight: 56)
+                        .padding(.horizontal, 18)
                     }
-                    }.padding(.top, 14)
-                }.padding(18).background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(category), \(selectedCount) selected")
+                    .accessibilityHint(expandedTaskCategories.contains(category) ? "Collapse group" : "Expand group")
+
+                    if expandedTaskCategories.contains(category) {
+                        Divider().padding(.horizontal, 18)
+                        VStack(alignment: .leading, spacing: 14) {
+                            ForEach(Catalog.tasks.filter { $0.category == category &&
+                                (model.search.isEmpty ||
+                                 ($0.title + " " + $0.summary)
+                                    .localizedCaseInsensitiveContains(model.search)) }, id: \.id) { task in
+                                HStack(alignment: .top, spacing: 18) {
+                                    Toggle(isOn: Binding(
+                                        get: { model.picker.selected.contains(task.id) },
+                                        set: { _ in model.picker.toggle(task.id) })) {
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text(task.title).fontWeight(.medium)
+                                            Text(task.summary).font(.callout).foregroundStyle(.secondary)
+                                                .fixedSize(horizontal: false, vertical: true)
+                                        }
+                                    }.toggleStyle(.checkbox).disabled(model.busy)
+                                    Spacer(minLength: 8)
+                                    Text(task.guided ? "User approval" : "Automatic")
+                                        .font(.caption).foregroundStyle(.secondary)
+                                        .frame(width: 102, alignment: .trailing)
+                                }
+                            }
+                        }.padding(18)
+                    }
+                }
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
             }
             Text(model.picker.preset?.summary ?? "Custom selection. Open a section to change its tasks.").foregroundStyle(.secondary)
         }
@@ -722,7 +772,6 @@ private struct SetupView: View {
                 Spacer()
                 Button("Continue") {
                     model.scope = .full
-                    model.shortcutsConfirmed = false
                     if model.picker.selected.contains("aerospace-profile")
                         || model.picker.selected.contains("karabiner-profile")
                         || model.picker.selected.contains("raycast-profile") {
@@ -730,7 +779,7 @@ private struct SetupView: View {
                     } else { model.review() }
                 }.disabled(model.busy || model.picker.selectedCount == 0).keyboardShortcut(.defaultAction)
             case .shortcuts:
-                Button("Back") { model.page = .features }; Spacer()
+                Button("Back") { model.returnToFeatures() }; Spacer()
                 Button("Continue") {
                     if model.scope == .shortcuts { model.review() }
                     else if model.picker.selected.contains("aerospace-profile") { model.page = .workspaces }
@@ -738,7 +787,10 @@ private struct SetupView: View {
                 }.disabled(model.workspaceError(in: model.layout) != nil)
                     .keyboardShortcut(.defaultAction)
             case .workspaces:
-                Button("Back") { model.page = model.scope == .full ? .shortcuts : .features }; Spacer()
+                Button("Back") {
+                    if model.scope == .full { model.page = .shortcuts }
+                    else { model.returnToFeatures() }
+                }; Spacer()
                 Button("Review changes") { model.review() }.keyboardShortcut(.defaultAction)
             case .review:
                 Button("Back") { model.page = model.scope == .workspaces ? .workspaces : .shortcuts }; Spacer()
