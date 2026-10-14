@@ -13,6 +13,11 @@ public struct WorkspaceGlyph: Hashable {
 
     // Every selectable glyph is supplied by Hack Nerd Font, the workspace font.
     public static let all: [WorkspaceGlyph] = [
+        .init("0", "0", "number zero"), .init("1", "1", "number one"),
+        .init("2", "2", "number two"), .init("3", "3", "number three"),
+        .init("4", "4", "number four"), .init("5", "5", "number five"),
+        .init("6", "6", "number six"), .init("7", "7", "number seven"),
+        .init("8", "8", "number eight"), .init("9", "9", "number nine"),
         .init("robot", "󰚩", "ai assistant chatgpt"), .init("terminal", "󰆍", "shell command"),
         .init("code", "󰅨", "developer editor vscode"), .init("file", "󰉋", "finder folder"),
         .init("git", "󰊢", "source version"), .init("tasks", "󱃔", "list todo"),
@@ -207,7 +212,7 @@ public struct WorkspaceConfiguration: Codable, Equatable {
         var result = template
         let ids = workspaces.map { "    \"\($0.id)\"," }.joined(separator: "\n")
         result = try Self.replace(result, from: "persistent-workspaces = [", to: "\n]\n",
-            with: "persistent-workspaces = [\n\(ids)\n]")
+            with: "persistent-workspaces = [\n\(ids)")
         let initial = workspaces.contains(where: { $0.id == "1" }) ? "1" : workspaces[0].id
         result = result.replacingOccurrences(of: "layout --workspace 1 --root tiles",
                                                with: "layout --workspace \(initial) --root tiles")
