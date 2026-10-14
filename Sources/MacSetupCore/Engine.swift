@@ -33,6 +33,8 @@ public final class Engine {
                 let result = try runner.run(brew, ["list", cask ? "--cask" : "--formula", "--versions", package])
                 return result.status == 0 && !result.text.isEmpty
             } ? .done : .ready
+        case let .appStore(app, _):
+            return appPath(app, home: paths.home) != nil ? .done : .guided
         case .linkedDotfiles:
             return dotfiles.status()
         case let .profile(directories):
@@ -93,6 +95,9 @@ public final class Engine {
         case let .install(packages, cask, _):
             lines.append("Homebrew installs: " + packages.joined(separator: ", ") + (cask ? " (casks)" : " (formulae)"))
             lines.append("App installations can request administrator approval. Installed packages are not automatically uninstalled by restore.")
+        case let .appStore(app, url):
+            lines.append("Install \(app) from the Mac App Store: \(url)")
+            lines.append("App Store installation requires user interaction. No Apple ID or purchase is automated.")
         case .linkedDotfiles:
             lines.append("Clone public dot-files into \(dotfiles.source.checkout.path) if it is not there already.")
             lines.append("Only profiles selected later are linked into \(paths.config.path). Existing local folders are backed up.")
@@ -160,6 +165,7 @@ public final class Engine {
                     }
                 }
                 guard try state(task) == .done else { throw SetupError("Installation could not be verified.") }
+            case .appStore: break // App Store installation requires explicit user action.
             case .linkedDotfiles:
                 try dotfiles.install(transaction: id)
                 guard dotfiles.status() == .done else { throw SetupError("Dotfiles installation could not be verified.") }
@@ -302,6 +308,9 @@ public final class Engine {
     }
 
     public func openGuide(_ task: SetupTask) throws {
+        if case let .appStore(_, url) = task.action {
+            try runner.checked("/usr/bin/open", [url]); return
+        }
         guard case let .guide(url, app, _) = task.action else { return }
         if task.id == "wallpaper-access", let executable = WallpaperWatcher.executable(paths: paths) {
             try runner.checked("/usr/bin/open", ["-R", executable.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().path])
