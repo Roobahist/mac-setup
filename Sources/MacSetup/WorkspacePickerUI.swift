@@ -112,6 +112,7 @@ struct WorkspacePickerUI {
                     }
                 case .backspace:
                     if !query.isEmpty { query.removeLast(); resultCursor = 0 }
+                case .space: query.append(" "); resultCursor = 0
                 case .escape:
                     if query.isEmpty { page = .workspaces }
                     else { query = ""; resultCursor = 0 }
@@ -166,6 +167,7 @@ struct WorkspacePickerUI {
                         } else { page = .apps }
                     }
                 case .backspace: if !editing.isEmpty { editing.removeLast() }
+                case .space: if page == .editName { editing.append(" ") }
                 case .escape: page = page == .manualApp ? .apps : .workspaces
                 case .character(let c): editing.append(c)
                 default: break
@@ -255,7 +257,8 @@ struct WorkspacePickerUI {
             lines.append("  Search: \(query)▌    \(installed.count) installed apps found")
             lines.append("")
             let matches = filteredApps()
-            let available = max(3, height - 10)
+            // Each application uses two terminal rows (name and bundle ID).
+            let available = max(2, (height - 10) / 2)
             let start = max(0, min(max(0, matches.count - available), resultCursor - available / 2))
             for index in start..<min(matches.count, start + available) {
                 let app = matches[index]
