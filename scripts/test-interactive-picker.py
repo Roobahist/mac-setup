@@ -69,7 +69,7 @@ try:
     os.write(master, b"\x1b[B")  # CSI cursor down
     read_until(
         lambda b: bool(re.search(
-            rb"\x1b\[1;46;30m[^\r\n]*Interface and terminal fonts", active_screen(b)
+            rb"\x1b\[1;38;5;231;48;5;24m[^\r\n]*Interface and terminal fonts", active_screen(b)
         )), timeout=4.0
     )
     assert "[x] ├── Interface and terminal fonts".encode() in active_screen(bytes(captured))
@@ -85,7 +85,7 @@ try:
     os.write(master, b"\x1bOA")  # SS3 cursor up
     read_until(
         lambda b: bool(re.search(
-            rb"\x1b\[1;46;30m[^\r\n]*Homebrew", active_screen(b)
+            rb"\x1b\[1;38;5;231;48;5;24m[^\r\n]*Homebrew", active_screen(b)
         )), timeout=4.0
     )
 
