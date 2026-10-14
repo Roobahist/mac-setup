@@ -232,7 +232,7 @@ sketchybar \
     label.width=400 \
     label.color="$BASE_WHITE" \
     script="$PLUGIN_DIR/clock.sh" \
-    update_freq=60 \
+    update_freq=1 \
     updates=on
 
 click_shield_members+=("clock")
