@@ -112,7 +112,7 @@ final class SetupModel: ObservableObject {
             let chosen: [String]
             switch scope {
             case .full: chosen = picker.orderedSelection
-            case .workspaces: chosen = ["aerospace-profile", "sketchybar-profile", "sketchybar-start"]
+            case .workspaces: chosen = ["aerospace-profile", "sketchybar-profile"]
             case .shortcuts: chosen = ["aerospace-profile", "karabiner-profile", "raycast-profile"]
             case .feature: chosen = tasks.map(\.id)
             }
