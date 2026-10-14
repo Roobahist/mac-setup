@@ -19,8 +19,8 @@ from pathlib import Path
 
 
 MAGICK = shutil.which("magick") or "magick"
-MAGICK_STAGE_TIMEOUT = 25
-PREPARE_TIMEOUT = 35
+MAGICK_STAGE_TIMEOUT = 18
+PREPARE_TIMEOUT = 32
 
 
 def prepare_image(image_data: bytes) -> bytes:
