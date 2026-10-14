@@ -139,7 +139,7 @@ func setup(_ ids: [String], engine: Engine, options: Options) throws {
     let chosen = Set(ids)
     let tasks = try Catalog.ordered(ids, includingDependencies: !exactSelection)
     if options.all || options.preset != nil {
-        engine.selectedWorkspaceTaskIDs = Set(tasks.map(\\.id))
+        engine.selectedWorkspaceTaskIDs = Set(tasks.map(\.id))
     }
     if tasks.isEmpty { print("No tasks selected."); return }
     if options.dryRun || options.command == "plan" {
