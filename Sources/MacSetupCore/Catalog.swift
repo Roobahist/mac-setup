@@ -12,6 +12,7 @@ public enum TaskAction {
     case finderIcons
     case install(packages: [String], cask: Bool, app: String?)
     case profile([String])
+    case appStore(app: String, url: String)
     case linkedDotfiles
     case preferences([Preference], restart: String?)
     case vorssaint
@@ -38,7 +39,9 @@ public struct SetupTask {
         if case .install = action { return true }
         return false
     }
-    public var guided: Bool { if case .guide = action { return true }; return false }
+    public var guided: Bool {
+        switch action { case .guide, .appStore: return true; default: return false }
+    }
 }
 
 public enum Catalog {
@@ -62,6 +65,9 @@ public enum Catalog {
         SetupTask("sketchybar", "Window management", "SketchyBar", "Install the custom menu bar.", dependencies: ["homebrew"], action: .install(packages: ["felixkratz/formulae/sketchybar"], cask: false, app: nil)),
         SetupTask("sketchybar-profile", "Window management", "SketchyBar configuration", "Apply the workspace bar, clock, fonts and colors. Replaces the SketchyBar config folder after backup.", dependencies: ["sketchybar", "aerospace-profile", "fonts"], action: .profile(["sketchybar"])),
         SetupTask("sketchybar-start", "Window management", "Start SketchyBar at login", "Start the user-level Homebrew service, or restart it after applying the profile.", dependencies: ["sketchybar-profile", "aerospace-access"], action: .service),
+        SetupTask("tomito", "Apps", "Tomito Pomodoro timer",
+                  "Optional Mac App Store Pomodoro timer. Add its timer workspace only when this task is selected.",
+                  action: .appStore(app: "Tomito", url: "macappstore://itunes.apple.com/app/id1526042938")),
         SetupTask("vorssaint", "Apps", "Vorssaint", "Install the modular macOS utility (Apple silicon, macOS 14+).", dependencies: ["homebrew"], action: .install(packages: ["vorssaint"], cask: true, app: "Vorssaint")),
         SetupTask("vorssaint-profile", "Apps", "Vorssaint preferences", "Apply the portable preference snapshot, including quit-on-last-window. Quit Vorssaint first. Private snippets, shelf contents and machine state are excluded.", dependencies: ["vorssaint"], action: .vorssaint),
         SetupTask("vorssaint-access", "Apps", "Vorssaint access and remaining settings", "Finish permissions and settings that cannot be transferred as public preferences.", dependencies: ["vorssaint-profile"], action: .guide(url: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility", app: "Vorssaint", instructions: [
