@@ -22,6 +22,7 @@ master, slave = pty.openpty()
 fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 36, 132, 0, 0))
 env = dict(os.environ, TERM="xterm-256color")
 env.pop("NO_COLOR", None)  # This test asserts ANSI highlighting regardless of the caller.
+env["MAC_SETUP_GLYPHS"] = "show"
 process = subprocess.Popen(
     [str(executable)],
     stdin=slave,
@@ -98,6 +99,9 @@ try:
     assert b"WORKSPACE ORDER" in workspace_screen
     assert b"SELECTED WORKSPACE" in workspace_screen, "Wide view should show inspector"
     assert b"SHORTCUT" in workspace_screen and b"GLYPH" in workspace_screen
+    assert b"ICON" in workspace_screen, "Glyph preview column should be present when forced"
+    assert "󰚩".encode() in workspace_screen, "Expected actual Hack Nerd Font icon preview"
+    assert b"Pomodoro" in workspace_screen, "Tomito workspace must be in default layout"
     assert b"APP RULES" in workspace_screen
     assert b"robot" in workspace_screen, "Glyph name must be readable without Nerd Font"
     assert b"\x1b[1;38;5;231;48;5;24m" in workspace_screen, "Selection has no highlight"
