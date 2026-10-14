@@ -175,14 +175,15 @@ cmd-alt-h = []
 # APP ASSIGNMENTS
 # ============================================================
 
-# Keep known system dialogs tiled.
+# Auxiliary System Settings and Continuity windows must not enter tile trees.
+# macOS presents lightweight suggestions as separate windows without reliable titles.
 [[on-window-detected]]
 if = 'test %{app-bundle-id} = com.apple.ScreenContinuity'
-run = 'layout tiling'
+run = 'layout floating'
 
 [[on-window-detected]]
 if = 'test %{app-bundle-id} = com.apple.systempreferences'
-run = 'layout tiling'
+run = 'layout floating'
 
 [[on-window-detected]]
 if = 'test %{app-bundle-id} = ru.keepcoder.Telegram'

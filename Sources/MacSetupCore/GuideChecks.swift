@@ -64,7 +64,7 @@ public extension Engine {
         }
         let missing = checks.filter { !$0.ready }.map(\.title)
         return GuideCheck(missing.isEmpty, missing.isEmpty
-            ? "Karabiner's helper, permissions, driver, keyboard and Portable profile are ready. Now press Option+E and verify that one Finder window opens."
+            ? "Karabiner's helper, permissions, driver, keyboard and Portable profile are ready. Test one enabled application shortcut from the Shortcuts editor."
             : "Still needed: " + missing.joined(separator: ", ") + ". Finish these in Karabiner's assistant, then check again.", requirements: checks)
     }
 

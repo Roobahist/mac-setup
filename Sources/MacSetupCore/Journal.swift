@@ -111,6 +111,22 @@ public final class Journal {
         try FileManager.default.copyItem(at: source, to: target)
     }
 
+    /// Back up then remove a file so a restore brings back its original contents.
+    public func remove(_ target: URL, transaction: String) throws {
+        try refuseSymlinkParents(target)
+        guard let before = try Self.fingerprint(target) else { return }
+        let backupName = transaction + "-" + UUID().uuidString
+        let backup = paths.state.appendingPathComponent("backups/" + backupName)
+        try FileManager.default.createDirectory(at: backup.deletingLastPathComponent(),
+                                                withIntermediateDirectories: true,
+                                                attributes: [.posixPermissions: 0o700])
+        try FileManager.default.copyItem(at: target, to: backup)
+        try add(SavedChange(kind: .path, target: target.path, key: nil,
+                            backup: backupName, before: before, after: nil,
+                            restored: false), to: transaction)
+        try FileManager.default.removeItem(at: target)
+    }
+
     public func write(_ target: URL, data: Data, transaction: String, executable: Bool = false) throws {
         let temp = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try data.write(to: temp)

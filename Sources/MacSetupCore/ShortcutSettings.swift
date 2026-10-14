@@ -41,10 +41,28 @@ public struct ShortcutSettings: Codable, Equatable {
     public var entries: [ManagedShortcut]
     /// Optional to support shortcuts.json files created before advanced rules were editable.
     public var advancedKarabiner: [AdvancedKarabinerRule]?
+    /// Nil indicates a configuration written before the Option+R migration.
+    public var configurationVersion: Int?
 
     public init(entries: [ManagedShortcut], advancedKarabiner: [AdvancedKarabinerRule]? = nil) {
         self.entries = entries
         self.advancedKarabiner = advancedKarabiner
+        self.configurationVersion = 2
+    }
+
+    /// Migrate only the known legacy defaults, not arbitrary user assignments.
+    public mutating func migrateBundledDefaults(installedAlacritty: Bool) {
+        guard configurationVersion == nil else { return }
+        if let index = entries.firstIndex(where: { $0.id == "raycast:launcher" }),
+           entries[index].shortcut == WorkspaceShortcut(key: "space", modifiers: ["cmd"]) {
+            entries[index].shortcut = .init(key: "r", modifiers: ["alt"])
+        }
+        if !installedAlacritty,
+           let index = entries.firstIndex(where: { $0.id == "karabiner:alacritty" }),
+           entries[index].action == "Alacritty" {
+            entries[index].action = "open:com.apple.Terminal"
+        }
+        configurationVersion = 2
     }
 
     public mutating func updateAdvancedRule(_ rule: AdvancedKarabinerRule) {
@@ -123,7 +141,7 @@ public struct ShortcutSettings: Codable, Equatable {
         }
         let karabiner: [ManagedShortcut] = [
             .init(id: "karabiner:alacritty", provider: .karabiner,
-                  action: "Alacritty", shortcut: .init(key: "enter", modifiers: ["alt"])),
+                  action: "open:com.apple.Terminal", shortcut: .init(key: "enter", modifiers: ["alt"])),
             .init(id: "karabiner:vscode", provider: .karabiner,
                   action: "Visual Studio Code", shortcut: .init(key: "v", modifiers: ["alt"])),
             .init(id: "karabiner:finder", provider: .karabiner,
@@ -131,7 +149,7 @@ public struct ShortcutSettings: Codable, Equatable {
         ]
         return .init(entries: aerospace + karabiner + [
             .init(id: "raycast:launcher", provider: .raycast, action: "launcher",
-                  shortcut: .init(key: "space", modifiers: ["cmd"]))
+                  shortcut: .init(key: "r", modifiers: ["alt"]))
         ])
     }
 

@@ -11,6 +11,7 @@ private final class SetupModel: ObservableObject {
     @Published var states: [String: String] = [:]
     @Published var layout = WorkspaceConfiguration.defaultLayout
     @Published var shortcuts = ShortcutSettings(entries: [])
+    @Published var pausedSetup = false
     let aerospaceTemplate: String
     let karabinerTemplate: Data
     @Published var apps: [InstalledApplication] = []
@@ -43,6 +44,9 @@ private final class SetupModel: ObservableObject {
         aerospaceTemplate = try String(contentsOf: engine.paths.profile.appendingPathComponent("aerospace/aerospace.toml"), encoding: .utf8)
         karabinerTemplate = try Data(contentsOf: engine.paths.profile.appendingPathComponent("karabiner/karabiner.json"))
         shortcuts = try ShortcutSettings.load(from: engine.paths, aerospaceTemplate: aerospaceTemplate)
+        shortcuts.migrateBundledDefaults(
+            installedAlacritty: ApplicationDiscovery.scan(home: engine.paths.home)
+                .contains { $0.name == "Alacritty" })
         layout = try WorkspaceConfiguration.load(from: engine.paths)
         guideProgress = try GuideProgress.load(from: engine.paths)
         apps = ApplicationDiscovery.scan(home: engine.paths.home)
@@ -88,6 +92,7 @@ private final class SetupModel: ObservableObject {
     }
 
     func openEditor(_ selected: SetupScope) {
+        pausedSetup = false
         scope = selected
         message = ""
         page = selected == .workspaces ? .workspaces : .shortcuts
@@ -126,6 +131,7 @@ private final class SetupModel: ObservableObject {
             try shortcuts.save(to: engine.paths)
             try layout.save(to: engine.paths)
             engine.selectedWorkspaceTaskIDs = scope == .full ? picker.selected : nil
+            pausedSetup = false
             index = 0; results = [:]; runLog = ""
             log("Starting \(scope) with \(tasks.count) selected tasks")
             log("Workspace order: \(layout.workspaces.map(\.id).joined(separator: ", "))")
@@ -136,6 +142,10 @@ private final class SetupModel: ObservableObject {
 
     func advance() {
         message = ""; details = ""; installerOutput = ""; response = ""
+        // Completed tasks are never repeated when resuming a paused setup.
+        while let task = current, ["Complete", "Already configured", "Pending"].contains(results[task.id] ?? "") {
+            index += 1
+        }
         checkedSteps = []; checkReady = false
         guard let task = current else {
             log("Tasks complete. Refreshing desktop services")
@@ -208,7 +218,7 @@ private final class SetupModel: ObservableObject {
         switch task.id {
         case "karabiner": return "Karabiner did not finish installing. If the installer asked for an administrator password, enter it in the secure installer field. Retry resumes this task."
         case "vorssaint-profile", "raycast-profile": return "Close the app from its Quit menu, then retry. Its saved preferences must be updated while it is closed."
-        case "alacritty": return "Homebrew could not install Alacritty. Review the installer details below and retry. Option+Return needs this app installed."
+        case "alacritty": return "Homebrew disabled the Alacritty cask on this system. Uncheck Alacritty in Terminal, choose another terminal, then resume at this task. Your previous completed steps will be preserved."
         default: return "This task needs attention. Review the error below, fix its stated cause, then retry. Completed tasks stay completed. You can also leave this task pending."
         }
     }
@@ -289,8 +299,42 @@ private final class SetupModel: ObservableObject {
         do { try engine.openGuideSettings(task) } catch { message = String(describing: error) }
     }
 
+    func pauseForEdits() {
+        guard !busy, page == .failed || page == .guide else { return }
+        pausedSetup = true
+        scope = .full
+        page = .features
+        log("Paused at task \(index + 1)/\(tasks.count); completed tasks remain recorded")
+        // Do not re-scan task states or release the active setup lock.
+    }
+
+    func resumeAfterEdits() {
+        guard pausedSetup, !busy else { return }
+        do {
+            if let error = workspaceError(in: layout) { throw SetupError(error) }
+            let changed = try Catalog.ordered(picker.orderedSelection, includingDependencies: false)
+            let selectedIDs = Set(changed.map(\.id))
+            let previousID = current?.id
+            tasks = changed
+            results = results.filter { selectedIDs.contains($0.key) }
+            if let previousID, !selectedIDs.contains(previousID) {
+                log("Removed interrupted task \(previousID) from this run")
+            }
+            try shortcuts.save(to: engine.paths)
+            try layout.save(to: engine.paths)
+            engine.selectedWorkspaceTaskIDs = picker.selected
+            index = 0
+            pausedSetup = false
+            log("Resuming \(tasks.count) selected tasks without repeating completed work")
+            advance()
+        } catch {
+            message = String(describing: error)
+        }
+    }
+
     func returnToFeatures() {
         setupLock = nil
+        pausedSetup = false
         scope = .full
         message = ""
         page = .features
@@ -386,6 +430,18 @@ private struct SetupView: View {
         VStack(alignment: .leading, spacing: 18) {
             Text("Choose what to configure").font(.title2.bold())
             Text("Choose the features to install, or update an existing workspace layout or keymap without repeating setup.")
+            if model.pausedSetup {
+                VStack(alignment: .leading, spacing: 10) {
+                    Label("Setup paused at task \(min(model.index + 1, model.tasks.count)) of \(model.tasks.count)",
+                          systemImage: "pause.circle.fill").font(.headline)
+                    Text("Change the selected tasks below, then resume where you stopped. Completed tasks will not run again.")
+                        .font(.callout).foregroundStyle(.secondary)
+                    Button("Resume setup") { model.resumeAfterEdits() }
+                        .keyboardShortcut(.defaultAction)
+                }
+                .padding(16).frame(maxWidth: .infinity, alignment: .leading)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+            }
             HStack(spacing: 12) {
                 Button { model.openEditor(.workspaces) } label: { Label("Edit workspaces only", systemImage: "square.grid.2x2") }
                 Button { model.openEditor(.shortcuts) } label: { Label("Edit shortcuts only", systemImage: "keyboard") }
@@ -756,7 +812,7 @@ private struct SetupView: View {
         VStack(alignment: .leading, spacing: 18) {
             Text(model.results.values.contains("Pending") ? "Setup saved; some tasks still need attention" : "Setup complete").font(.title2.bold())
             Button { copyLog() } label: { Label("Copy apply log", systemImage: "doc.on.doc") }
-            Text("Move the pointer to the bottom edge: the Dock should reveal after about one second. The macOS menu bar should hide when the pointer leaves the top. Its reveal timing is controlled by macOS. If it still stays visible, set Automatically hide and show the menu bar to Always in System Settings, then log out and back in.")
+            Text("Move the pointer to the bottom edge: the Dock should reveal promptly. The macOS menu bar should hide when the pointer leaves the top. Its reveal timing is controlled by macOS. If it still stays visible, set Automatically hide and show the menu bar to Always in System Settings, then log out and back in.")
             Text("Check the workspace highlight with your chosen modifiers and destination key, then use the move-window shortcut to send a window to another workspace.")
             ForEach(model.tasks, id: \.id) { task in
                 HStack { Text(task.title); Spacer(); Text(model.results[task.id] ?? "Pending").foregroundStyle(model.results[task.id] == "Pending" ? Color.orange : Color.secondary) }
@@ -774,6 +830,10 @@ private struct SetupView: View {
             case .features:
                 Text("\(model.picker.selectedCount) selected tasks").foregroundStyle(.secondary)
                 Spacer()
+                if model.pausedSetup {
+                    Button("Resume setup") { model.resumeAfterEdits() }
+                        .disabled(model.busy).keyboardShortcut(.defaultAction)
+                } else {
                 Button("Continue") {
                     model.scope = .full
                     if model.picker.selected.contains("aerospace-profile")
@@ -782,6 +842,7 @@ private struct SetupView: View {
                         model.page = .shortcuts
                     } else { model.review() }
                 }.disabled(model.busy || model.picker.selectedCount == 0).keyboardShortcut(.defaultAction)
+                }
             case .shortcuts:
                 Button("Back") { model.returnToFeatures() }; Spacer()
                 Button("Continue") {
@@ -800,10 +861,12 @@ private struct SetupView: View {
                 Button("Back") { model.page = model.scope == .workspaces ? .workspaces : .shortcuts }; Spacer()
                 Button("Start setup") { model.start() }.keyboardShortcut(.defaultAction)
             case .guide:
+                Button("Back to task selection") { model.pauseForEdits() }
+                    .disabled(model.busy)
                 Button("Leave pending & continue") { model.skip() }.disabled(model.busy); Spacer()
                 Button("Test passed — continue") { model.completeGuide() }.disabled(model.busy || !model.checkReady || model.checkedSteps.count != model.steps.count).keyboardShortcut(.defaultAction)
             case .failed:
-                Button("Review selection") { model.returnToFeatures() }
+                Button("Change selection") { model.pauseForEdits() }
                 if model.current != nil { Button("Leave pending & continue") { model.skip() } }
                 Spacer(); Button("Retry this task") { model.advance() }.keyboardShortcut(.defaultAction)
             case .running:

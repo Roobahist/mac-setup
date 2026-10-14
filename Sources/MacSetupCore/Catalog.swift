@@ -10,6 +10,7 @@ public struct Preference {
 public enum TaskAction {
     case homebrew
     case finderIcons
+    case finderResetFolderViews
     case install(packages: [String], cask: Bool, app: String?)
     case profile([String])
     case appStore(app: String, url: String)
@@ -84,7 +85,7 @@ public enum Catalog {
         ])),
         SetupTask("raycast", "Apps", "Raycast", "Install Raycast. Account setup and personal extensions stay local.", dependencies: ["homebrew"], action: .install(packages: ["raycast"], cask: true, app: "Raycast")),
         SetupTask("raycast-profile", "Apps", "Raycast launcher shortcut", "Apply the launcher shortcut chosen in Mac Setup. If it uses Command+Space, back up and disable the conflicting Spotlight shortcut.", dependencies: ["raycast"], action: .preferences([
-            Preference("com.raycast.macos", "raycastGlobalHotkey", "Command-49")
+            Preference("com.raycast.macos", "raycastGlobalHotkey", "Option-15")
         ], restart: nil)),
         SetupTask("raycast-access", "Apps", "Raycast setup", "Check the configured Raycast launcher shortcut and authorize the extensions you use.", dependencies: ["raycast-profile"], action: .guide(url: "x-apple.systempreferences:com.apple.Keyboard-Settings.extension", app: "Raycast", instructions: [
             "If Raycast shows Welcome, continue with local setup. Skip account sign-in, AI, and extension suggestions if offered. Those are optional.",
@@ -101,15 +102,18 @@ public enum Catalog {
             "In Karabiner, select the Portable profile and the virtual keyboard layout matching your physical keyboard. Click Check again here; the step stays pending until the services, driver, virtual keyboard and permissions are ready.",
             "Test Option+Return for Alacritty, Option+E for Finder, and Option+V for Visual Studio Code. Install those target apps if needed."
         ])),
-        SetupTask("alacritty", "Terminal", "Alacritty", "Install the terminal used by the keyboard shortcuts.", dependencies: ["homebrew"], action: .install(packages: ["alacritty"], cask: true, app: "Alacritty")),
+        SetupTask("alacritty", "Terminal", "Alacritty (optional)", "Optional terminal. Homebrew disabled its cask on some versions of macOS; select another terminal if unavailable.", dependencies: ["homebrew"], action: .install(packages: ["alacritty"], cask: true, app: "Alacritty")),
         SetupTask("alacritty-profile", "Terminal", "Alacritty configuration", "Apply the terminal font, transparency and dark palette.", dependencies: ["alacritty", "fonts"], action: .profile(["alacritty"])),
+        SetupTask("ghostty", "Terminal", "Ghostty (optional)", "Install Ghostty, or keep your preferred existing terminal. Select its launch shortcut in the shortcuts editor.", dependencies: ["homebrew"], action: .install(packages: ["ghostty"], cask: true, app: "Ghostty")),
+        SetupTask("wezterm", "Terminal", "WezTerm (optional)", "Install WezTerm. Terminal choice does not block other setup tasks.", dependencies: ["homebrew"], action: .install(packages: ["wezterm"], cask: true, app: "WezTerm")),
+        SetupTask("kitty", "Terminal", "Kitty (optional)", "Install Kitty. Terminal choice does not block other setup tasks.", dependencies: ["homebrew"], action: .install(packages: ["kitty"], cask: true, app: "kitty")),
         SetupTask("atuin", "Terminal", "Atuin", "Install searchable shell history. No personal history or account is imported.", dependencies: ["homebrew"], action: .install(packages: ["atuin"], cask: false, app: nil)),
         SetupTask("atuin-profile", "Terminal", "Atuin preferences", "Apply Atuin configuration without history, encryption keys or session tokens.", dependencies: ["atuin"], action: .profile(["atuin"])),
         SetupTask("atuin-shell", "Terminal", "Enable Atuin in zsh", "Append one managed initialization block to .zshrc. Open a new shell afterwards.", dependencies: ["atuin-profile"], action: .atuinShell),
         SetupTask("git-ignore", "Terminal", "Global Git ignore", "Preserve existing rules and append standard macOS ignores. Save the previous Git setting.", action: .gitIgnore),
         SetupTask("dark-mode", "Appearance", "Dark mode", "Set dark appearance. A logout may be needed for every app to refresh.", action: .preferences([Preference("NSGlobalDomain", "AppleInterfaceStyle", "Dark")], restart: nil)),
-        SetupTask("dock-hide", "Appearance", "Hide Dock; reveal after one second", "Hide the Dock until the pointer reaches the bottom edge. Reveal after about one second.", action: .preferences([
-            Preference("com.apple.dock", "autohide", true), Preference("com.apple.dock", "orientation", "bottom"), Preference("com.apple.dock", "autohide-time-modifier", 0.25), Preference("com.apple.dock", "autohide-delay", 1.0), Preference("com.apple.dock", "show-recents", false)
+        SetupTask("dock-hide", "Appearance", "Auto-hide Dock; reveal immediately", "Show the hidden Dock promptly when the pointer reaches its edge. macOS animation and edge-trigger behavior still apply.", action: .preferences([
+            Preference("com.apple.dock", "autohide", true), Preference("com.apple.dock", "orientation", "bottom"), Preference("com.apple.dock", "autohide-time-modifier", 0.15), Preference("com.apple.dock", "autohide-delay", 0.0), Preference("com.apple.dock", "show-recents", false)
         ], restart: "Dock")),
         SetupTask("dock-minimal", "Appearance", "Clear pinned Dock items", "Remove pinned app and folder tiles after backup. Running apps, Finder and Trash can still appear.", action: .preferences([
             Preference("com.apple.dock", "persistent-apps", [String]()), Preference("com.apple.dock", "persistent-others", [String]()), Preference("com.apple.dock", "show-recents", false)
@@ -120,10 +124,13 @@ public enum Catalog {
             Preference("com.apple.finder", "FinderWindowTabs", false), Preference("NSGlobalDomain", "AppleWindowTabbingMode", "manual")
         ], restart: "Finder")),
         SetupTask("finder-icons", "Finder", "Finder list-view settings", "Match the reference: list view, no groups, Date Modified sorting, large icons, text 13, selected columns, relative dates and previews. Existing folder overrides may remain.", dependencies: ["finder-list"], action: .finderIcons),
+        SetupTask("finder-reset-views", "Finder", "Reset saved folder view overrides (optional)",
+                  "Back up and clear .DS_Store view metadata in Desktop, Documents, Downloads, Movies, Music and Pictures. Resets folder icon positions and other per-folder customizations; excludes Library, hidden directories, packages and symlinks.",
+                  dependencies: ["finder-icons"], action: .finderResetFolderViews),
         SetupTask("finder-view-check", "Finder", "Folder list-view behavior", "Check the folder-specific Always open and Browse in list view options from the reference.", dependencies: ["finder-icons"], action: .guide(url: nil, app: "Finder", instructions: [
             "Open Macintosh HD (or your startup disk) and press Command+J. Enable Always open in list view and Browse in list view.",
             "Check Group By: None; Sort By: Date Modified; large icons; text size 13; only Date Modified, Size and Kind columns besides Name; relative dates and icon previews enabled; Calculate all sizes disabled. Click Use as Defaults.",
-            "Existing folders can retain their own view metadata. Repeat the two top checkbox choices for folders that override the default. mac-setup does not rewrite every folder's .DS_Store file."
+            "Existing folders may override the global defaults in .DS_Store. Use the separate Reset saved folder view overrides task to back up and clear those overrides for your home folders. This also resets custom icon placement."
         ])),
         SetupTask("finder-sidebar", "Finder", "Clean up Finder sidebar", "Keep Home and Macintosh HD; remove unused favorites such as Desktop.", action: .guide(url: nil, app: "Finder", instructions: [
             "In Finder > Settings > Sidebar, enable your Home folder and Hard disks; disable unused entries such as Desktop.",

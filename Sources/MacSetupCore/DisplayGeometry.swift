@@ -81,7 +81,7 @@ public struct DisplayGeometry: Codable, Equatable {
 
             ##### Host Display Geometry #####
             sketchybar --add item display_geometry left \\
-              --set display_geometry drawing=off updates=on update_freq=15 \\
+              --set display_geometry drawing=off updates=on update_freq=0 \\
                 script="/bin/bash '$PLUGIN_DIR/geometry.sh'" \\
               --subscribe display_geometry display_change system_woke
             if [ -x "$PLUGIN_DIR/mac-setup-display" ]; then
