@@ -6,7 +6,7 @@ The portable configurations come from [dot-files](https://github.com/Roobahist/d
 
 ## Start here: install and open the app
 
-macOS 13+ is required. Building from source requires Swift 5.9+ and compatible Command Line Tools or Xcode. Vorssaint requires Apple silicon and macOS 14+.
+macOS 13+ is required. Building from source requires Swift 5.9+ and a compatible Apple developer toolchain. On newer SwiftUI SDKs, full Xcode is required because standalone Command Line Tools may lack the SwiftUIMacros compiler plugin. Vorssaint requires Apple silicon and macOS 14+.
 
 Run the installer as your normal macOS user, without `sudo`:
 
@@ -18,6 +18,19 @@ open "$HOME/Applications/Mac Setup.app"
 ```
 
 The installer creates `~/Applications/Mac Setup.app` as a link to the managed bundle in `~/.local/lib/mac-setup/current`. Reopen it from Finder to make later adjustments. To rebuild after a source update, run `git pull && bash install.sh`.
+
+### Building with Xcode 27 and newer SwiftUI SDKs
+
+SwiftUI now implements `@State` as a compiler macro when building against the latest SDKs. Some standalone Command Line Tools installations expose the newer SwiftUI headers without the `SwiftUIMacros` compiler plugin, resulting in `plugin for module 'SwiftUIMacros' not found`, missing `$binding` errors, and spurious immutable-`self` errors.
+
+`bash install.sh` automatically uses `/Applications/Xcode.app/Contents/Developer` for the build when full Xcode is present but Command Line Tools are selected. This override applies only to the build, not the system-wide developer setting. Older, compatible Command Line Tools installations continue to work. If your Xcode is installed in a nonstandard location, select it for this invocation explicitly:
+
+```sh
+xcode-select -p
+DEVELOPER_DIR="/path/to/Xcode.app/Contents/Developer" bash install.sh
+```
+
+If the toolchain has the macro/plugin mismatch and full Xcode is absent, the build script stops with a specific diagnostic instead of emitting dozens of unrelated SwiftUI errors. Install full Xcode or use a compatible prebuilt release.
 
 ## Everyday customization
 
