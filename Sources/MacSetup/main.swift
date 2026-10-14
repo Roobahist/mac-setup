@@ -21,11 +21,11 @@ Usage:
   mac-setup update              Reapply previously installed bundled profiles
   mac-setup backups             List recovery records
   mac-setup restore [backup ID]  Restore one record (latest by default)
-  mac-setup watch               Run the installed or bundled accent watcher in the foreground
+  mac-setup watch               Run the shared accent watcher in the foreground
   mac-setup watcher-status      Inspect its startup service and logs
   mac-setup watcher-stop        Stop it until login or reload
   mac-setup watcher-disable     Disable it across logins
-  mac-setup watcher-enable      Enable the installed or bundled watcher
+  mac-setup watcher-enable      Enable the shared watcher and migrate old installations
 
 Options:
   --preset NAME                 repair, complete, minimal, productivity, developer
@@ -245,6 +245,17 @@ do {
     case "watcher-status":
         let active = try WallpaperWatcher.runningLabel(journal: engine.journal)
         print(active.map { "Startup watcher: registered (\($0))" } ?? "Startup watcher: not registered")
+        if let active {
+            let plist = engine.paths.home.appendingPathComponent("Library/LaunchAgents/\(active).plist")
+            if let data = try? Data(contentsOf: plist),
+               let values = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+               let arguments = values["ProgramArguments"] as? [String] {
+                print("Configured executable: " + arguments.joined(separator: " "))
+            }
+            print(try WallpaperWatcher.isCurrent(engine: engine)
+                  ? "Runtime: shared Mac Setup watcher"
+                  : "Migration or refresh needed: run mac-setup watcher-enable")
+        }
         print("Registration does not verify wallpaper access. Change wallpapers to test the visible result.")
         for name in ["wallpaper-accent-watcher.log", "wallpaper-accent-watcher.stdout.log", "wallpaper-accent-watcher.stderr.log"] {
             let file = URL(fileURLWithPath: "/tmp").appendingPathComponent(name)
@@ -258,8 +269,8 @@ do {
         guard options.yes || (isatty(STDIN_FILENO) != 0 && ask("Stop the startup wallpaper watcher?")) else { print("Cancelled."); break }
         let lock = try SetupLock(paths: engine.paths)
         defer { withExtendedLifetime(lock) {} }
-        if let active = try WallpaperWatcher.runningLabel(journal: engine.journal) {
-            try engine.journal.stopLaunchAgent(active)
+        for label in [WallpaperWatcher.label, WallpaperWatcher.replacementLabel] {
+            try engine.journal.stopLaunchAgent(label)
         }
         print("Stopped. The startup plist remains; watcher-enable will reload it. Restore its backup to remove this installation.")
     case "watcher-disable", "watcher-enable":

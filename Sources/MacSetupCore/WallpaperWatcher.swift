@@ -2,8 +2,8 @@ import AppKit
 import Foundation
 import Darwin
 
-/// Prefer the user's existing watcher. The bundled helper is only used when
-/// no existing watcher application is available.
+/// All installations use the packaged runtime. The old label is retained only
+/// to migrate and restore installations of the standalone watcher app.
 public enum WallpaperWatcher {
     public static let label = "com.roobahist.wallpaper-watcher"
     public static let replacementLabel = "io.github.roobahist.mac-setup.wallpaper"
@@ -11,78 +11,67 @@ public enum WallpaperWatcher {
     public struct Source: Equatable {
         public let label: String
         public let executable: URL
-        public let bundled: Bool
-    }
-
-    public static func executable(paths: Paths) -> URL? {
-        let candidates = [
-            paths.home.appendingPathComponent("Applications/WallpaperAccentWatcher.app"),
-            URL(fileURLWithPath: "/Applications/WallpaperAccentWatcher.app")
-        ]
-        return candidates.map { $0.appendingPathComponent("Contents/MacOS/WallpaperAccentWatcher") }
-            .first { FileManager.default.isExecutableFile(atPath: $0.path) }
     }
 
     public static func bundledExecutable(paths: Paths) -> URL? {
         let name = "mac-setup-wallpaper-watcher"
-        let candidates = [
-            paths.home.appendingPathComponent("Applications/Mac Setup.app/Contents/Helpers/\(name)"),
-            URL(fileURLWithPath: "/Applications/Mac Setup.app/Contents/Helpers/\(name)"),
+        // Prefer the helper shipped beside the calling CLI/app, including
+        // installations under a custom prefix. Isolated homes never use it.
+        let local: [URL]
+        if paths.home == FileManager.default.homeDirectoryForCurrentUser {
+            local = [Bundle.main.executableURL?.resolvingSymlinksInPath()
+                .deletingLastPathComponent().appendingPathComponent(name),
+                Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/\(name)")]
+                .compactMap { $0 }
+        } else { local = [] }
+        let candidates = local + [
             paths.home.appendingPathComponent(".local/lib/mac-setup/current/\(name)"),
-            Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/\(name)")
+            paths.home.appendingPathComponent("Applications/Mac Setup.app/Contents/Helpers/\(name)"),
+            URL(fileURLWithPath: "/Applications/Mac Setup.app/Contents/Helpers/\(name)")
         ].compactMap { $0 }
         return candidates.first { FileManager.default.isExecutableFile(atPath: $0.path) }
     }
 
     public static func source(paths: Paths) throws -> Source {
-        if let installed = executable(paths: paths) {
-            return Source(label: label, executable: installed, bundled: false)
-        }
         if let bundled = bundledExecutable(paths: paths) {
-            return Source(label: replacementLabel, executable: bundled, bundled: true)
+            return Source(label: replacementLabel, executable: bundled)
         }
         throw SetupError("The wallpaper watcher helper is missing from Mac Setup. Reinstall the current Mac Setup release, then retry Automatic wallpaper color updates.")
     }
 
     public static func runningLabel(journal: Journal) throws -> String? {
-        if try journal.launchAgentLoaded(label) { return label }
         if try journal.launchAgentLoaded(replacementLabel) { return replacementLabel }
+        if try journal.launchAgentLoaded(label) { return label }
         return nil
     }
 
-    public static func installedLabel(paths: Paths) -> String {
-        let original = paths.home.appendingPathComponent("Library/LaunchAgents/\(label).plist")
-        let fallback = paths.home.appendingPathComponent("Library/LaunchAgents/\(replacementLabel).plist")
-        // A stale plist may remain after the original app is removed. Prefer
-        // the available executable's intended service rather than its plist.
-        if let preferred = try? source(paths: paths) {
-            let matching = preferred.label == label ? original : fallback
-            if Journal.exists(matching) { return preferred.label }
+    public static func isCurrent(engine: Engine) throws -> Bool {
+        guard let helper = bundledExecutable(paths: engine.paths),
+              try engine.journal.launchAgentLoaded(replacementLabel),
+              try !engine.journal.launchAgentLoaded(label) else { return false }
+        let agents = engine.paths.home.appendingPathComponent("Library/LaunchAgents")
+        guard !Journal.exists(agents.appendingPathComponent("\(label).plist")),
+              let data = try? Data(contentsOf: agents.appendingPathComponent("\(replacementLabel).plist")),
+              let values = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
+        else { return false }
+        let environment = values["EnvironmentVariables"] as? [String: String]
+        let identity = try runtimeIdentity(helper)
+        return values["ProgramArguments"] as? [String] == [helper.path] &&
+            environment?["MAC_SETUP_WATCHER_BUILD"] == identity
+    }
+
+    private static func runtimeIdentity(_ executable: URL) throws -> String {
+        guard let fingerprint = try Journal.fingerprint(executable) else {
+            throw SetupError("The packaged wallpaper watcher disappeared. Reinstall Mac Setup.")
         }
-        if Journal.exists(original) { return label }
-        if Journal.exists(fallback) { return replacementLabel }
-        return executable(paths: paths) != nil ? label : replacementLabel
+        return fingerprint.map { String(format: "%02x", $0) }.joined()
     }
 
     public static func run(engine: Engine, image: URL? = nil, once: Bool = false) throws {
         guard try runningLabel(journal: engine.journal) == nil else {
             throw SetupError("A startup watcher is already running. Stop it before starting a foreground watcher.")
         }
-        if let original = executable(paths: engine.paths) {
-            var arguments = [
-                "WALLPAPER_ACCENT_EXTRACTOR=" + engine.paths.config.appendingPathComponent("unsplash/get_wallpaper_accent.py").path,
-                "WALLPAPER_ACCENT_COLORS=" + engine.paths.config.appendingPathComponent("sketchybar/plugins/colors.sh").path
-            ]
-            if once { arguments.append("WALLPAPER_ACCENT_ONESHOT=1") }
-            if let image { arguments.append("WALLPAPER_ACCENT_IMAGE=" + image.path) }
-            arguments.append(original.path)
-            try engine.runner.checked("/usr/bin/env", arguments, interactive: true)
-        } else {
-            guard bundledExecutable(paths: engine.paths) != nil else {
-                throw SetupError("The bundled watcher helper is missing. Reinstall Mac Setup and retry.")
-            }
-            try runBuiltIn(engine: engine, image: image, once: once)
-        }
+        try runBuiltIn(engine: engine, image: image, once: once)
     }
 
     public struct Observation: Equatable {
@@ -216,25 +205,16 @@ public enum WallpaperWatcher {
     }
 
     public static func setEnabled(_ enabled: Bool, engine: Engine) throws {
-        let active = try runningLabel(journal: engine.journal)
-        let selected = active ?? installedLabel(paths: engine.paths)
-        let plist = engine.paths.home.appendingPathComponent("Library/LaunchAgents/\(selected).plist")
-        if enabled && !Journal.exists(plist) {
-            throw SetupError("Run setup wallpaper-watcher before enabling it.")
-        }
-        let other = selected == label ? replacementLabel : label
-        if try enabled && engine.journal.launchAgentLoaded(other) {
-            throw SetupError("A different wallpaper watcher is already running. Stop it before enabling another.")
-        }
-        try engine.runner.checked("/bin/launchctl", [
-            enabled ? "enable" : "disable", "gui/\(getuid())/\(selected)"
-        ])
         if enabled {
-            if !(try engine.journal.launchAgentLoaded(selected)) {
-                try engine.journal.loadLaunchAgent(plist)
-            }
+            // Setup journals the migration and removes the old startup entry.
+            // Reapply even when loaded so updates restart the executable.
+            let recovery = try engine.apply(Catalog.task("wallpaper-watcher"))
+            print("Watcher recovery record: \(recovery)")
         } else {
-            try engine.journal.stopLaunchAgent(selected)
+            for selected in [label, replacementLabel] {
+                try engine.runner.checked("/bin/launchctl", ["disable", "gui/\(getuid())/\(selected)"])
+                try engine.journal.stopLaunchAgent(selected)
+            }
         }
     }
 
@@ -246,9 +226,8 @@ public enum WallpaperWatcher {
     public static func launchPlist(source: Source, paths: Paths, image: URL? = nil) throws -> Data {
         var environment = [
             "HOME": paths.home.path,
-            "PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
-            "WALLPAPER_ACCENT_EXTRACTOR": paths.config.appendingPathComponent("unsplash/get_wallpaper_accent.py").path,
-            "WALLPAPER_ACCENT_COLORS": paths.config.appendingPathComponent("sketchybar/plugins/colors.sh").path
+            "MAC_SETUP_WATCHER_BUILD": try runtimeIdentity(source.executable),
+            "PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
         ]
         if let image { environment["WALLPAPER_ACCENT_IMAGE"] = image.path }
         let properties: [String: Any] = [

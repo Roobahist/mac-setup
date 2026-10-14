@@ -96,12 +96,8 @@ public final class Engine {
             guard executable("sketchybar") != nil else { return .blocked }
             return try journal.serviceStarted() ? .done : .ready
         case .wallpaperWatcher:
-            if try journal.launchAgentLoaded(WallpaperWatcher.label) ||
-                journal.launchAgentLoaded(WallpaperWatcher.replacementLabel) {
-                return .done
-            }
-            return WallpaperWatcher.executable(paths: paths) != nil ||
-                WallpaperWatcher.bundledExecutable(paths: paths) != nil ? .ready : .blocked
+            if try WallpaperWatcher.isCurrent(engine: self) { return .done }
+            return WallpaperWatcher.bundledExecutable(paths: paths) != nil ? .ready : .blocked
         case let .loginItems(names):
             // Inspect only our own journal during initial inventory, never
             // prompt System Events just to draw the feature-selection screen.
@@ -171,10 +167,10 @@ public final class Engine {
             let installed = StartupLoginItems.installedPaths(names: names, home: paths.home)
             lines.append("Register installed apps in System Settings > General > Login Items & Extensions > Open at Login, preserving other items.")
             lines += installed.map { "Add at login if missing: \($0)" }
-            lines.append("System Events may request macOS Automation approval. SketchyBar starts through Homebrew and WallpaperAccentWatcher through its LaunchAgent; no duplicate entries are created for those background jobs.")
+            lines.append("System Events may request macOS Automation approval. SketchyBar starts through Homebrew and the shared wallpaper watcher through its LaunchAgent; no duplicate entries are created for those background jobs.")
         case .wallpaperWatcher:
-            lines.append("Preserve an existing WallpaperAccentWatcher.app. If absent, use the watcher helper bundled with Mac Setup.")
-            lines.append("Register only one user-level LaunchAgent with a two-second wallpaper-change check; existing SketchyBar and dotfiles configuration stays unchanged.")
+            lines.append("Use the shared watcher helper packaged with Mac Setup on every Mac.")
+            lines.append("Back up and remove the old watcher startup entry, stop it, and register the shared helper with a two-second wallpaper-change check. The old app stays on disk.")
             lines.append("Use watcher-status to check logs, watcher-disable to disable it across logins, and watcher-enable to resume. Restore only undoes changes recorded by mac-setup.")
         case let .guide(url, app, instructions):
             if let app { lines.append("Open \(app).") }
@@ -678,16 +674,44 @@ public final class Engine {
     }
 
     private func installWallpaperWatcher(transaction: String, image: URL?) throws {
-        // A running watcher wins. Never install a second service alongside it,
-        // even if the other runtime becomes available after initial setup.
-        if try WallpaperWatcher.runningLabel(journal: journal) != nil { return }
+        // Resolve the replacement before touching a working legacy service.
         let chosen = try WallpaperWatcher.source(paths: paths)
-        let other = chosen.label == WallpaperWatcher.label
-            ? WallpaperWatcher.replacementLabel : WallpaperWatcher.label
-        guard try !journal.launchAgentLoaded(other) else {
-            throw SetupError("Another wallpaper watcher is already active. Stop it before registering a second watcher.")
+        let legacyPlist = paths.home.appendingPathComponent("Library/LaunchAgents/\(WallpaperWatcher.label).plist")
+        let legacyLoaded = try journal.launchAgentLoaded(WallpaperWatcher.label)
+        guard !legacyLoaded || Journal.exists(legacyPlist) else {
+            throw SetupError("The old watcher is running without its startup plist. Stop it before migration so its configuration can be restored safely.")
+        }
+        // Older personal profiles read only the static export. Add the same
+        // validated cache loader as the portable profile, without replacing
+        // the palette. Follow config links just as the old watcher did; the
+        // actual file is journaled so restoring also restores linked profiles.
+        let colors = paths.config.appendingPathComponent("sketchybar/plugins/colors.sh").resolvingSymlinksInPath()
+        var cacheUpdate: Data?
+        if Journal.exists(colors) {
+            let existing = try String(contentsOf: colors, encoding: .utf8)
+            if !existing.contains("sketchybar/highlight-color") {
+                let profile = try String(contentsOf: paths.profile.appendingPathComponent("sketchybar/plugins/colors.sh"), encoding: .utf8)
+                guard let loader = profile.range(of: "# Match the source dotfiles palette and accept the current wallpaper accent.") else {
+                    throw SetupError("The packaged wallpaper accent cache loader is missing. Reinstall Mac Setup.")
+                }
+                cacheUpdate = Data((existing + "\n" + profile[loader.lowerBound...]).utf8)
+            }
+        }
+        // Retain an intentionally pinned image when restarting or migrating.
+        let currentPlist = paths.home.appendingPathComponent("Library/LaunchAgents/\(chosen.label).plist")
+        let previousPlist = Journal.exists(legacyPlist) ? legacyPlist : currentPlist
+        let previous = (try? Data(contentsOf: previousPlist))
+            .flatMap { try? PropertyListSerialization.propertyList(from: $0, format: nil) as? [String: Any] }
+        let environment = previous?["EnvironmentVariables"] as? [String: String]
+        let selectedImage = image ?? environment?["WALLPAPER_ACCENT_IMAGE"]
+            .flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0) }
+        if Journal.exists(legacyPlist) || legacyLoaded {
+            try journal.suspendLaunchAgent(WallpaperWatcher.label, plist: legacyPlist,
+                                          transaction: transaction, reload: false)
+            try journal.remove(legacyPlist, transaction: transaction)
         }
 
+        if let cacheUpdate { try journal.write(colors, data: cacheUpdate, transaction: transaction) }
         let extractor = paths.config.appendingPathComponent("unsplash/get_wallpaper_accent.py")
         if !Journal.exists(extractor) {
             try journal.write(extractor,
@@ -695,7 +719,7 @@ public final class Engine {
                               transaction: transaction)
         }
         let plist = paths.home.appendingPathComponent("Library/LaunchAgents/\(chosen.label).plist")
-        let proposed = try WallpaperWatcher.launchPlist(source: chosen, paths: paths, image: image)
+        let proposed = try WallpaperWatcher.launchPlist(source: chosen, paths: paths, image: selectedImage)
         try journal.suspendLaunchAgent(chosen.label, plist: plist, transaction: transaction)
 
         // A stale service might still refer to a deleted app. Preserve its
@@ -704,7 +728,8 @@ public final class Engine {
         if needsUpdate {
             try journal.write(plist, data: proposed, transaction: transaction)
         }
-        try WallpaperWatcher.setEnabled(true, engine: self)
+        try runner.checked("/bin/launchctl", ["enable", "gui/\(getuid())/\(chosen.label)"])
+        try journal.loadLaunchAgent(plist)
         guard try journal.launchAgentLoaded(chosen.label) else {
             throw SetupError("Wallpaper watcher registration could not be verified. Inspect mac-setup watcher-status.")
         }
