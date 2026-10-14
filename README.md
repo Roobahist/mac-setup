@@ -81,7 +81,16 @@ If you are scripting installation, use task IDs or a preset instead of the picke
 ## Customize workspaces
 
 Press **W** in the interactive setup checklist or run `mac-setup workspaces`
-any time. This opens a keyboard-driven workspace editor:
+any time. The editor has a column-aligned workspace table and a selected-workspace
+inspector on wider terminals. In narrow terminals, the inspector is placed
+below the table instead. The workspace list distinguishes shortcut, friendly
+label, glyph name, AeroSpace workspace ID and assigned application count. Color
+highlights the focused row and unsaved changes; `NO_COLOR` and `TERM=dumb`
+are supported, and each row retains an ASCII focus marker without color.
+Nerd Font icons are named in text so missing glyphs in the terminal do not
+make the list unreadable. The glyph browser still provides optional previews.
+
+The editor supports these keyboard controls:
 
 - **Up/Down** selects a workspace; **[** and **]** move it left or right.
 - **A** adds a workspace, **D** removes one (with confirmation).

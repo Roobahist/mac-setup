@@ -5,11 +5,10 @@ import MacSetupCore
 /// Reuses the existing raw terminal so entering from the setup checklist does not
 /// tear down and recreate the terminal or lose key presses.
 struct WorkspacePickerUI {
-    private enum Page {
-        case workspaces, glyphs, apps, editID, editName, manualApp, confirmDelete
-    }
+    private typealias Page = WorkspacePickerView.Page
 
     private var layout: WorkspaceConfiguration
+    private let initialLayout: WorkspaceConfiguration
     private let installed: [InstalledApplication]
     private var page: Page = .workspaces
     private var selected = 0
@@ -20,6 +19,7 @@ struct WorkspacePickerUI {
 
     init(layout: WorkspaceConfiguration, installed: [InstalledApplication]) {
         self.layout = layout
+        self.initialLayout = layout
         self.installed = installed
     }
 
@@ -34,6 +34,7 @@ struct WorkspacePickerUI {
             let key = terminal.nextKey(timeout: 120)
             if case .idle = key { continue }
             redraw = true
+            message = ""
 
             if case .interrupt = key { return nil }
             switch page {
@@ -41,10 +42,14 @@ struct WorkspacePickerUI {
                 switch key {
                 case .up: selected = max(0, selected - 1)
                 case .down: selected = min(layout.workspaces.count - 1, selected + 1)
-                case .escape: return nil
+                case .escape:
+                    if layout == initialLayout { return nil }
+                    page = .confirmCancel
                 case .character(let c):
                     switch c {
-                    case "q": return nil
+                    case "q":
+                        if layout == initialLayout { return nil }
+                        page = .confirmCancel
                     case "s":
                         do { try layout.validate(); return layout }
                         catch { message = String(describing: error) }
@@ -86,6 +91,12 @@ struct WorkspacePickerUI {
                         }
                     default: break
                     }
+                default: break
+                }
+            case .confirmCancel:
+                switch key {
+                case .character("y"): return nil
+                case .character("n"), .escape: page = .workspaces
                 default: break
                 }
             case .confirmDelete:
@@ -190,98 +201,30 @@ struct WorkspacePickerUI {
     }
 
     private func filteredApps() -> [InstalledApplication] {
-        let apps = installed.filter { app in
+        // Include saved app rules even when the app is not installed. Otherwise
+        // users cannot remove an obsolete assignment from the configuration.
+        let discovered = Set(installed.map(\.bundleID))
+        let saved = Set(layout.workspaces.flatMap(\.apps)).subtracting(discovered)
+            .map { InstalledApplication(name: $0, bundleID: $0, path: "") }
+        return (installed + saved).filter { app in
             query.isEmpty || app.name.localizedCaseInsensitiveContains(query)
                 || app.bundleID.localizedCaseInsensitiveContains(query)
-        }
-        return apps
-    }
-
-    private func fitted(_ text: String, width: Int) -> String {
-        let count = max(5, width)
-        return text.count > count ? String(text.prefix(count - 1)) + "…" : text
+        }.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
     private func render(width: Int, height: Int) -> String {
-        let usable = max(15, width - 4)
-        var lines = [
-            "  ◈  WORKSPACE EDITOR",
-            "  \(layout.workspaces.count)/\(WorkspaceConfiguration.keys.count) workspaces  ·  Hack Nerd Font icons",
-            "  " + String(repeating: "─", count: min(75, usable))
-        ]
-        switch page {
-        case .workspaces, .confirmDelete:
-            lines.append("  ↑↓ Select  [ ] Reorder  A Add  D Remove  R Rename ID  N Label")
-            lines.append("  G Glyph  P Apps  S Save  Q Cancel")
-            lines.append("")
-            let available = max(3, height - 14)
-            let first = max(0, min(max(0, layout.workspaces.count - available), selected - available / 2))
-            for index in first..<min(layout.workspaces.count, first + available) {
-                let ws = layout.workspaces[index]
-                let key = WorkspaceConfiguration.keys[index]
-                let glyph = WorkspaceConfiguration.symbol(for: ws.glyph) ?? "?"
-                let marker = index == selected ? "❯" : " "
-                lines.append(fitted("  \(marker) ⌥\(key)  \(glyph)  \(ws.name)  [\(ws.id)]  ·  \(ws.apps.count) apps", width: usable))
-            }
-            lines.append("")
-            let current = layout.workspaces[selected]
-            if !current.apps.isEmpty {
-                lines.append("  Assigned app bundle IDs:")
-                let names = Dictionary(installed.map { ($0.bundleID, $0.name) },
-                                       uniquingKeysWith: { first, _ in first })
-                for id in current.apps.prefix(max(1, height - lines.count - 5)) {
-                    lines.append(fitted("    " + (names[id] ?? id), width: usable))
-                }
-            } else {
-                lines.append("  No applications assigned. Apps stay in the workspace where you open them.")
-            }
-            if page == .confirmDelete {
-                lines.append("  Remove \(current.name) and its app rules? Y Yes  N Cancel")
-            }
-        case .glyphs:
-            lines.append("  Type to filter glyph names or keywords  ·  ↑↓ Choose  Enter Select  Esc Back")
-            lines.append("  Search: \(query)▌")
-            lines.append("")
-            let matches = WorkspaceGlyph.matching(query)
-            let available = max(3, height - 9)
-            let start = max(0, min(max(0, matches.count - available), resultCursor - available / 2))
-            for index in start..<min(matches.count, start + available) {
-                let item = matches[index]
-                lines.append(fitted("  \(index == resultCursor ? "❯" : " ")  \(item.symbol)  \(item.name)  ·  \(item.keywords)",
-                                    width: usable))
-            }
-            if matches.isEmpty { lines.append("  No matching glyphs.") }
-        case .apps:
-            lines.append("  Type to filter installed apps  ·  ↑↓ Select  Space Assign/Remove  + Bundle ID")
-            lines.append("  Esc Clear/Back  ·  Selected workspace: \(layout.workspaces[selected].name)")
-            lines.append("  Search: \(query)▌    \(installed.count) installed apps found")
-            lines.append("")
-            let matches = filteredApps()
-            // Each application uses two terminal rows (name and bundle ID).
-            let available = max(2, (height - 10) / 2)
-            let start = max(0, min(max(0, matches.count - available), resultCursor - available / 2))
-            for index in start..<min(matches.count, start + available) {
-                let app = matches[index]
-                let owner = layout.workspaces.firstIndex(where: { $0.apps.contains(app.bundleID) })
-                let assigned = owner.map { layout.workspaces[$0].name } ?? "Unassigned"
-                lines.append(fitted("  \(index == resultCursor ? "❯" : " ") \(owner == selected ? "[x]" : "[ ]") \(app.name)  ·  \(assigned)",
-                                    width: usable))
-                lines.append(fitted("        \(app.bundleID)", width: usable))
-            }
-            if matches.isEmpty { lines.append("  No matching applications. + adds a bundle ID manually.") }
-        case .editID, .editName, .manualApp:
-            lines.append(page == .editID ? "  Rename AeroSpace workspace ID (letters, digits, _ and -):" :
-                         page == .editName ? "  Change the descriptive workspace label:" :
-                         "  Enter the application's CFBundleIdentifier:")
-            lines.append("  \(editing)▌")
-            lines.append("")
-            lines.append("  Enter Save  ·  Backspace Delete  ·  Esc Cancel")
-        }
-        if !message.isEmpty {
-            lines.append("")
-            lines.append(fitted("  " + message, width: usable))
-        }
-        if lines.count > height { lines = Array(lines.prefix(height)) }
-        return "\u{001B}[H\u{001B}[2J" + lines.map { fitted($0, width: width) }.joined(separator: "\r\n") + "\r\n"
+        WorkspacePickerView(
+            layout: layout,
+            installed: installed,
+            page: page,
+            selected: selected,
+            resultCursor: resultCursor,
+            query: query,
+            editing: editing,
+            message: message,
+            modified: layout != initialLayout,
+            width: width,
+            height: height
+        ).render()
     }
 }
