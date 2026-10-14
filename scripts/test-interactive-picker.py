@@ -247,7 +247,8 @@ try:
                and b"2 Workspaces" in active_screen(b))
     os.write(master, b"k")
     read_until(lambda b: b"REVIEW SELECTION" in active_screen(b)
-               and b"3 Review" in active_screen(b))
+               and b"3 Review" in active_screen(b)
+               and b"Review your choices before applying changes." in active_screen(b))
     assert_consistent_chrome(bytes(captured), b"3 Review")
     os.write(master, b"\x1b")  # Escape returns to selection, not setup
     read_until(lambda b: b"REVIEW SELECTION" not in active_screen(b)
