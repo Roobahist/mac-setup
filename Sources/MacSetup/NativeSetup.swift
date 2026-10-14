@@ -497,14 +497,21 @@ struct SetupView: View {
                     case .failed: failed
                     case .finished: finished
                     }
-                }.padding(24).frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(SetupDesign.pagePadding)
+                .frame(maxWidth: SetupDesign.pageWidth, alignment: .leading)
+                .frame(maxWidth: .infinity)
             }
             .id(model.page)
             Divider()
             Group {
                 if embedded { embeddedFooter }
                 else { footer }
-            }.padding(20)
+            }
+            .padding(.horizontal, SetupDesign.pagePadding)
+            .padding(.vertical, 16)
+            .frame(maxWidth: SetupDesign.pageWidth)
+            .frame(maxWidth: .infinity)
         }
         .font(.system(size: 15))
         .frame(minWidth: embedded ? 610 : 820, minHeight: embedded ? 610 : 660)
@@ -666,19 +673,19 @@ struct SetupView: View {
 
     private var workspaceColumns: some View {
         HStack(spacing: 12) {
-            workspaceColumn("ORDER", width: 64)
+            workspaceColumn("DRAG", width: 50)
             workspaceColumn("GLYPH", width: 60)
-            workspaceColumn("WORKSPACE", width: 190, alignment: .leading)
-            workspaceColumn("APPS", width: 116)
-            workspaceColumn("KEY", width: 110)
-            workspaceColumn("REMOVE", width: 44)
+            workspaceColumn("WORKSPACE", width: 204, alignment: .leading)
+            workspaceColumn("APPS", width: 155)
+            workspaceColumn("KEY", width: 130)
+            workspaceColumn("REMOVE", width: 55)
         }
         .padding(.horizontal, 12)
     }
 
     private var workspaces: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Workspaces").font(.title2.bold())
+            Text("Workspaces").font(SetupDesign.pageTitle)
             Text("Drag a row or use the arrows to reorder. The menu preview updates immediately; your actual menu bar does not change until you apply the layout.")
                 .font(.callout).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -725,17 +732,7 @@ struct SetupView: View {
                 Text(model.message).font(.callout).foregroundStyle(.orange)
             }
         }
-        .frame(maxWidth: 800, alignment: .leading)
-    }
-
-    private func moveWorkspace(_ index: Int, upward: Bool) {
-        guard model.layout.workspaces.indices.contains(index) else { return }
-        let id = model.layout.workspaces[index].id
-        let target = upward ? index - 1 : index + 2
-        guard upward ? index > 0 : index < model.layout.workspaces.count - 1 else { return }
-        withAnimation(.easeInOut(duration: 0.16)) {
-            model.layout.insertWorkspace(id, at: target)
-        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func workspaceCard(at i: Int) -> some View {
@@ -743,25 +740,12 @@ struct SetupView: View {
         let glyph = item.resolvedIcon
         let assignedCount = model.layout.workspaces[i].apps.count
         return HStack(spacing: 12) {
-            HStack(spacing: 2) {
-                Image(systemName: "line.3.horizontal")
-                    .foregroundStyle(.tertiary)
-                    .frame(width: 22)
-                    .help("Drag anywhere on this row to reorder")
-                VStack(spacing: 1) {
-                    Button { moveWorkspace(i, upward: true) } label: {
-                        Image(systemName: "chevron.up").frame(width: 28, height: 17)
-                    }
-                    .disabled(i == 0)
-                    .help("Move \(item.name) up")
-                    Button { moveWorkspace(i, upward: false) } label: {
-                        Image(systemName: "chevron.down").frame(width: 28, height: 17)
-                    }
-                    .disabled(i == model.layout.workspaces.count - 1)
-                    .help("Move \(item.name) down")
-                }
-            }
-            .frame(width: 64)
+            Image(systemName: "circle.grid.2x3.fill")
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(.secondary)
+                .frame(width: 50, height: 36)
+                .help("Drag this workspace to reorder")
+                .accessibilityLabel("Drag workspace \(item.name)")
             Button { glyphWorkspaceID = item.id } label: {
                 Group {
                     if glyph.symbol == "?" {
@@ -780,27 +764,33 @@ struct SetupView: View {
 
             TextField("Workspace name", text: $model.layout.workspaces[i].name)
                 .textFieldStyle(.roundedBorder)
-                .frame(width: 190)
+                .frame(width: 204)
                 .accessibilityLabel("Workspace name")
 
             Button {
                 model.selectedWorkspace = i
                 model.appSheet = true
             } label: {
-                Label("\(assignedCount) apps", systemImage: "square.stack.3d.up")
-                    .frame(width: 116, height: 32)
+                HStack(spacing: 6) {
+                    Image(systemName: "square.stack.3d.up")
+                    Text("\(assignedCount) apps")
+                    Spacer(minLength: 2)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .semibold))
+                }
+                .frame(width: 143, height: 32)
             }
-            .help("Assign applications to \(item.name)")
+            .buttonStyle(.bordered)
+            .help("Click to edit apps assigned to \(item.name)")
 
             workspaceShortcutKey(at: i)
             Button { model.layout.workspaces.remove(at: i) } label: {
                 Image(systemName: "trash")
-                    .frame(width: 44, height: 32)
+                    .frame(width: 55, height: 32)
             }
             .disabled(model.layout.workspaces.count == 1)
             .help("Remove \(item.name)")
         }
-        .buttonStyle(.plain)
         .controlSize(.regular)
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -814,7 +804,7 @@ struct SetupView: View {
         }
         .contentShape(RoundedRectangle(cornerRadius: 11))
         .draggable("mac-setup-workspace:\(workspaceDragSession):\(item.id)") {
-            Label(item.name, systemImage: "line.3.horizontal")
+            Label(item.name, systemImage: "circle.grid.2x3.fill")
                 .font(.headline)
                 .padding(14)
                 .frame(width: 280, alignment: .leading)
@@ -838,26 +828,34 @@ struct SetupView: View {
 
     private func workspaceShortcutKey(at i: Int) -> some View {
         let item = model.layout.workspaces[i]
-        let binding = Binding<String>(
-            get: {
-                item.shortcutKey ?? item.shortcuts?.switchTo?.key
-                    ?? (WorkspaceConfiguration.keys.indices.contains(i)
-                        ? WorkspaceConfiguration.keys[i] : "")
-            },
-            set: { key in
-                model.layout.workspaces[i].shortcutKey = key
+        let key = item.shortcutKey ?? item.shortcuts?.switchTo?.key
+            ?? (WorkspaceConfiguration.keys.indices.contains(i) ? WorkspaceConfiguration.keys[i] : "")
+        return Menu {
+            Button("None") {
+                model.layout.workspaces[i].shortcutKey = ""
                 model.layout.workspaces[i].shortcuts = nil
-            })
-        return Picker("Shortcut destination key", selection: binding) {
-            Text("None").tag("")
-            ForEach(workspaceKeys, id: \.self) { key in
-                Text(WorkspaceShortcut.keyLabel(key)).tag(key)
             }
+            ForEach(workspaceKeys, id: \.self) { selected in
+                Button(WorkspaceShortcut.keyLabel(selected)) {
+                    model.layout.workspaces[i].shortcutKey = selected
+                    model.layout.workspaces[i].shortcuts = nil
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "keyboard").foregroundStyle(.secondary)
+                Text(key.isEmpty ? "None" : WorkspaceShortcut.keyLabel(key))
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(width: 118, height: 32)
         }
-        .labelsHidden()
-        .pickerStyle(.menu)
-        .frame(width: 110)
-        .help("Key for \(item.name)")
+        .buttonStyle(.bordered)
+        .help("Click to change shortcut for \(item.name)")
+        .accessibilityLabel("Change shortcut key for \(item.name)")
     }
 
     private var appAssignments: some View {

@@ -258,6 +258,13 @@ public struct WorkspaceConfiguration: Codable, Equatable {
     public mutating func insertWorkspace(_ sourceID: String, at destination: Int) {
         guard let source = workspaces.firstIndex(where: { $0.id == sourceID }),
               (0...workspaces.count).contains(destination) else { return }
+        // Materialize inherited keys before moving a workspace. Reordering
+        // must not unexpectedly assign it a different keyboard shortcut.
+        for index in workspaces.indices where workspaces[index].shortcutKey == nil
+            && workspaces[index].shortcuts == nil {
+            workspaces[index].shortcutKey = Self.keys.indices.contains(index)
+                ? Self.keys[index] : ""
+        }
         let item = workspaces.remove(at: source)
         let index = min(workspaces.count, destination > source ? destination - 1 : destination)
         workspaces.insert(item, at: index)

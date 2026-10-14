@@ -323,7 +323,7 @@ struct ControlCenterView: View {
             VStack(alignment: .leading, spacing: 23) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Mac Setup at a glance")
-                        .font(.system(size: 29, weight: .semibold))
+                        .font(SetupDesign.pageTitle)
                     Text("Your customization dashboard. Choose a setting from the sidebar, review what is installed, or run the guided setup on a new Mac.")
                         .font(.callout).foregroundStyle(.secondary)
                 }
@@ -370,8 +370,8 @@ struct ControlCenterView: View {
                 .padding(22)
                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
             }
-            .padding(28)
-            .frame(maxWidth: 950, alignment: .leading)
+            .padding(SetupDesign.pagePadding)
+            .frame(maxWidth: SetupDesign.pageWidth, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
     }
@@ -379,7 +379,7 @@ struct ControlCenterView: View {
     private func scrollSettings(_ title: String, category: String, includeAccent: Bool = false) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text(title).font(.system(size: 27, weight: .semibold))
+                Text(title).font(SetupDesign.pageTitle)
                 Text("Changes are applied individually and saved to the recovery journal.")
                     .foregroundStyle(.secondary).font(.callout)
                 if includeAccent { DesktopAccentControls(engine: model.engine) }
@@ -388,7 +388,7 @@ struct ControlCenterView: View {
                         service: TweakService(journal: model.engine.journal,
                                               runner: model.engine.runner, paths: model.engine.paths))
                 }
-            }.padding(28).frame(maxWidth: 880, alignment: .leading)
+            }.padding(SetupDesign.pagePadding).frame(maxWidth: SetupDesign.pageWidth, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .center)
         }
     }
@@ -402,7 +402,7 @@ struct ControlCenterView: View {
         }
         return ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                Text("Search results").font(.system(size: 27, weight: .semibold))
+                Text("Search results").font(SetupDesign.pageTitle)
                 Text("\(matches.count) settings and \(tasks.count) features for “\(needle)”")
                     .foregroundStyle(.secondary)
                 ForEach(matches) { tweak in
@@ -434,7 +434,7 @@ struct ControlCenterView: View {
                             .font(.callout).foregroundStyle(.secondary)
                     }.frame(maxWidth: .infinity).padding(40)
                 }
-            }.padding(28).frame(maxWidth: 880, alignment: .leading)
+            }.padding(SetupDesign.pagePadding).frame(maxWidth: SetupDesign.pageWidth, alignment: .leading)
                 .frame(maxWidth: .infinity)
         }
     }
@@ -446,7 +446,7 @@ struct ControlCenterView: View {
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
-                        Text("Apps & Features").font(.system(size: 27, weight: .semibold))
+                        Text("Apps & Features").font(SetupDesign.pageTitle)
                         Text("Choose a ready-made setup or select entire categories. You don't need to open each feature individually.")
                             .font(.callout).foregroundStyle(.secondary)
                         featureBatchControls
@@ -458,8 +458,8 @@ struct ControlCenterView: View {
                         Text("Nothing is installed by selecting a checkbox. Review the selected tasks and confirm before anything runs. Dependencies are included automatically.")
                             .font(.caption).foregroundStyle(.secondary)
                     }
-                    .padding(28)
-                    .frame(maxWidth: 900, alignment: .leading)
+                    .padding(SetupDesign.pagePadding)
+                    .frame(maxWidth: SetupDesign.pageWidth, alignment: .leading)
                     .frame(maxWidth: .infinity)
                 }
             }
