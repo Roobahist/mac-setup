@@ -952,7 +952,7 @@ struct SetupView: View {
             case .review:
                 Button("Back to features") { onReturn?() }
                 Spacer()
-                Button("Apply selected feature") { model.start() }
+                Button(model.scope == .full ? "Apply selected setup" : "Apply selected feature") { model.start() }
                     .disabled(model.busy).keyboardShortcut(.defaultAction)
             case .running:
                 Text("Applying your changes.").foregroundStyle(.secondary)
@@ -1056,11 +1056,11 @@ enum NativeSetup {
         window.title = "Mac Setup"
         let initial: ControlDestination = workspaceEditor ? .workspaces
             : (shortcutEditor ? .shortcuts : .home)
-        if guided {
-            window.contentView = NSHostingView(rootView: SetupView(model: model))
-        } else {
-            window.contentView = NSHostingView(rootView: ControlCenterView(model: model, initialDestination: initial))
-        }
+        // Guided setup uses the same real sections and controls as the dashboard.
+        window.contentView = NSHostingView(
+            rootView: ControlCenterView(model: model, initialDestination: initial,
+                                        startGuided: guided,
+                                        hasPreparedSelection: ids != nil || preset != nil))
         window.center()
         window.makeKeyAndOrderFront(nil)
         app.activate(ignoringOtherApps: true)

@@ -46,7 +46,7 @@ Launching Mac Setup normally opens the **Overview** dashboard rather than the in
 - **Workspaces and Keyboard Shortcuts**: open existing editors directly within the app and apply only their relevant provider profiles.
 - **Apps & Features**: inspect installed or configured tasks and review the dependency-aware operation for any individual feature.
 - **Updates**: check GitHub's latest tagged release, download the package for this Mac, verify its published SHA-256 checksum, and install to the versioned managed directory. Restart the app to load new controls.
-- **Guided Setup**: preserve the original step-by-step onboarding workflow.
+- **Guided Setup**: a contextual tour of these exact pages, explaining each section while letting you apply changes independently.
 
 Each native preference is read from macOS, applied individually, and recorded through the recovery journal. An **Undo** action is available after applying a preference. Settings without a stored value display the assumed system default until customized. A system update may change these defaults or stop honoring undocumented preference keys; the app reports verification errors rather than silently claiming success.
 
@@ -54,17 +54,13 @@ Installing a task does not imply that an app can be uninstalled safely. Mac Setu
 
 ## Guided setup
 
-Choose **Guided Setup** in the sidebar if you want the complete sequential workflow:
+Choose **Guided Setup** in the sidebar, or run `mac-setup setup`, to walk through the **same controls you can use at any time**. There is no second setup wizard or separate edit-shortcuts/edit-workspaces route.
 
+The guide starts in **Apps & Features**, then moves through **Keyboard Shortcuts**, **Workspaces**, **Appearance**, **Dock**, **Menu Bar & Clock**, **Finder**, and **Updates**. Each section includes a short explanation of what it changes and how to use the controls already on that page. **Back**, **Next**, and **Skip step** move through the sections; **End guide** returns the page to normal customization. Sidebar navigation also ends the tour.
 
+If you start the guide with an explicit `--preset`, `--all`, or task selection, Apps & Features shows a **Review selected setup** action. You can inspect those preselected tasks and confirm whether to apply them, without opening a second wizard.
 
-1. **Choose features.** Select a preset or individual tasks. Existing apps are kept; Obsidian and Tomito are optional installers.
-2. **Keyboard shortcuts.** Browse the AeroSpace, Karabiner, and Raycast shortcut sections. Add, edit, disable, or remove supported action bindings, and choose consistent modifiers for workspace switching and moving windows. Raycast has one editable launcher hotkey. Changes are written into the actual provider profiles and preferences; no redundant confirmation checkbox is required.
-3. **Workspaces.** Drag whole cards to insert them at a new position. Edit workspace names, pick symbols from installed fonts, select assigned apps, and choose a letter or number for each workspace. Both workspace actions share that key and use the global modifiers from the previous step.
-4. **Review.** See the exact tasks that will run.
-5. **Set up & test.** Apply the tasks and check permissions and physical shortcuts. Copy the timestamped apply log if anything needs troubleshooting.
-
-Workspace cards use consistent-sized controls and a clearly labeled drag handle. The menu-bar preview is visually separated from the editor with a dark bar treatment, while the cards use translucent macOS materials. Entire category headers on the feature-selection page are clickable.
+**Tour navigation never automatically installs apps or saves preferences.** If you decide to change workspaces or shortcuts, use the relevant **Apply** action at the bottom of that existing editor. Native macOS preferences have their own Apply, Undo, and System default controls. An optional wallpaper watcher remains opt-in. Applying a change can open the normal task/recovery experience without losing the ability to customize more areas afterward.
 
 ### Make changes later without repeating installation
 
@@ -75,7 +71,7 @@ mac-setup workspaces
 mac-setup shortcuts
 ```
 
-These paths apply only the relevant provider profiles, rather than restarting the entire installer. The full sequential setup is available through **Guided Setup** or `mac-setup setup`. `mac-setup` now opens the control center. The older terminal editor remains available through `mac-setup terminal`.
+These paths apply only the relevant provider profiles, rather than restarting the entire installer. `mac-setup setup` opens the contextual guide, while `mac-setup` opens the dashboard. The older terminal editor remains available through `mac-setup terminal`.
 
 ### Workspace cards and shortcut readability
 
