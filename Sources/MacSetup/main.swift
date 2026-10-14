@@ -130,6 +130,7 @@ func selectedIDs(_ options: inout Options, engine: Engine) throws -> [String] {
     var picker = TaskPickerUI(engine: engine)
     guard let selection = try picker.run() else { return [] }
     options.upgrades = selection.updates
+    engine.selectedWorkspaceTaskIDs = Set(selection.ids)
     return selection.ids
 }
 
@@ -137,6 +138,9 @@ func setup(_ ids: [String], engine: Engine, options: Options) throws {
     let exactSelection = options.command == "setup" && options.ids.isEmpty && !options.all && options.preset == nil
     let chosen = Set(ids)
     let tasks = try Catalog.ordered(ids, includingDependencies: !exactSelection)
+    if options.all || options.preset != nil {
+        engine.selectedWorkspaceTaskIDs = Set(tasks.map(\\.id))
+    }
     if tasks.isEmpty { print("No tasks selected."); return }
     if options.dryRun || options.command == "plan" {
         print(exactSelection ? "Preview only. Only the reviewed tasks are included; nothing will change." : "Preview only. Prerequisites are included; no files, settings, apps or permissions will change.")
@@ -186,7 +190,13 @@ func setup(_ ids: [String], engine: Engine, options: Options) throws {
                 if options.yes { print("  Guided task stays pending in --yes mode."); blocked.insert(task.id); continue }
                 if ask("Open the app or settings now?") { try engine.openGuide(task) }
                 if ask("Have you completed and tested these steps?") {
-                    try engine.confirm(task); print("Recorded as user confirmed; not automatically verified.")
+                    if task.id == "tomito" && try engine.state(task) != .done {
+                        print("Pending: Tomito is not yet installed. Finish installation in the App Store and rerun setup.")
+                        blocked.insert(task.id)
+                        continue
+                    }
+                    if task.id != "tomito" { try engine.confirm(task) }
+                    print(task.id == "tomito" ? "Verified: Tomito is installed." : "Recorded as user confirmed; not automatically verified.")
                 } else { blocked.insert(task.id) }
             } else {
                 if options.yes || ask("Apply this task?") {
