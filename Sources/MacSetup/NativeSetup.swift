@@ -573,8 +573,9 @@ private struct SetupView: View {
             } label: {
                 HStack(spacing: 7) {
                     Image(systemName: "square.grid.2x2.fill").font(.system(size: 17))
-                    Text("\(model.layout.forSelectedTasks(model.scope == .full ? model.picker.selected : nil,
-                        installedBundleIDs: installedIDs).workspaces[i].apps.count)")
+                    Text(String(model.layout.forSelectedTasks(
+                        model.scope == .full ? model.picker.selected : nil,
+                        installedBundleIDs: installedIDs).workspaces[i].apps.count))
                         .font(.system(size: 14, weight: .medium, design: .rounded))
                 }.frame(width: 86, height: 38)
             }.help("Edit applications assigned to \(item.name)")
