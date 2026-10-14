@@ -11,7 +11,7 @@ public struct WorkspaceGlyph: Hashable {
         self.keywords = keywords
     }
 
-    // The five default symbols match the reference Mac. Extra symbols use Nerd Font.
+    // Legacy IDs are retained only to decode existing layouts, never as picker labels.
     public static let all: [WorkspaceGlyph] = [
         .init("0", "0", "number zero"), .init("1", "1", "number one"),
         .init("2", "2", "number two"), .init("3", "3", "number three"),
@@ -108,15 +108,25 @@ public struct WorkspaceDefinition: Codable, Equatable {
     public var apps: [String]
     public var requiresTask: String?
     public var shortcuts: WorkspaceShortcuts?
+    public var icon: FontGlyphSelection?
 
     public init(id: String, name: String, glyph: String, apps: [String] = [], requiresTask: String? = nil,
-                shortcuts: WorkspaceShortcuts? = nil) {
+                shortcuts: WorkspaceShortcuts? = nil, icon: FontGlyphSelection? = nil) {
         self.id = id
         self.name = name
         self.glyph = glyph
         self.apps = apps
         self.requiresTask = requiresTask
         self.shortcuts = shortcuts
+        self.icon = icon
+    }
+
+    public var resolvedIcon: FontGlyphSelection {
+        if let icon { return icon }
+        let reference = WorkspaceConfiguration.referenceGlyphs.contains(glyph)
+        let font = reference ? GlyphFont(postScriptName: "SFPro-Regular", family: "SF Pro", style: "Regular")
+            : GlyphFont(postScriptName: "HackNF-Bold", family: "Hack Nerd Font", style: "Bold")
+        return .init(font: font, symbol: WorkspaceConfiguration.symbol(for: glyph) ?? "?")
     }
 }
 
@@ -204,6 +214,20 @@ public struct WorkspaceConfiguration: Codable, Equatable {
         workspaces[index].shortcuts ?? .defaultRow(at: index)
     }
 
+    /// Move within the displayed order while preserving hidden optional workspaces.
+    public mutating func moveWorkspace(_ sourceID: String, to targetID: String, selectedTasks: Set<String>? = nil) {
+        var visible = forSelectedTasks(selectedTasks).workspaces
+        guard let source = visible.firstIndex(where: { $0.id == sourceID }),
+              let target = visible.firstIndex(where: { $0.id == targetID }), source != target else { return }
+        let item = visible.remove(at: source)
+        visible.insert(item, at: target)
+        let visibleIDs = Set(visible.map(\.id))
+        var next = 0
+        for index in workspaces.indices where visibleIDs.contains(workspaces[index].id) {
+            workspaces[index] = visible[next]; next += 1
+        }
+    }
+
     public func validate(aerospaceTemplate: String? = nil, checkingShortcutsFor workspaceID: String? = nil) throws {
         guard !workspaces.isEmpty else {
             throw SetupError("Keep at least one workspace.")
@@ -221,9 +245,10 @@ public struct WorkspaceConfiguration: Codable, Equatable {
                   !item.name.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else {
                 throw SetupError("Workspace names cannot be empty or contain control characters.")
             }
-            guard Self.symbol(for: item.glyph) != nil else {
+            guard item.icon != nil || Self.symbol(for: item.glyph) != nil else {
                 throw SetupError("Unknown glyph '\(item.glyph)' for workspace '\(item.id)'.")
             }
+            try item.resolvedIcon.validate()
             for app in item.apps {
                 guard !app.isEmpty && app.unicodeScalars.allSatisfy(allowedApp.contains),
                       applications.insert(app).inserted else {
@@ -343,14 +368,13 @@ public struct WorkspaceConfiguration: Codable, Equatable {
     public func sketchybarShell(from template: String) throws -> String {
         try validate()
         let icons = workspaces.map { item in
-            let symbol = Self.symbol(for: item.glyph)!
-            return "    \(item.id)) printf '%s\\n' '\(symbol)' ;;"
+            return "    \(item.id)) printf '%s\\n' \(Self.shellQuote(item.resolvedIcon.symbol)) ;;"
         }.joined(separator: "\n")
-        let fonts = workspaces.map { "    \($0.id)) printf '%s\\n' '\(Self.font(for: $0.glyph))' ;;" }.joined(separator: "\n")
+        let fonts = workspaces.map { "    \($0.id)) printf '%s\\n' \(Self.shellQuote($0.resolvedIcon.font.sketchybarFont)) ;;" }.joined(separator: "\n")
         let section = """
         ##### Workspace Icons #####
 
-        # Reference symbols use SF Pro; extra symbols and numbers use Hack Nerd Font.
+        # Each workspace uses its selected Unicode character and font face.
         workspace_icon() {
           case "$1" in
         \(icons)
@@ -370,5 +394,9 @@ public struct WorkspaceConfiguration: Codable, Equatable {
                                 to: "# Read workspace names and order directly from AeroSpace\n",
                                 with: section + "##### AeroSpace Workspaces #####\n\nsketchybar --add event aerospace_workspace_change\n\n# ------------------------------------------------------------\n")
         return DisplayGeometry.barShell(rendered)
+    }
+
+    private static func shellQuote(_ value: String) -> String {
+        "'" + value.replacingOccurrences(of: "'", with: "'\"'\"'") + "'"
     }
 }

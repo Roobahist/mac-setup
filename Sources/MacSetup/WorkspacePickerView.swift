@@ -6,11 +6,14 @@ import MacSetupCore
 /// terminal cell widths so the same screens work in narrow and wide terminals.
 struct WorkspacePickerView {
     enum Page {
-        case workspaces, glyphs, apps, editID, editName, manualApp, confirmDelete, confirmCancel
+        case workspaces, glyphs, fonts, apps, editID, editName, manualApp, confirmDelete, confirmCancel
     }
 
     let layout: WorkspaceConfiguration
     let installed: [InstalledApplication]
+    let glyphFont: GlyphFont
+    let glyphs: [FontGlyph]
+    let fonts: [GlyphFont]
     let page: Page
     let selected: Int
     let resultCursor: Int
@@ -145,13 +148,13 @@ struct WorkspacePickerView {
     private func tableRow(_ index: Int, width: Int, includeID: Bool) -> Line {
         let ws = layout.workspaces[index]
         let columns = workspaceColumns(width: width, includeID: includeID)
-        let symbol = WorkspaceConfiguration.symbol(for: ws.glyph) ?? "?"
+        let symbol = ws.resolvedIcon.symbol
         let iconOffset = 3 + columns.shortcut + 2 + columns.name + 2
         let text = " \(index == selected ? ">" : " ") "
             + fit(shortcut(at: index), to: columns.shortcut, padded: true) + "  "
             + fit(ws.name, to: columns.name, padded: true) + "  "
             + String(repeating: " ", count: columns.icon) + "  "
-            + fit(ws.glyph, to: columns.glyph, padded: true)
+            + fit(ws.resolvedIcon.codePoint, to: columns.glyph, padded: true)
             + (includeID ? "  " + fit(ws.id, to: columns.id, padded: true) : "")
             + "  " + fit(String(ws.apps.count), to: columns.apps, padded: true)
         return Line(fit(text, to: width, padded: true),
@@ -188,9 +191,11 @@ struct WorkspacePickerView {
             Line("AeroSpace ID", .muted),
             Line("  \(workspace.id)", .normal),
             Line("SketchyBar glyph", .muted),
-            Line("        \(workspace.glyph)", .normal,
-                 glyph: GlyphPlacement(symbol: WorkspaceConfiguration.symbol(for: workspace.glyph) ?? "?",
+            Line("        \(workspace.resolvedIcon.codePoint)", .normal,
+                 glyph: GlyphPlacement(symbol: workspace.resolvedIcon.symbol,
                                        offset: 2)),
+            Line("  \(FontGlyphCatalog.metadata(workspace.resolvedIcon)?.name ?? workspace.resolvedIcon.codePoint)", .normal),
+            Line("  \(workspace.resolvedIcon.font.title)", .muted),
             Line(),
             Line("APP RULES  \(workspace.apps.count)", .accent)
         ]
@@ -225,7 +230,7 @@ struct WorkspacePickerView {
             left.append(Line("  Showing \(range.lowerBound + 1)-\(range.upperBound) of \(layout.workspaces.count); use ↑↓ to scroll", .muted))
         }
         if !wide {
-            left += [Line(), Line("SELECTED: \(workspace.name)  |  ID: \(workspace.id)  |  Glyph: \(workspace.glyph)", .accent)]
+            left += [Line(), Line("SELECTED: \(workspace.name)  |  ID: \(workspace.id)  |  Glyph: \(workspace.resolvedIcon.codePoint)", .accent)]
             if !workspace.apps.isEmpty {
                 left.append(Line("Assigned: " + appNames().joined(separator: ", "), .muted))
             } else {
@@ -245,13 +250,13 @@ struct WorkspacePickerView {
     }
 
     private func glyphRows() -> [Line] {
-        let matches = WorkspaceGlyph.matching(query)
+        let matches = FontGlyphCatalog.matching(glyphs, query: query)
         var lines: [Line] = [
             Line("GLYPH LIBRARY   /   \(workspace.name)", .accent),
-            Line("Type to filter glyph names and keywords", .muted),
+            Line("Font: \(glyphFont.title)   Tab changes the font", .muted),
             Line("Search: \(query)\(useColor ? "▌" : "_")    \(matches.count) matches", .title),
             Line(),
-            Line("   ICON  GLYPH NAME            KEYWORDS / DESCRIPTION", .accent)
+            Line("   ICON  FONT GLYPH NAME      CODE POINT / UNICODE NAME", .accent)
         ]
         let pageRows = max(1, SetupChrome.bodyCapacity(height: height) - 10)
         for index in selectionRange(total: matches.count, limit: pageRows, cursor: resultCursor) {
@@ -259,19 +264,32 @@ struct WorkspacePickerView {
             let label = fit(glyph.name, to: 20, padded: true)
             let text = " \(index == resultCursor ? ">" : " ") "
                 + "    " + "  " + label
-                + "  " + glyph.keywords
+                + "  " + glyph.id + "  " + (glyph.unicodeName ?? "")
             lines.append(Line(text, index == resultCursor ? .selected : .normal,
                               glyph: GlyphPlacement(symbol: glyph.symbol, offset: 3)))
         }
-        if matches.isEmpty { lines.append(Line("  No matching glyphs. Try another keyword.", .caution)) }
+        if matches.isEmpty { lines.append(Line("  No matching glyphs. Try a name, U+ code or paste a character; Tab changes fonts.", .caution)) }
         if let candidate = matches.indices.contains(resultCursor) ? matches[resultCursor] : nil {
             lines += [
                 Line(),
                 Line("SELECTED GLYPH", .accent),
-                Line("  Name: \(candidate.name)    Code point: U+\(String(candidate.symbol.unicodeScalars.first!.value, radix: 16).uppercased())", .normal),
+                Line("  Name: \(candidate.name)    Code point: \(candidate.id)", .normal),
                 Line("  Preview: \(candidate.symbol)", .muted)
             ]
         }
+        return lines
+    }
+
+    private func fontRows() -> [Line] {
+        let words = query.split(whereSeparator: \.isWhitespace)
+        let matches = fonts.filter { font in words.allSatisfy { font.title.localizedCaseInsensitiveContains($0) || font.id.localizedCaseInsensitiveContains($0) } }
+        var lines = [Line("INSTALLED FONTS", .accent), Line("Type to search font families, styles and PostScript names", .muted),
+                     Line("Search: \(query)_    \(matches.count) matches", .title), Line()]
+        let limit = max(1, SetupChrome.bodyCapacity(height: height) - 6)
+        for index in selectionRange(total: matches.count, limit: limit, cursor: resultCursor) {
+            lines.append(Line(" \(index == resultCursor ? ">" : " ") \(matches[index].title)  [\(matches[index].id)]", index == resultCursor ? .selected : .normal))
+        }
+        if matches.isEmpty { lines.append(Line("No matching installed fonts.", .caution)) }
         return lines
     }
 
@@ -370,8 +388,11 @@ struct WorkspacePickerView {
                     : Line("S Save   Q Cancel   Apply AeroSpace / SketchyBar profiles afterward.", .muted)
             ]
         case .glyphs:
-            return [Line("↑↓ Select     Enter Use glyph     Type to search     Esc Clear search / Back", .accent),
-                    Line("Icons are always shown. Set your terminal font to Hack Nerd Font for proper rendering.", .muted)]
+            return [Line("↑↓ Select   Enter Use glyph   Tab Change font   Type to search   Esc Clear / Back", .accent),
+                    Line("Terminal previews use your terminal's font. The native app previews the selected font.", .muted)]
+        case .fonts:
+            return [Line("↑↓ Select   Enter Browse font glyphs   Type to search   Tab / Esc Back", .accent),
+                    Line("Fonts and glyph names come from this Mac's installed fonts.", .muted)]
         case .apps:
             return [Line("↑↓ Select    Space / Enter Assign or remove    + Manual bundle ID    Esc Clear / Back", .accent),
                     Line("An app belongs to at most one workspace. Reassigning it replaces its old rule.", .muted)]
@@ -395,6 +416,7 @@ struct WorkspacePickerView {
         switch page {
         case .workspaces: body = tableAndInspector()
         case .glyphs: body = glyphRows().map { styled($0, width: availableWidth) }
+        case .fonts: body = fontRows().map { styled($0, width: availableWidth) }
         case .apps: body = appRows().map { styled($0, width: availableWidth) }
         case .editID, .editName, .manualApp: body = promptRows().map { styled($0, width: availableWidth) }
         case .confirmDelete, .confirmCancel: body = warningRows().map { styled($0, width: availableWidth) }
@@ -413,6 +435,9 @@ struct WorkspacePickerView {
         case .glyphs:
             title = "GLYPH LIBRARY   |   \(workspace.name)"
             description = "Type to filter glyph names; select one with Enter."
+        case .fonts:
+            title = "FONT LIBRARY   |   \(workspace.name)"
+            description = "Search installed fonts and select a face to browse its glyphs."
         case .apps:
             title = "APP ROUTING   |   \(workspace.name)"
             description = "Filter installed apps by name or bundle ID and toggle their workspace assignments."
