@@ -96,8 +96,12 @@ public final class Engine {
             guard executable("sketchybar") != nil else { return .blocked }
             return try journal.serviceStarted() ? .done : .ready
         case .wallpaperWatcher:
-            guard WallpaperWatcher.executable(paths: paths) != nil else { return .blocked }
-            return try journal.launchAgentLoaded(WallpaperWatcher.label) ? .done : .ready
+            if try journal.launchAgentLoaded(WallpaperWatcher.label) ||
+                journal.launchAgentLoaded(WallpaperWatcher.replacementLabel) {
+                return .done
+            }
+            return WallpaperWatcher.executable(paths: paths) != nil ||
+                WallpaperWatcher.bundledExecutable(paths: paths) != nil ? .ready : .blocked
         case let .loginItems(names):
             // Inspect only our own journal during initial inventory, never
             // prompt System Events just to draw the feature-selection screen.
@@ -169,8 +173,8 @@ public final class Engine {
             lines += installed.map { "Add at login if missing: \($0)" }
             lines.append("System Events may request macOS Automation approval. SketchyBar starts through Homebrew and WallpaperAccentWatcher through its LaunchAgent; no duplicate entries are created for those background jobs.")
         case .wallpaperWatcher:
-            lines.append("Use the existing WallpaperAccentWatcher.app in ~/Applications or /Applications. Preserve its two-second checks and debounce behavior; no replacement runtime is installed.")
-            lines.append("An already registered app and its launch configuration are left unchanged. Otherwise, register it at login after backing up its existing plist.")
+            lines.append("Preserve an existing WallpaperAccentWatcher.app. If absent, use the watcher helper bundled with Mac Setup.")
+            lines.append("Register only one user-level LaunchAgent with a two-second wallpaper-change check; existing SketchyBar and dotfiles configuration stays unchanged.")
             lines.append("Use watcher-status to check logs, watcher-disable to disable it across logins, and watcher-enable to resume. Restore only undoes changes recorded by mac-setup.")
         case let .guide(url, app, instructions):
             if let app { lines.append("Open \(app).") }
@@ -613,7 +617,7 @@ public final class Engine {
         }
     }
 
-    private func applyAccent(transaction: String, image: URL?) throws {
+    private func wallpaperAccentData(image: URL?) throws -> (URL, Data) {
         guard let python = executable("python3"), executable("magick") != nil else { throw SetupError("Install wallpaper-tools first.") }
         let wallpaper: URL
         if let image { wallpaper = image }
@@ -643,7 +647,10 @@ public final class Engine {
             ?? paths.home.appendingPathComponent(".cache")
         let target = cacheRoot.appendingPathComponent("sketchybar/highlight-color")
         let value = "0xff" + String(color.dropFirst()) + "\n"
-        try journal.write(target, data: Data(value.utf8), transaction: transaction)
+        return (target, Data(value.utf8))
+    }
+
+    private func notifyWallpaperAccentChange() throws {
         if let sketchybar = executable("sketchybar"), let aerospace = executable("aerospace") {
             let focused = try runner.run(aerospace, ["list-workspaces", "--focused"])
             if focused.status == 0 && !focused.text.isEmpty {
@@ -651,24 +658,53 @@ public final class Engine {
             }
         }
     }
+    private func applyAccent(transaction: String, image: URL?) throws {
+        let (target, data) = try wallpaperAccentData(image: image)
+        try journal.write(target, data: data, transaction: transaction)
+        try notifyWallpaperAccentChange()
+    }
+
+    /// Runtime updates are derived cache files, not setup preferences. Avoid
+    /// creating a backup transaction for every wallpaper transition.
+    public func refreshWallpaperAccent(image: URL?) throws {
+        let (target, data) = try wallpaperAccentData(image: image)
+        if (try? Data(contentsOf: target)) == data { return }
+        try FileManager.default.createDirectory(at: target.deletingLastPathComponent(),
+                                                withIntermediateDirectories: true)
+        try data.write(to: target, options: .atomic)
+        try notifyWallpaperAccentChange()
+    }
+
     private func installWallpaperWatcher(transaction: String, image: URL?) throws {
-        guard WallpaperWatcher.executable(paths: paths) != nil else {
-            throw SetupError("Install your existing WallpaperAccentWatcher.app in ~/Applications or /Applications first. mac-setup does not install a replacement watcher.")
+        // A running watcher wins. Never install a second service alongside it,
+        // even if the other runtime becomes available after initial setup.
+        if try WallpaperWatcher.runningLabel(journal: journal) != nil { return }
+        let chosen = try WallpaperWatcher.source(paths: paths)
+        let other = chosen.label == WallpaperWatcher.label
+            ? WallpaperWatcher.replacementLabel : WallpaperWatcher.label
+        guard try !journal.launchAgentLoaded(other) else {
+            throw SetupError("Another wallpaper watcher is already active. Stop it before registering a second watcher.")
         }
-        guard !(try journal.launchAgentLoaded(WallpaperWatcher.replacementLabel)) else {
-            throw SetupError("Stop the mac-setup replacement watcher before using WallpaperAccentWatcher.")
-        }
-        if try journal.launchAgentLoaded(WallpaperWatcher.label) { return }
+
         let extractor = paths.config.appendingPathComponent("unsplash/get_wallpaper_accent.py")
         if !Journal.exists(extractor) {
-            try journal.write(extractor, data: Data(contentsOf: paths.profile.appendingPathComponent("unsplash/get_wallpaper_accent.py")), transaction: transaction)
+            try journal.write(extractor,
+                              data: Data(contentsOf: paths.profile.appendingPathComponent("unsplash/get_wallpaper_accent.py")),
+                              transaction: transaction)
         }
-        let plist = paths.home.appendingPathComponent("Library/LaunchAgents/" + WallpaperWatcher.label + ".plist")
-        try journal.suspendLaunchAgent(WallpaperWatcher.label, plist: plist, transaction: transaction)
-        if !Journal.exists(plist) || image != nil {
-            try journal.write(plist, data: WallpaperWatcher.launchPlist(paths: paths, image: image), transaction: transaction)
+        let plist = paths.home.appendingPathComponent("Library/LaunchAgents/\(chosen.label).plist")
+        let proposed = try WallpaperWatcher.launchPlist(source: chosen, paths: paths, image: image)
+        try journal.suspendLaunchAgent(chosen.label, plist: plist, transaction: transaction)
+
+        // A stale service might still refer to a deleted app. Preserve its
+        // original plist in the recovery journal before making a repair.
+        let needsUpdate = try !Journal.exists(plist) || Data(contentsOf: plist) != proposed
+        if needsUpdate {
+            try journal.write(plist, data: proposed, transaction: transaction)
         }
         try WallpaperWatcher.setEnabled(true, engine: self)
-        guard try journal.launchAgentLoaded(WallpaperWatcher.label) else { throw SetupError("WallpaperAccentWatcher registration could not be verified.") }
+        guard try journal.launchAgentLoaded(chosen.label) else {
+            throw SetupError("Wallpaper watcher registration could not be verified. Inspect mac-setup watcher-status.")
+        }
     }
 }

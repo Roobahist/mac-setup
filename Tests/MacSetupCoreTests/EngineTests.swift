@@ -473,13 +473,74 @@ final class EngineTests: XCTestCase {
         XCTAssertFalse(runner.calls.contains { ["bootout", "bootstrap", "enable"].contains($0.dropFirst().first ?? "") })
     }
 
-    func testMissingAppAndCompetingWatcherAreRejected() throws {
-        // Use a dedicated home app in tests; /Applications has no watcher on this Mac.
+    func bundledWatcher() throws -> URL {
+        let helper = try write("Applications/Mac Setup.app/Contents/Helpers/mac-setup-wallpaper-watcher", "bundled helper")
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: helper.path)
+        return helper
+    }
+
+    func testBundledWallpaperWatcherAutomaticallyRegistersAndRestores() throws {
+        let helper = try bundledWatcher()
+        let task = try Catalog.task("wallpaper-watcher")
+        XCTAssertEqual(try engine.state(task), .ready)
+        let recovery = try engine.apply(task)
+        let label = WallpaperWatcher.replacementLabel
+        let plist = home.appendingPathComponent("Library/LaunchAgents/\(label).plist")
+        let values = try PropertyListSerialization.propertyList(
+            from: Data(contentsOf: plist), format: nil) as! [String: Any]
+        XCTAssertEqual(values["Label"] as? String, label)
+        XCTAssertEqual(values["ProgramArguments"] as? [String], [helper.path])
+        XCTAssertTrue(runner.jobs.contains(label))
+        XCTAssertFalse(runner.jobs.contains(WallpaperWatcher.label))
+        XCTAssertEqual(try engine.state(task), .done)
+
+        try engine.journal.restore(recovery)
+        XCTAssertFalse(runner.jobs.contains(label))
+        XCTAssertFalse(Journal.exists(plist))
+        XCTAssertTrue(Journal.exists(helper))
+    }
+
+    func testExistingWatcherTakesPrecedenceOverBundledHelper() throws {
+        let installed = try existingWatcher()
+        _ = try bundledWatcher()
+        let label = WallpaperWatcher.label
+        _ = try engine.apply(Catalog.task("wallpaper-watcher"))
+        let plist = home.appendingPathComponent("Library/LaunchAgents/\(label).plist")
+        let dictionary = try PropertyListSerialization.propertyList(
+            from: Data(contentsOf: plist), format: nil) as! [String: Any]
+        XCTAssertEqual(dictionary["ProgramArguments"] as? [String], [installed.path])
+        XCTAssertFalse(runner.jobs.contains(WallpaperWatcher.replacementLabel))
+    }
+
+    func testBundledWatcherKeepsExistingAppSessionRunning() throws {
+        _ = try bundledWatcher()
+        runner.jobs.insert(WallpaperWatcher.label)
+        let record = try engine.apply(Catalog.task("wallpaper-watcher"))
+        XCTAssertTrue(runner.jobs.contains(WallpaperWatcher.label))
+        XCTAssertFalse(runner.jobs.contains(WallpaperWatcher.replacementLabel))
+        XCTAssertTrue(engine.journal.transactions.first { $0.id == record }!.changes.isEmpty)
+    }
+
+    func testBundledWatcherCanBeDisabledAndEnabled() throws {
+        _ = try bundledWatcher()
+        _ = try engine.apply(Catalog.task("wallpaper-watcher"))
+        try WallpaperWatcher.setEnabled(false, engine: engine)
+        XCTAssertTrue(runner.disabledJobs.contains(WallpaperWatcher.replacementLabel))
+        XCTAssertFalse(runner.jobs.contains(WallpaperWatcher.replacementLabel))
+        try WallpaperWatcher.setEnabled(true, engine: engine)
+        XCTAssertTrue(runner.jobs.contains(WallpaperWatcher.replacementLabel))
+    }
+
+    func testMissingHelperFailsAndAnActiveWatcherIsNeverReplaced() throws {
+        // A corrupt or incomplete Mac Setup installation should still fail
+        // with an actionable message rather than a false success.
         XCTAssertThrowsError(try engine.apply(Catalog.task("wallpaper-watcher")))
         _ = try existingWatcher()
         runner.jobs.insert(WallpaperWatcher.replacementLabel)
-        XCTAssertThrowsError(try engine.apply(Catalog.task("wallpaper-watcher")))
+        let record = try engine.apply(Catalog.task("wallpaper-watcher"))
         XCTAssertTrue(runner.jobs.contains(WallpaperWatcher.replacementLabel))
+        XCTAssertFalse(runner.jobs.contains(WallpaperWatcher.label))
+        XCTAssertTrue(engine.journal.transactions.first { $0.id == record }!.changes.isEmpty)
     }
 
     func testWallpaperWatcherCanBeDisabledAndEnabled() throws {

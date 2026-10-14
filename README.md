@@ -52,7 +52,7 @@ Vorssaint floating-point settings use a small numeric tolerance when verifying m
 
 Our full, productivity and repair setups include **Start essential apps at login**. When selected, Mac Setup registers installed AeroSpace, Karabiner-Elements and Raycast under **System Settings > General > Login Items & Extensions > Open at Login**, without removing existing items or duplicating an already registered app. macOS may require permission for Mac Setup to automate System Events. Restoring the setup transaction removes only the login items created by that run.
 
-SketchyBar continues to start through its existing Homebrew user service. WallpaperAccentWatcher starts from its existing user LaunchAgent and may appear under **Allow in Background**, not **Open at Login**. Karabiner's drivers and helper services also retain their own system-managed startup and permission requirements. We never replace these with duplicate boot processes.
+SketchyBar continues to start through its existing Homebrew user service. An installed WallpaperAccentWatcher starts from its existing user LaunchAgent, and a missing watcher is replaced by Mac Setup's bundled helper under a distinct user LaunchAgent. Only one service is active, and neither belongs in the regular **Open at Login** application list. Karabiner's drivers and helper services also retain their own system-managed startup and permission requirements. We never replace these with duplicate boot processes.
 
 On macOS 26 and later, setup includes the **Native menu bar background** check. In **System Settings > Menu Bar**, enable **Show menu bar background** so the auto-hidden native menu bar has its own blurred surface when it appears over SketchyBar. Apple has not documented a stable command-line preference for this switch, so Mac Setup links to the real system setting rather than writing an unverified key. This does not globally enable Reduce Transparency or change SketchyBar's palette.
 
@@ -82,11 +82,17 @@ If an installation fails, choose **Change selection** to return to the feature l
 
 The Raycast default is Option + R. Legacy configurations using the former Command + Space default are migrated once; customized launcher shortcuts remain unchanged.
 
+### Automatic wallpaper watcher setup
+
+Selecting **Automatic wallpaper color updates** does not require downloading a separate application. Mac Setup prefers an existing `WallpaperAccentWatcher.app` and preserves its current LaunchAgent. If the app is absent, the Mac Setup installer supplies a signed watcher helper and registers it as a user LaunchAgent at login. Both use the existing wallpaper accent calculation and poll for wallpaper changes every two seconds, with no duplicate service. The bundled watcher only analyzes changes after the image has stabilized, retries failed images with a delay, and keeps the original SketchyBar and AeroSpace configuration.
+
+Reinstall Mac Setup before retrying this task if you installed an older build without the bundled helper. The `watcher-status`, `watcher-stop`, `watcher-enable`, and `watcher-disable` commands work with either mode. macOS file-access permissions remain user-controlled.
+
 ### Guided permissions and wallpaper accents
 
 Multi-step permission guides display instructions as individual rows. Karabiner's background services, driver extension, Accessibility, Input Monitoring, and profile configuration each have an adjacent settings or app shortcut and a local **Check this step** action. Verified states are shown beside their corresponding instructions. macOS still requires users to approve all permissions; setup does not silently grant access.
 
-Wallpaper accent extraction normalizes large images once before performing its analysis, avoiding repeated full-resolution ImageMagick decodes. Each image processing stage has a bounded timeout, and the complete accent task has a longer 120-second budget in both the CLI and native app. Other setup commands retain their existing timeout. When extraction fails, the app shows the specific ImageMagick stage error instead of asking users to open Python as if it were an application. The wallpaper accent is still computed locally and the watcher remains the existing WallpaperAccentWatcher app.
+Wallpaper accent extraction normalizes large images once before performing its analysis, avoiding repeated full-resolution ImageMagick decodes. Each image processing stage has a bounded timeout, and the complete accent task has a longer 120-second budget in both the CLI and native app. Other setup commands retain their existing timeout. When extraction fails, the app shows the specific ImageMagick stage error instead of asking users to open Python as if it were an application. The wallpaper accent is still computed locally. Mac Setup preserves WallpaperAccentWatcher.app when installed and uses the bundled watcher helper when that app is absent.
 
 ### Finder folder views
 

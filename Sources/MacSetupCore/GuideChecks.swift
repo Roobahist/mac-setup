@@ -123,7 +123,9 @@ public enum GuideStepRouting {
             switch index {
             case 1, 2: return .init(title: "Open privacy settings",
                                     url: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")
-            case 3: return .init(title: "Open watcher", app: "WallpaperAccentWatcher")
+            case 3:
+                return WallpaperWatcher.executable(paths: Paths()) != nil
+                    ? .init(title: "Open watcher", app: "WallpaperAccentWatcher") : nil
             default: return nil
             }
         }
