@@ -45,7 +45,7 @@ def read_until(predicate, timeout=8.0):
             if not chunk:
                 break
             captured.extend(chunk)
-    raise AssertionError("Interactive picker did not reach the expected screen in time")
+    raise AssertionError("Interactive picker did not reach the expected screen in time. Screen: " + repr(active_screen(bytes(captured))[-2200:]))
 
 def active_screen(data: bytes) -> bytes:
     return data.rsplit(b"\x1b[H\x1b[2J", 1)[-1]
