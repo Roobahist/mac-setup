@@ -408,13 +408,14 @@ private struct SetupView: View {
                 VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Image(systemName: "line.3.horizontal").frame(width: 20, height: 28)
+                        .contentShape(Rectangle())
                         .foregroundStyle(.secondary).help("Drag to reorder \(model.layout.workspaces[i].name)")
                         .accessibilityLabel("Drag to reorder \(model.layout.workspaces[i].name)")
                         .onDrag {
                             draggingWorkspaceID = id
                             dropTargetWorkspaceID = nil
-                            let provider = NSItemProvider()
-                            provider.registerDataRepresentation(forTypeIdentifier: workspaceDragType.identifier, visibility: .ownProcess) { completion in
+                            let provider = NSItemProvider(object: id as NSString)
+                            provider.registerDataRepresentation(forTypeIdentifier: workspaceDragType.identifier, visibility: .all) { completion in
                                 completion(Data(id.utf8), nil); return nil
                             }
                             return provider

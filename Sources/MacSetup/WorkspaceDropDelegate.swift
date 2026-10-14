@@ -2,7 +2,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 import MacSetupCore
 
-let workspaceDragType = UTType(exportedAs: "com.roobahist.mac-setup.workspace")
+let workspaceDragType = UTType(exportedAs: "com.roobahist.mac-setup.workspace", conformingTo: .text)
 
 struct WorkspaceDropDelegate: DropDelegate {
     let targetID: String
