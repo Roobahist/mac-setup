@@ -7,6 +7,49 @@ final class WorkspaceConfigurationTests: XCTestCase {
         return try String(contentsOf: url, encoding: .utf8)
     }
 
+    func testWorkspaceBarAppearanceRendersSavedOrderSpacingBlurAndPalette() throws {
+        var layout = WorkspaceConfiguration.defaultLayout
+        let originalIDs = layout.workspaces.map(\.id)
+        let first = try XCTUnwrap(layout.workspaces.first?.id)
+        layout.insertWorkspace(first, at: 3)
+        layout.barStyle = WorkspaceBarStyle(
+            itemWidth: 36, blurRadius: 20,
+            backgroundColor: "0x8a192b3c",
+            occupiedColor: "0xffeeddcc",
+            emptyColor: "0x55bbaacc")
+        let shell = try layout.sketchybarShell(from: template("sketchybar/sketchybarrc"))
+        let expected = "workspace_ids=("
+            + layout.workspaces.map { "'" + $0.id + "'" }.joined(separator: " ")
+            + ")"
+        XCTAssertTrue(shell.contains(expected))
+        XCTAssertFalse(shell.contains("AEROSPACE_CONFIG="))
+        XCTAssertTrue(shell.contains("label.width=36"))
+        XCTAssertTrue(shell.contains("blur_radius=20"))
+        XCTAssertNotEqual(layout.workspaces.map(\.id), originalIDs)
+
+        let colors = try layout.barStyle.colorsShell(from: template("sketchybar/plugins/colors.sh"))
+        XCTAssertTrue(colors.contains("export BAR_COLOR=0x8a192b3c"))
+        XCTAssertTrue(colors.contains("export BASE_WHITE=0xffeeddcc"))
+        XCTAssertTrue(colors.contains("export BASE_GRAY=0x55bbaacc"))
+        XCTAssertTrue(colors.contains("export HIGHLIGHT_COLOR=0xff7873B6"),
+                      "Keep wallpaper accent selection independent of inactive workspace colors")
+
+        let data = try JSONEncoder().encode(layout)
+        XCTAssertEqual(try JSONDecoder().decode(WorkspaceConfiguration.self, from: data), layout)
+    }
+
+    func testAppearanceBackwardsCompatibleAndValidatesInputs() throws {
+        let legacy = Data(#"{"workspaces":[{"id":"1","name":"Main","glyph":"1","apps":[]}]}"#.utf8)
+        let decoded = try JSONDecoder().decode(WorkspaceConfiguration.self, from: legacy)
+        XCTAssertEqual(decoded.barStyle, WorkspaceBarStyle())
+        var style = decoded.barStyle
+        style.itemWidth = 55
+        XCTAssertThrowsError(try style.validate())
+        style.itemWidth = 21
+        style.backgroundColor = "#ffffff"
+        XCTAssertThrowsError(try style.validate())
+    }
+
     func testGeneratedSystemSettingsRulesTileLikePublicDotfiles() throws {
         let source = try String(contentsOf: Paths().profile.appendingPathComponent("aerospace/aerospace.toml"), encoding: .utf8)
         let generated = try WorkspaceConfiguration.defaultLayout.aerospaceTOML(from: source)
