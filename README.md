@@ -203,6 +203,24 @@ automatically verified state, guided steps, and steps the user confirmed.
 Stored preference verification does not guarantee the visible behavior of an
 undocumented setting on every macOS release.
 
+### Resume after a Mission Control preference failure
+
+If AeroSpace and its profile were installed but the `mission-control` task
+failed with a `defaults` usage message, update `mac-setup` to a build containing
+the Boolean preference fix, then rerun only the blocked steps:
+
+```sh
+mac-setup setup mission-control aerospace-access
+```
+
+You don't need to reinstall AeroSpace or its configuration. The Mission Control
+task saves the previous values in a new recovery record before changing them,
+and requires logging out and back in for the separate-Spaces setting to take
+effect. If you are still in the original setup run, let other tasks finish and
+return to the blocked steps afterward. A failed task's recovery record is not
+automatically restored, so review `mac-setup backups` before restoring any
+partially applied settings.
+
 `update` reapplies previously installed profiles bundled in the current executable.
 Install a newer CLI build first to obtain newer profiles. It does not download an updated public profile, upgrade every Homebrew package,
 or replace the executable itself.
@@ -332,10 +350,11 @@ GitHub Actions tests public profiles and produces preview artifacts on main push
 Pushing a `v`-prefixed version tag runs the release workflow, builds Apple silicon
 and Intel archives, and publishes them to GitHub Releases without Apple membership.
 
-Tests use temporary homes and fake system commands. CI never applies the setup to
-the runner's actual preferences. Real permission flows, display settings and app
-behavior still need testing on a spare Mac or disposable user account before a
-stable release.
+Most tests use temporary homes and fake system commands. One regression test
+checks `defaults` against a disposable, randomly named preference domain on
+the macOS CI runner, then cleans it up. CI does not apply actual setup settings.
+Real permission flows, display settings and app behavior still need testing
+on a spare Mac or disposable user account before a stable release.
 
 MIT license. Third-party apps and fonts retain their own licenses; see NOTICE.md.
 

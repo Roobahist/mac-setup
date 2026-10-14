@@ -54,7 +54,12 @@ final class FakeRunner: CommandRunning {
             if operation == "delete" { preferences[domain]?[key] = nil; return CommandResult(status: 0) }
             let value: Any
             switch args[3] {
-            case "-bool": value = args[4] == "1" || args[4] == "true" || args[4] == "YES"
+            case "-bool":
+                let bool = args[4].lowercased()
+                guard ["true", "false", "yes", "no"].contains(bool) else {
+                    return CommandResult(status: 255, output: Data("Invalid -bool argument".utf8))
+                }
+                value = bool == "true" || bool == "yes"
             case "-int": value = Int(args[4])!
             case "-float": value = Double(args[4])!
             case "-string": value = args[4]
@@ -191,6 +196,41 @@ final class EngineTests: XCTestCase {
         XCTAssertNil(runner.preferences["test"]?["new"])
         XCTAssertTrue(equalPlist(runner.preferences["test"]?["list"], [["name": "keep", "nested": [1, 2]]]))
         XCTAssertEqual(runner.preferences["test"]?["unrelated"] as? String, "untouched")
+    }
+
+    func testMissionControlWritesValidBooleanArgumentsAndCanRestore() throws {
+        // The real defaults CLI accepts true/false, not NSNumber.stringValue's 0/1.
+        let task = try Catalog.task("mission-control")
+        let record = try engine.apply(task)
+        let writes = runner.calls.filter {
+            $0.first == "/usr/bin/defaults" && $0.count >= 6 &&
+            $0[1] == "write" && $0[4] == "-bool"
+        }
+        XCTAssertTrue(writes.contains {
+            $0[2] == "com.apple.dock" && $0[3] == "mru-spaces" && $0[5] == "false"
+        })
+        XCTAssertTrue(writes.contains {
+            $0[2] == "com.apple.spaces" && $0[3] == "spans-displays" && $0[5] == "false"
+        })
+        XCTAssertEqual(try engine.state(task), .done)
+        try engine.journal.restore(record)
+        XCTAssertNil(runner.preferences["com.apple.dock"]?["mru-spaces"])
+        XCTAssertNil(runner.preferences["com.apple.spaces"]?["spans-displays"])
+    }
+
+    func testBooleanPreferencesRoundTripWithActualMacOSDefaults() throws {
+        // Use a disposable domain rather than editing system or app preferences.
+        let domain = "org.macsetup.tests.bool-" + UUID().uuidString.lowercased()
+        let realRunner = ProcessRunner()
+        defer { _ = try? realRunner.run("/usr/bin/defaults", ["delete", domain]) }
+        try realRunner.checked("/usr/bin/defaults", ["write", domain, "enabled", "-bool", "true"])
+        let actualJournal = try Journal(paths: paths, runner: realRunner)
+        let record = try actualJournal.begin("boolean-real-defaults")
+        try actualJournal.setPreference(domain, "enabled", false, transaction: record)
+        XCTAssertTrue(equalPlist(try actualJournal.preference(domain, "enabled"), false))
+        try actualJournal.finish(record)
+        try actualJournal.restore(record)
+        XCTAssertTrue(equalPlist(try actualJournal.preference(domain, "enabled"), true))
     }
 
     func testFailedPreferenceWriteHasRecoverableRecord() throws {
