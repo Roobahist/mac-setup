@@ -33,10 +33,13 @@ final class SetupRepairTests: XCTestCase {
         XCTAssertEqual(process.terminationStatus, 0)
         let calls = try String(contentsOf: capture, encoding: .utf8)
         XCTAssertTrue(calls.contains("--set space.research label=" + WorkspaceConfiguration.symbol(for: "book")!))
-        XCTAssertTrue(calls.contains("label.font=Hack Nerd Font Mono:Bold:17.0"))
-        XCTAssertTrue(calls.contains("label.width=30"))
+        XCTAssertTrue(calls.contains("label.font=Hack Nerd Font:Bold:14.5"))
+        XCTAssertTrue(calls.contains("label.width=21"))
         XCTAssertFalse(calls.contains("Font Awesome"))
         XCTAssertTrue(calls.contains("front_app_switched system_woke"))
+        XCTAssertTrue(calls.contains("topmost=window"))
+        XCTAssertTrue(calls.contains("notch_display_height="))
+        XCTAssertTrue(calls.contains("display_change system_woke"))
     }
 
     func testKarabinerMustHavePermissionsDriverAndProfile() throws {

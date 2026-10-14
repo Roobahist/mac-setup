@@ -13,11 +13,12 @@ public final class Engine {
     public var selectedWorkspaceTaskIDs: Set<String>?
     public var deferRestarts = false
     public private(set) var pendingRestarts = Set<String>()
+    private let displayHelper: URL?
     private var brewRefreshed = false
     private let tools: (String) -> String?
 
-    public init(paths: Paths = Paths(), runner: CommandRunning = ProcessRunner(), dotfilesSource: DotfilesSource? = nil, tools: @escaping (String) -> String? = executable) throws {
-        self.paths = paths; self.runner = runner; self.tools = tools
+    public init(paths: Paths = Paths(), runner: CommandRunning = ProcessRunner(), dotfilesSource: DotfilesSource? = nil, displayHelper: URL? = AppResources.displayHelperURL, tools: @escaping (String) -> String? = executable) throws {
+        self.paths = paths; self.runner = runner; self.tools = tools; self.displayHelper = displayHelper
         let record = try Journal(paths: paths, runner: runner)
         journal = record
         dotfiles = LinkedDotfiles(paths: paths, runner: runner, journal: record, source: dotfilesSource)
@@ -64,6 +65,7 @@ public final class Engine {
             }
             return .done
         case let .preferences(preferences, _):
+            if task.id == "raycast-profile", try spotlightSearchEnabled() { return .ready }
             return try preferences.allSatisfy { equalPlist(try journal.preference($0.domain, $0.key), $0.value) } ? .done : .ready
         case .vorssaint:
             return try vorssaintPreferences().allSatisfy { equalPlist(try journal.preference($0.domain, $0.key), $0.value) } ? .done : .ready
@@ -207,7 +209,10 @@ public final class Engine {
                     if running.status == 0 { try runner.checked(tool, ["reload-config"]) }
                 }
             case let .preferences(preferences, restart):
-                if task.id == "raycast-profile" { try quitForPreferences("com.raycast.macos") }
+                if task.id == "raycast-profile" {
+                    try quitForPreferences("com.raycast.macos")
+                    try releaseSpotlightShortcut(transaction: id)
+                }
                 for preference in preferences { try journal.setPreference(preference.domain, preference.key, preference.value, transaction: id) }
                 if let restart { try self.restart(restart) }
             case .vorssaint:
@@ -398,10 +403,18 @@ public final class Engine {
         let root = paths.profile.appendingPathComponent(name)
         let files = try bundledFiles(name)
         guard !files.isEmpty else { return false }
+        if name == "sketchybar" {
+            guard let displayHelper,
+                  let actual = try? Data(contentsOf: paths.config.appendingPathComponent("sketchybar/plugins/mac-setup-display")),
+                  actual == (try Data(contentsOf: displayHelper)) else { return false }
+        }
         return try files.allSatisfy { file in
             let relative = String(file.path.dropFirst(root.path.count + 1))
             let target = paths.config.appendingPathComponent(name).appendingPathComponent(relative)
             guard let actual = try? Data(contentsOf: target) else { return false }
+            if name == "aerospace", relative == "aerospace.toml" {
+                return DisplayGeometry.stableConfiguration(actual) == DisplayGeometry.stableConfiguration(try materialized(file))
+            }
             if relative == "plugins/colors.sh" { return String(decoding: actual, as: UTF8.self).contains("HIGHLIGHT_COLOR=") }
             return actual == (try materialized(file))
         }
@@ -419,6 +432,10 @@ public final class Engine {
            file.deletingLastPathComponent().lastPathComponent == "sketchybar" {
             return Data(try WorkspaceConfiguration.load(from: paths)
                 .forSelectedTasks(selectedWorkspaceTaskIDs).sketchybarShell(from: original).utf8)
+        }
+        if file.lastPathComponent == "geometry.sh" {
+            let quoted = "'" + paths.config.appendingPathComponent("aerospace/aerospace.toml").path.replacingOccurrences(of: "'", with: "'\"'\"'") + "'"
+            return Data(original.replacingOccurrences(of: "AEROSPACE_CONFIG=auto", with: "AEROSPACE_CONFIG=" + quoted).utf8)
         }
         // Alacritty's import path is resolved against the recipient's configuration directory.
         if file.lastPathComponent == "alacritty.toml" {
@@ -461,6 +478,13 @@ public final class Engine {
             try materialized(file).write(to: output)
             let mode = file.pathExtension == "sh" || file.pathExtension == "py" || file.lastPathComponent == "sketchybarrc" ? 0o755 : 0o644
             try FileManager.default.setAttributes([.posixPermissions: mode], ofItemAtPath: output.path)
+        }
+        if name == "sketchybar" {
+            guard let displayHelper else { throw SetupError("This build is missing mac-setup-display. Rebuild or download the complete app package.") }
+            let output = staging.appendingPathComponent("plugins/mac-setup-display")
+            if Journal.exists(output) { try FileManager.default.removeItem(at: output) }
+            try FileManager.default.copyItem(at: displayHelper, to: output)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: output.path)
         }
         try journal.replace(target, with: staging, transaction: transaction)
     }

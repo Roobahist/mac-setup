@@ -50,7 +50,7 @@ public enum Catalog {
         SetupTask("dotfiles-linked", "Tools", "Link public dotfiles",
                   "Clone the public dot-files repository. Only selected application profiles are linked later. Requires Git.",
                   action: .linkedDotfiles),
-        SetupTask("fonts", "Tools", "Interface and terminal fonts", "Install Hack Nerd Font and JetBrains Mono.", dependencies: ["homebrew"], action: .install(packages: ["font-hack-nerd-font", "font-jetbrains-mono"], cask: true, app: nil)),
+        SetupTask("fonts", "Tools", "Interface and terminal fonts", "Install SF Pro for the reference workspace symbols, Hack Nerd Font, and JetBrains Mono.", dependencies: ["homebrew"], action: .install(packages: ["font-sf-pro", "font-hack-nerd-font", "font-jetbrains-mono"], cask: true, app: nil)),
         SetupTask("aerospace", "Window management", "AeroSpace", "Install the tiling window manager.", dependencies: ["homebrew"], action: .install(packages: ["nikitabobko/tap/aerospace"], cask: true, app: "AeroSpace")),
         SetupTask("aerospace-profile", "Window management", "AeroSpace configuration", "Apply workspace names, key bindings, app rules and SketchyBar integration. Replaces the AeroSpace config folder after backup.", dependencies: ["aerospace"], action: .profile(["aerospace"])),
         SetupTask("mission-control", "Window management", "Mission Control workspace settings", "Keep Space order fixed and enable separate Spaces per display. Log out and back in for the display setting to take effect.", dependencies: ["aerospace-profile"], action: .preferences([
@@ -77,19 +77,22 @@ public enum Catalog {
             "Enable launch at login in Vorssaint itself. The captured profile merges portable stored settings; it does not overwrite another Mac's private content or register login items."
         ])),
         SetupTask("raycast", "Apps", "Raycast", "Install Raycast. Account setup and personal extensions stay local.", dependencies: ["homebrew"], action: .install(packages: ["raycast"], cask: true, app: "Raycast")),
-        SetupTask("raycast-profile", "Apps", "Raycast launcher shortcut", "Match this Mac: Option+R opens Raycast. Quit Raycast before changing its stored shortcut.", dependencies: ["raycast"], action: .preferences([
-            Preference("com.raycast.macos", "raycastGlobalHotkey", "Option-15")
+        SetupTask("raycast-profile", "Apps", "Raycast launcher shortcut", "Use Command+Space for Raycast and release the same shortcut from Spotlight. Existing Spotlight settings are backed up.", dependencies: ["raycast"], action: .preferences([
+            Preference("com.raycast.macos", "raycastGlobalHotkey", "Command-49")
         ], restart: nil)),
         SetupTask("raycast-access", "Apps", "Raycast setup", "Set the launcher shortcut and authorize the extensions you use.", dependencies: ["raycast-profile"], action: .guide(url: nil, app: "Raycast", instructions: [
-            "If Raycast shows Welcome, choose Set up for myself. Skip account sign-in, AI, and extension suggestions; those are optional. Continue to the launcher shortcut.",
-            "Set Raycast Hotkey to Option+R, matching the applied profile. Keep Spotlight on Command+Space. No Spotlight change is needed.",
-            "In Raycast Settings > General, enable Launch Raycast at login. Close Settings and press Option+R: the launcher must appear before you mark this step complete."
+            "If Raycast shows Welcome, continue with local setup. Skip account sign-in, AI, and extension suggestions if offered. Those are optional.",
+            "Open Raycast Settings > General. Raycast Hotkey should be Command+Space; if onboarding changed it, click that field and press Command+Space. Setup disables Spotlight’s conflicting Show Spotlight search shortcut automatically.",
+            "In Raycast Settings > General, enable Launch Raycast at login. Close Settings and press Command+Space: Raycast must appear instead of Spotlight before you mark this step complete."
         ])),
         SetupTask("karabiner", "Apps", "Karabiner-Elements", "Install the keyboard remapping tool.", dependencies: ["homebrew"], action: .install(packages: ["karabiner-elements"], cask: true, app: "Karabiner-Elements")),
         SetupTask("karabiner-profile", "Apps", "Karabiner configuration", "Apply portable application shortcuts. Replaces the Karabiner config folder after backup; one optional generic key-sequence example is disabled.", dependencies: ["karabiner"], action: .profile(["karabiner"])),
         SetupTask("karabiner-access", "Apps", "Karabiner permissions", "Use Karabiner's own setup assistant for its helper permissions and driver approval.", dependencies: ["karabiner-profile"], action: .guide(url: "https://karabiner-elements.pqrs.org/docs/getting-started/installation/", app: "Karabiner-Elements", instructions: [
-            "Karabiner opens automatically here. In its setup assistant, enable its core service under Login Items & Extensions, then approve its Driver Extension. Return to Karabiner after each approval.",
-            "Enable the Karabiner helper shown by its assistant under Input Monitoring and Accessibility. Choose the Portable profile. The Check again button verifies the helper, driver, keyboard and profile.",
+            "Background services: in System Settings > General > Login Items & Extensions, allow the Karabiner background services shown by its assistant. Keep the privileged core service and the user agent enabled.",
+            "Driver Extension: in General > Login Items & Extensions > Driver Extensions, allow org.pqrs.Karabiner-DriverKit-VirtualHIDDevice. This is required even after installing Karabiner; without it the remappings do not work.",
+            "Accessibility: in Privacy & Security > Accessibility, enable the Karabiner core service requested by its assistant. Approval for Mac Setup does not approve Karabiner.",
+            "Input Monitoring: enable the Karabiner helper requested by its assistant under Privacy & Security > Input Monitoring if Karabiner still asks for it. Return to Karabiner after each approval.",
+            "In Karabiner, select the Portable profile and the virtual keyboard layout matching your physical keyboard. Click Check again here; the step stays pending until the services, driver, virtual keyboard and permissions are ready.",
             "Test Option+Return for Alacritty, Option+E for Finder, and Option+V for Visual Studio Code. Install those target apps if needed."
         ])),
         SetupTask("alacritty", "Terminal", "Alacritty", "Install the terminal used by the keyboard shortcuts.", dependencies: ["homebrew"], action: .install(packages: ["alacritty"], cask: true, app: "Alacritty")),

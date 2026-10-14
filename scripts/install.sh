@@ -23,6 +23,7 @@ mkdir -p "$INSTALL_ROOT/versions" "$BIN_ROOT"
 INSTALL_DIR="$INSTALL_ROOT/versions/$(date +%Y%m%d-%H%M%S)-$$"
 mkdir "$INSTALL_DIR"
 cp "$SOURCE_DIR/mac-setup" "$INSTALL_DIR/"
+cp "$SOURCE_DIR/mac-setup-display" "$INSTALL_DIR/"
 cp -R "$SOURCE_DIR/MacSetup_MacSetupCore.bundle" "$INSTALL_DIR/"
 if [[ -d "$SOURCE_DIR/Mac Setup.app" ]]; then
   cp -R "$SOURCE_DIR/Mac Setup.app" "$INSTALL_DIR/"

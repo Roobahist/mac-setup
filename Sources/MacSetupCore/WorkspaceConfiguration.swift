@@ -11,29 +11,29 @@ public struct WorkspaceGlyph: Hashable {
         self.keywords = keywords
     }
 
-    // Every selectable glyph is supplied by Hack Nerd Font, the workspace font.
+    // The five default symbols match the reference Mac. Extra symbols use Nerd Font.
     public static let all: [WorkspaceGlyph] = [
         .init("0", "0", "number zero"), .init("1", "1", "number one"),
         .init("2", "2", "number two"), .init("3", "3", "number three"),
         .init("4", "4", "number four"), .init("5", "5", "number five"),
         .init("6", "6", "number six"), .init("7", "7", "number seven"),
         .init("8", "8", "number eight"), .init("9", "9", "number nine"),
-        .init("robot", "󰚩", "ai assistant chatgpt"), .init("terminal", "󰆍", "shell command"),
+        .init("robot", "􀴽", "ai assistant chatgpt reference"), .init("terminal", "󰆍", "shell command"),
         .init("code", "󰅨", "developer editor vscode"), .init("file", "󰉋", "finder folder"),
         .init("git", "󰊢", "source version"), .init("tasks", "󱃔", "list todo"),
         .init("weather", "󰖕", "sun cloud"), .init("mail", "󰇮", "email inbox"),
         .init("calculator", "󰪚", "math"), .init("map", "󰆋", "navigation location"),
-        .init("microphone", "󰍬", "audio recording"), .init("chat", "󰍩", "messages telegram whatsapp"),
-        .init("video call", "󰍫", "zoom meetings"), .init("notes", "󱞎", "writing obsidian"),
+        .init("microphone", "󰍬", "audio recording"), .init("chat", "􀌲", "messages telegram whatsapp"),
+        .init("video call", "󰍫", "zoom meetings"), .init("notes", "􀈫", "writing obsidian"),
         .init("camera", "󰄀", "photo"), .init("web", "󰇧", "browser safari chrome"),
-        .init("home", "󱉑", "house automation"), .init("music", "󰎄", "spotify tunes"),
+        .init("home", "󱉑", "house automation"), .init("music", "􀑬", "spotify tunes"),
         .init("podcast", "󰦔", "radio"), .init("play", "󱉺", "video television"),
         .init("book", "󰂿", "reading"), .init("dictionary", "󱁯", "reference"),
         .init("preview", "󰋲", "image screenshot"), .init("password", "󰷡", "security key"),
         .init("download", "󱑢", "transfer"), .init("cast", "󱒃", "airplay"),
         .init("table", "󰓫", "excel spreadsheet"), .init("presentation", "󰈩", "slides"),
         .init("cloud", "󰅧", "drive backup"), .init("pen", "󰏬", "design drawing"),
-        .init("desktop", "󰢹", "monitor remote"), .init("clock", "󰥔", "timer pomodoro"),
+        .init("desktop", "󰢹", "monitor remote"), .init("clock", "􀐯", "timer pomodoro"),
         .init("calendar", "󰃭", "schedule"), .init("wifi", "󰖩", "internet"),
         .init("vpn", "󰦝", "network privacy"), .init("battery", "󰁹", "power"),
         .init("memory", "󰓅", "ram"), .init("disk", "󰋊", "storage"),
@@ -124,7 +124,14 @@ public struct WorkspaceConfiguration: Codable, Equatable {
 
     // The layout supports AeroSpace's familiar Option+key navigation.
     public static let keys = ["backtick", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "minus", "equal"]
-    public static let font = "Hack Nerd Font Mono:Bold:17.0"
+    public static let font = "Hack Nerd Font:Bold:14.5"
+    public static let referenceGlyphs: Set<String> = ["robot", "music", "chat", "notes", "clock"]
+    public static func font(for glyph: String) -> String {
+        referenceGlyphs.contains(glyph) ? "SF Pro:Regular:14.5" : font
+    }
+    public static func fontFamily(for glyph: String) -> String {
+        referenceGlyphs.contains(glyph) ? "SF Pro" : "Hack Nerd Font"
+    }
 
     // Tomito is not a setup dependency, and the timer workspace is optional.
     public static var defaultLayout: WorkspaceConfiguration {
@@ -235,9 +242,9 @@ public struct WorkspaceConfiguration: Codable, Equatable {
             + String(original[endRange.lowerBound...])
     }
 
-    public func aerospaceTOML(from template: String) throws -> String {
+    public func aerospaceTOML(from template: String, geometry: DisplayGeometry = .current()) throws -> String {
         try validate()
-        var result = template
+        var result = geometry.applying(to: template)
         let ids = workspaces.map { "    \"\($0.id)\"," }.joined(separator: "\n")
         result = try Self.replace(result, from: "persistent-workspaces = [", to: "\n]\n",
             with: "persistent-workspaces = [\n\(ids)")
@@ -306,10 +313,11 @@ public struct WorkspaceConfiguration: Codable, Equatable {
             let symbol = Self.symbol(for: item.glyph)!
             return "    \(item.id)) printf '%s\\n' '\(symbol)' ;;"
         }.joined(separator: "\n")
+        let fonts = workspaces.map { "    \($0.id)) printf '%s\\n' '\(Self.font(for: $0.glyph))' ;;" }.joined(separator: "\n")
         let section = """
         ##### Workspace Icons #####
 
-        # Custom workspace icons use Hack Nerd Font. Layout is saved locally.
+        # Reference symbols use SF Pro; extra symbols and numbers use Hack Nerd Font.
         workspace_icon() {
           case "$1" in
         \(icons)
@@ -318,12 +326,16 @@ public struct WorkspaceConfiguration: Codable, Equatable {
         }
 
         workspace_font() {
-          printf '%s\\n' '\(Self.font)'
+          case "$1" in
+        \(fonts)
+            *) printf '%s\\n' '\(Self.font)' ;;
+          esac
         }
 
         """
-        return try Self.replace(template, from: "##### Workspace Icons #####\n",
+        let rendered = try Self.replace(template, from: "##### Workspace Icons #####\n",
                                 to: "# Read workspace names and order directly from AeroSpace\n",
                                 with: section + "##### AeroSpace Workspaces #####\n\nsketchybar --add event aerospace_workspace_change\n\n# ------------------------------------------------------------\n")
+        return DisplayGeometry.barShell(rendered)
     }
 }

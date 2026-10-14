@@ -27,6 +27,7 @@ private final class SetupModel: ObservableObject {
     @Published var appSearch = ""
     private let worker = DispatchQueue(label: "mac-setup.native", qos: .userInitiated)
     private var setupLock: SetupLock?
+    private var guideProgress = GuideProgress()
     let runner = EmbeddedInstaller()
     let engine: Engine
 
@@ -34,6 +35,7 @@ private final class SetupModel: ObservableObject {
         engine = try Engine(runner: runner)
         engine.deferRestarts = true
         layout = try WorkspaceConfiguration.load(from: engine.paths)
+        guideProgress = try GuideProgress.load(from: engine.paths)
         apps = ApplicationDiscovery.scan(home: engine.paths.home)
         if let preset { picker.choose(preset) }
         if let ids {
@@ -136,7 +138,8 @@ private final class SetupModel: ObservableObject {
                     let check = try engine.checkGuide(task)
                     DispatchQueue.main.async {
                         self.busy = false; self.page = .guide
-                        self.message = check.message; self.checkReady = check.ready
+                        self.restoreGuideProgress()
+                        self.updateGuideCheck(check)
                     }
                     return
                 }
@@ -172,11 +175,44 @@ private final class SetupModel: ObservableObject {
         worker.async { [self] in
             do {
                 let check = try engine.checkGuide(task)
-                DispatchQueue.main.async { self.message = check.message; self.checkReady = check.ready; self.busy = false }
+                DispatchQueue.main.async { self.updateGuideCheck(check); self.busy = false }
             } catch {
                 DispatchQueue.main.async { self.message = String(describing: error); self.checkReady = false; self.busy = false }
             }
         }
+    }
+
+    private func restoreGuideProgress() {
+        guard let task = current else { return }
+        let saved = guideProgress.completedSteps[task.id] ?? []
+        checkedSteps = Set(steps.enumerated().filter { saved.contains($0.element) }.map(\.offset))
+    }
+
+    func setGuideStep(_ index: Int, _ enabled: Bool) {
+        if enabled { checkedSteps.insert(index) } else { checkedSteps.remove(index) }
+        saveGuideProgress()
+    }
+
+    private func saveGuideProgress() {
+        guard let task = current else { return }
+        guideProgress.completedSteps[task.id] = Set(checkedSteps.compactMap { steps.indices.contains($0) ? steps[$0] : nil })
+        do { try guideProgress.save(to: engine.paths) }
+        catch { message = "Could not save this checklist: \(error)" }
+    }
+
+    private func updateGuideCheck(_ check: GuideCheck) {
+        message = check.message; checkReady = check.ready
+        guard let task = current else { return }
+        guideProgress.observedRequirements[task.id] = check.requirements
+        guideProgress.lastChecked[task.id] = Date()
+        if task.id == "karabiner-access" {
+            let required = [["services"], ["driver"], ["accessibility"], ["input"], ["keyboard", "profile"]]
+            for (index, identifiers) in required.enumerated() {
+                let ready = identifiers.allSatisfy { id in check.requirements.contains { $0.id == id && $0.ready } }
+                if ready { checkedSteps.insert(index) } else { checkedSteps.remove(index) }
+            }
+        }
+        saveGuideProgress()
     }
 
     func completeGuide() {
@@ -210,6 +246,13 @@ private final class SetupModel: ObservableObject {
 
 private struct SetupView: View {
     @ObservedObject var model: SetupModel
+
+    private var previewTime: String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "EEE MMM dd HH:mm"
+        return formatter.string(from: Date())
+    }
 
     private var visibleWorkspaceIndices: [Int] {
         model.layout.workspaces.indices.filter { i in
@@ -310,14 +353,17 @@ private struct SetupView: View {
     private var workspaces: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Your workspace bar").font(.title2.bold())
-            Text("Use Option plus the key shown to switch. Option+Shift plus that key moves a window. Icons use the Nerd Font installed by setup.")
-            HStack(spacing: 12) {
+            Text("Use Option plus the key shown to switch. Option+Shift plus that key moves a window. Symbols and fonts match the reference Mac. Setup installs SF Pro and Hack Nerd Font when needed.")
+            HStack(spacing: 0) {
                 ForEach(model.layout.forSelectedTasks(model.picker.selected).workspaces, id: \.id) { workspace in
                     Text(WorkspaceConfiguration.symbol(for: workspace.glyph) ?? workspace.name)
-                        .font(.custom("Hack Nerd Font Mono", size: 22)).help(workspace.name)
+                        .font(.custom(WorkspaceConfiguration.fontFamily(for: workspace.glyph), size: 14.5))
+                        .fontWeight(WorkspaceConfiguration.referenceGlyphs.contains(workspace.glyph) ? .regular : .bold)
+                        .frame(width: 21).help(workspace.name)
                 }
-                Spacer(); Text(Date(), style: .time).font(.system(size: 17, weight: .bold, design: .monospaced))
-            }.padding(16).background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
+                Spacer(); Text(previewTime).font(.custom("Hack Nerd Font Mono", size: 14).weight(.bold)).frame(width: 400, alignment: .trailing)
+            }.padding(.horizontal, 20).frame(height: CGFloat(DisplayGeometry.current().previewHeight))
+             .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
             ForEach(visibleWorkspaceIndices, id: \.self) { i in
                 HStack {
                     Text("⌥ \(keyName(WorkspaceConfiguration.keys[visibleWorkspaceIndices.firstIndex(of: i)!]))").font(.system(.body, design: .monospaced)).frame(width: 60, alignment: .leading)
@@ -387,10 +433,10 @@ private struct SetupView: View {
     private var guide: some View {
         VStack(alignment: .leading, spacing: 18) {
             Text(model.current?.title ?? "Test your setup").font(.title2.bold())
-            Text("Task \(model.index + 1) of \(model.tasks.count). The app or settings for this task has opened. Follow these choices, then return here.").foregroundStyle(.secondary)
+            Text("Task \(model.index + 1) of \(model.tasks.count). The app or settings for this task has opened. This checklist is saved locally. Detected Karabiner permissions are checked automatically; you still test the physical shortcuts.").foregroundStyle(.secondary)
             ForEach(Array(model.steps.enumerated()), id: \.offset) { i, instruction in
                 Toggle(isOn: Binding(get: { model.checkedSteps.contains(i) }, set: { enabled in
-                    if enabled { model.checkedSteps.insert(i) } else { model.checkedSteps.remove(i) }
+                    model.setGuideStep(i, enabled)
                 })) {
                     Text("\(i + 1). \(instruction)").fixedSize(horizontal: false, vertical: true)
                 }.toggleStyle(.checkbox).padding(14).background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
@@ -469,6 +515,7 @@ enum NativeSetup {
     static func run(ids: [String]? = nil, preset: SetupPreset? = nil, workspaceEditor: Bool = false) throws {
         let app = NSApplication.shared
         app.setActivationPolicy(.regular)
+        if let icon = AppResources.iconURL, let image = NSImage(contentsOf: icon) { app.applicationIconImage = image }
         let model = try SetupModel(ids: ids, preset: preset)
         if workspaceEditor { model.page = .workspaces }
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 930, height: 760), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)

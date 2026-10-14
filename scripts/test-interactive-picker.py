@@ -207,7 +207,7 @@ try:
     assert b"SELECTED WORKSPACE" in workspace_screen, "Wide view should show inspector"
     assert b"SHORTCUT" in workspace_screen and b"GLYPH" in workspace_screen
     assert b"ICON" in workspace_screen, "Glyph preview column should always be present"
-    assert "󰚩".encode() in workspace_screen, "Expected actual Hack Nerd Font icon preview"
+    assert "􀴽".encode() in workspace_screen, "Expected actual reference SF Pro icon preview"
     assert b"Pomodoro" in workspace_screen, "Tomito workspace must be in default layout"
     assert b"APP RULES" in workspace_screen
     assert b"robot" in workspace_screen, "Glyph name must be readable without Nerd Font"

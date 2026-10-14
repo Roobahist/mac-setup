@@ -59,9 +59,10 @@ must report working services, Accessibility, Input Monitoring, its driver, virtu
 keyboard and the Portable profile; a previous yes/no answer cannot bypass these
 checks. Test the physical keyboard shortcuts before continuing.
 
-The Repair preset configures Raycast's **Option+R** shortcut from the reference Mac.
+The Repair preset assigns **Command+Space** to Raycast and disables only Spotlight’s
+conflicting Show Spotlight search shortcut after backing up the existing shortcuts.
 Its guide explains which optional account/AI/extension screens to skip and how to
-keep Spotlight on Command+Space. Vorssaint's replacement app switcher is disabled
+test Command+Space and resolve any onboarding override. Vorssaint's replacement app switcher is disabled
 in this AeroSpace profile so native Command+Tab can follow workspace focus. The
 remaining guide enables quit-on-close and explains the required Accessibility and
 launch-at-login choices. Permission Settings open from a separate button, so they
@@ -89,10 +90,41 @@ Your choices are saved locally in
 `~/Library/Application Support/mac-setup/workspaces.json` when setup starts.
 The optional timer workspace is emitted only when Tomito is selected. AeroSpace and
 SketchyBar are generated as backed-up local copies rather than changes to a public
-Git checkout. Glyph mappings have one definition and use the installed Hack Nerd
-Font Mono at 17 points, with 30-point workspace slots and visible inactive colors.
+Git checkout. Glyph mappings have one definition. The five default symbols exactly match the
+reference Mac’s SF Pro characters, while numbers and additional glyphs use Hack Nerd
+Font at 14.5 points in 21-point slots. The native preview uses those same fonts and sizes.
 The bar refreshes after application switching and wake, with a periodic recovery
 check for missed workspace events.
+
+SketchyBar’s height is measured in logical points from the host’s system status bar
+and display safe areas. Notched displays receive a separate height override. AeroSpace
+uses per-display gaps and subtracts the top area already reserved by macOS, so the
+notch is not counted twice. A compiled helper keeps both configurations aligned after
+monitor, resolution and scaling changes; it requires no Swift or Xcode on the receiving
+Mac. Only the marked generated top-gap line is runtime-managed. Restore still checks
+all other configuration edits. `topmost=window` and zero offsets keep SketchyBar over
+application windows at the top edge, below the native menu bar when it reveals.
+
+Karabiner’s guide separately records background services, Driver Extension,
+Accessibility, Input Monitoring and virtual-keyboard/profile readiness. These checks
+are refreshed from Karabiner and saved locally in
+`~/Library/Application Support/mac-setup/guided-checklist.json`; pending steps can be
+resumed. The driver and privacy approvals require the user’s action in System Settings.
+The physical shortcut test is never inferred from service registration.
+
+## Open the app without using Terminal
+
+Download and extract the archive for your Mac. Double-click **Mac Setup.app**.
+Keep **Repair** selected, click **Continue**, review the workspace preview, then
+**Review changes → Start setup**. Every remaining guide and installer prompt appears
+in that window. Installed apps are retained. If a step needs attention, use **Check again**,
+**Retry this task**, or **Leave pending & continue**.
+
+After a source or archive installation using `install.sh`, the app is also available
+at `~/Applications/Mac Setup.app`. The `mac-setup` command opens the same native UI;
+`mac-setup terminal` explicitly opens the legacy terminal picker. An older installed
+CLI must be updated first to gain the Swift app. The release app has its own monitor
+and checkmark icon.
 
 ## Download a build
 

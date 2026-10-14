@@ -85,7 +85,8 @@ public final class Journal {
             } else if type == .typeRegular {
                 hasher.update(data: Data("file".utf8))
                 hasher.update(data: Data(String(describing: attributes[.posixPermissions] ?? "").utf8))
-                hasher.update(data: try Data(contentsOf: item))
+                let data = try Data(contentsOf: item)
+                hasher.update(data: item.lastPathComponent == "aerospace.toml" ? DisplayGeometry.stableConfiguration(data) : data)
             } else { throw SetupError("Unsupported file type: \(item.path)") }
             hasher.update(data: Data([0]))
         }

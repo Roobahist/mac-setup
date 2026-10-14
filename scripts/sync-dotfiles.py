@@ -44,6 +44,10 @@ def build_profile(repository, destination):
         target = destination / name
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, target)
+    # The compiled host-geometry adapter belongs to the installer profile.
+    adapter = PROFILE / "sketchybar/plugins/geometry.sh"
+    if adapter.is_file():
+        shutil.copy2(adapter, destination / "sketchybar/plugins/geometry.sh")
     # This app's portable settings are managed by mac-setup, not dot-files.
     shutil.copytree(PROFILE / "vorssaint", destination / "vorssaint")
     env = dict(os.environ, MAC_SETUP_PROFILE_ROOT=str(destination))

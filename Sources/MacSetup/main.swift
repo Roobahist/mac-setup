@@ -3,7 +3,7 @@ import Darwin
 import MacSetupCore
 
 let help = """
-mac-setup 0.3.0 | interactive setup for your Mac
+mac-setup 0.3.1 | interactive setup for your Mac
 
 Usage:
   mac-setup                     Open the native Swift setup app
@@ -222,7 +222,7 @@ func setup(_ ids: [String], engine: Engine, options: Options) throws {
 do {
     var options = try Options(Array(CommandLine.arguments.dropFirst()))
     if options.command == "help" { print(help); exit(0) }
-    if options.command == "version" { print("0.3.0"); exit(0) }
+    if options.command == "version" { print("0.3.1"); exit(0) }
     guard getuid() != 0 else { throw SetupError("Run mac-setup as your normal user, not with sudo. Individual installers request privileges themselves.") }
     let engine = try Engine()
     if options.command == "menu" || options.command == "gui" || (options.command == "setup" && !options.yes && !options.dryRun) {

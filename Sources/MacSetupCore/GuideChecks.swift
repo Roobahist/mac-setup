@@ -3,7 +3,10 @@ import Foundation
 public struct GuideCheck {
     public let ready: Bool
     public let message: String
-    public init(_ ready: Bool, _ message: String) { self.ready = ready; self.message = message }
+    public let requirements: [GuideRequirement]
+    public init(_ ready: Bool, _ message: String, requirements: [GuideRequirement] = []) {
+        self.ready = ready; self.message = message; self.requirements = requirements
+    }
 }
 
 public extension Engine {
@@ -22,7 +25,8 @@ public extension Engine {
             return Self.karabinerCheck(result, profile: profile.text)
         case "raycast-access":
             let shortcut = try journal.preference("com.raycast.macos", "raycastGlobalHotkey") as? String
-            return GuideCheck(shortcut == "Option-15", "Expected Raycast shortcut: Option+R. Press it and check that Raycast appears; enable Launch at login in Raycast Settings.")
+            let spotlight = try spotlightSearchEnabled()
+            return GuideCheck(shortcut == "Command-49" && !spotlight, "Expected: Command+Space opens Raycast and Spotlight’s Show Spotlight search shortcut is disabled. Enable Launch at login in Raycast Settings and test Command+Space.")
         case "tomito":
             return GuideCheck(try state(task) == .done, "Install Tomito using the App Store, then return and check again.")
         default:
@@ -38,19 +42,24 @@ public extension Engine {
               let context = value["guidance_context"] as? [String: Any] else {
             return GuideCheck(false, "Karabiner did not return its setup status. Open Karabiner and finish its assistant, then check again.")
         }
-        var missing: [String] = []
-        if permissions["accessibility_process_trusted"] as? Bool != true { missing.append("Accessibility") }
-        if permissions["iohid_listen_event_allowed"] as? Bool != true { missing.append("Input Monitoring") }
-        if core["driver_activated"] as? Bool != true || core["driver_connected"] as? Bool != true { missing.append("Driver Extension") }
-        if core["virtual_hid_keyboard_ready"] as? Bool != true { missing.append("virtual keyboard") }
-        if core["driver_version_mismatched"] as? Bool == true { missing.append("matching driver version") }
-        if context["services_running"] as? Bool != true { missing.append("background services") }
-        if let error = core["karabiner_json_parse_error_message"] as? String, !error.isEmpty { missing.append("configuration: " + error) }
-        if core["karabiner_json_permission_error"] as? Bool == true || value["console_user_server_karabiner_json_permission_error"] as? Bool == true { missing.append("configuration file access") }
-        if profile != "Portable" { missing.append("Portable profile") }
+        var checks: [GuideRequirement] = [
+            .init("services", "Background services", context["services_running"] as? Bool == true),
+            .init("driver", "Driver Extension", core["driver_activated"] as? Bool == true && core["driver_connected"] as? Bool == true && core["driver_version_mismatched"] as? Bool != true),
+            .init("accessibility", "Accessibility", permissions["accessibility_process_trusted"] as? Bool == true),
+            .init("input", "Input Monitoring", permissions["iohid_listen_event_allowed"] as? Bool == true),
+            .init("keyboard", "Virtual keyboard and layout", core["virtual_hid_keyboard_ready"] as? Bool == true && core["virtual_hid_keyboard_type_not_set"] as? Bool != true),
+            .init("profile", "Portable profile", profile == "Portable")
+        ]
+        if let error = core["karabiner_json_parse_error_message"] as? String, !error.isEmpty {
+            checks.append(.init("config", "Configuration: " + error, false))
+        }
+        if core["karabiner_json_permission_error"] as? Bool == true || value["console_user_server_karabiner_json_permission_error"] as? Bool == true {
+            checks.append(.init("file", "Configuration file access", false))
+        }
+        let missing = checks.filter { !$0.ready }.map(\.title)
         return GuideCheck(missing.isEmpty, missing.isEmpty
             ? "Karabiner's helper, permissions, driver, keyboard and Portable profile are ready. Now press Option+E and verify that one Finder window opens."
-            : "Still needed: " + missing.joined(separator: ", ") + ". Finish these in Karabiner's assistant, then check again.")
+            : "Still needed: " + missing.joined(separator: ", ") + ". Finish these in Karabiner's assistant, then check again.", requirements: checks)
     }
 
     /// Settings are opened separately so the app's assistant stays visible.
