@@ -3,7 +3,7 @@ import CryptoKit
 import Darwin
 import CoreFoundation
 
-public enum ChangeKind: String, Codable { case path, preference, git, service, launchAgent }
+public enum ChangeKind: String, Codable { case path, preference, git, service, launchAgent, loginItem }
 
 public struct SavedChange: Codable {
     public let kind: ChangeKind
@@ -187,6 +187,20 @@ public final class Journal {
         }
     }
 
+    public func loginItemRegistered(_ path: String) throws -> Bool {
+        try StartupLoginItems.query(path, runner: runner)
+    }
+
+    public func registerLoginItem(_ path: String, transaction: String) throws {
+        guard !(try loginItemRegistered(path)) else { return }
+        // Journal the precise app path before making the change. Never remove
+        // another user's login items, or items that were already registered.
+        try add(SavedChange(kind: .loginItem, target: path, key: nil, backup: nil,
+                            before: try plistData(false), after: try plistData(true),
+                            restored: false), to: transaction)
+        try StartupLoginItems.update(path, enabled: true, runner: runner)
+    }
+
     public func launchAgentLoaded(_ label: String) throws -> Bool {
         try runner.run("/bin/launchctl", ["print", "gui/\(getuid())/\(label)"]).status == 0
     }
@@ -284,6 +298,11 @@ public final class Journal {
                 try runner.checked(brew, ["services", wasStarted ? "start" : "stop", "sketchybar"], interactive: true)
             case .launchAgent:
                 if try plistValue(change.before!) as? Bool == true { try loadLaunchAgent(URL(fileURLWithPath: change.key!)) }
+            case .loginItem:
+                let wasRegistered = try plistValue(change.before!) as? Bool ?? false
+                if try loginItemRegistered(change.target) != wasRegistered {
+                    try StartupLoginItems.update(change.target, enabled: wasRegistered, runner: runner)
+                }
             }
             transactions[index].changes[changeIndex].restored = true
             try save()
@@ -297,6 +316,7 @@ public final class Journal {
         case .git: return try plistData(gitValues(change.key!))
         case .service: return try plistData(serviceStarted())
         case .launchAgent: return try plistData(launchAgentLoaded(change.target))
+        case .loginItem: return try plistData(loginItemRegistered(change.target))
         }
     }
 
