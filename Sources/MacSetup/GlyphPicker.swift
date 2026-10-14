@@ -146,6 +146,6 @@ struct GlyphPicker: View {
             }
             Text("Names come from the font and Unicode. Some fonts provide internal code names rather than descriptions. Only characters with a Unicode mapping can be used in the bar.")
                 .font(.system(size: 12)).foregroundStyle(.secondary)
-        }.padding(24).font(.system(size: 15)).frame(width: 880, height: 640)
+        }.padding(24).font(.system(size: 15)).frame(width: 760, height: 640)
     }
 }
