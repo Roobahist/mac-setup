@@ -58,6 +58,8 @@ Choose **Guided Setup** in the sidebar, or run `mac-setup setup`, to walk throug
 
 The guide starts in **Apps & Features**, then moves through **Keyboard Shortcuts**, **Workspaces**, **Appearance**, **Dock**, **Menu Bar & Clock**, **Finder**, and **Updates**. Each section includes a short explanation of what it changes and how to use the controls already on that page. **Back**, **Next**, and **Skip step** move through the sections; **End guide** returns the page to normal customization. Sidebar navigation also ends the tour.
 
+If you start the guide with an explicit `--preset`, `--all`, or task selection, Apps & Features shows a **Review selected setup** action. You can inspect those preselected tasks and confirm whether to apply them, without opening a second wizard.
+
 **Tour navigation never automatically installs apps or saves preferences.** If you decide to change workspaces or shortcuts, use the relevant **Apply** action at the bottom of that existing editor. Native macOS preferences have their own Apply, Undo, and System default controls. An optional wallpaper watcher remains opt-in. Applying a change can open the normal task/recovery experience without losing the ability to customize more areas afterward.
 
 ### Make changes later without repeating installation

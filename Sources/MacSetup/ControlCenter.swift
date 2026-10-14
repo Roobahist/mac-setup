@@ -38,6 +38,7 @@ enum ControlDestination: String, CaseIterable, Identifiable {
 
 struct ControlCenterView: View {
     @ObservedObject var model: SetupModel
+    let hasPreparedSelection: Bool
     @LocalViewState private var destination: ControlDestination? = .home
     @LocalViewState private var previousDestination: ControlDestination = .home
     @LocalViewState private var query = ""
@@ -46,8 +47,9 @@ struct ControlCenterView: View {
     @LocalViewState private var guidedStep: Int?
 
     init(model: SetupModel, initialDestination: ControlDestination = .home,
-         startGuided: Bool = false) {
+         startGuided: Bool = false, hasPreparedSelection: Bool = false) {
         self.model = model
+        self.hasPreparedSelection = hasPreparedSelection
         let initial: ControlDestination = startGuided ? .apps : initialDestination
         _destination = LocalViewState(initialValue: initial)
         _previousDestination = LocalViewState(initialValue: initial)
@@ -441,6 +443,26 @@ struct ControlCenterView: View {
                         Text("Apps & Features").font(.system(size: 27, weight: .semibold))
                         Text("Set up only what you need. Installed components are detected without rerunning setup.")
                             .font(.callout).foregroundStyle(.secondary)
+                        if hasPreparedSelection {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Label("Prepared setup selection", systemImage: "list.bullet.clipboard")
+                                    .font(.headline)
+                                Text("\(model.picker.selectedCount) tasks were selected by the command that opened Mac Setup. Review them here before applying anything.")
+                                    .font(.callout).foregroundStyle(.secondary)
+                                Button("Review selected setup") {
+                                    model.scope = .full
+                                    model.review()
+                                    if model.page == .review { activeFeature = "prepared-setup" }
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .disabled(model.busy || model.picker.selectedCount == 0)
+                                if !model.message.isEmpty {
+                                    Text(model.message).font(.caption).foregroundStyle(.orange)
+                                }
+                            }
+                            .padding(18)
+                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+                        }
                         ForEach(Array(Set(Catalog.tasks.map(\.category))).sorted(), id: \.self) { category in
                             VStack(alignment: .leading, spacing: 10) {
                                 Text(category).font(.headline)
