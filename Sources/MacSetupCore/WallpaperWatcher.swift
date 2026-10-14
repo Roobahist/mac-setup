@@ -153,7 +153,7 @@ public enum WallpaperWatcher {
             throw SetupError("Run setup wallpaper-watcher before enabling it.")
         }
         let other = selected == label ? replacementLabel : label
-        if enabled && (try engine.journal.launchAgentLoaded(other)) {
+        if try enabled && engine.journal.launchAgentLoaded(other) {
             throw SetupError("A different wallpaper watcher is already running. Stop it before enabling another.")
         }
         try engine.runner.checked("/bin/launchctl", [

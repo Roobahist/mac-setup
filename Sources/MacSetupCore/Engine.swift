@@ -698,7 +698,8 @@ public final class Engine {
 
         // A stale service might still refer to a deleted app. Preserve its
         // original plist in the recovery journal before making a repair.
-        if !Journal.exists(plist) || (try Data(contentsOf: plist)) != proposed {
+        let needsUpdate = try !Journal.exists(plist) || Data(contentsOf: plist) != proposed
+        if needsUpdate {
             try journal.write(plist, data: proposed, transaction: transaction)
         }
         try WallpaperWatcher.setEnabled(true, engine: self)
