@@ -188,6 +188,7 @@ try:
                and b"APP RULES" in active_screen(b)
                and b"G Glyph" in active_screen(b), timeout=15.0)
     workspace_screen = active_screen(bytes(captured))
+    assert b"MAC SETUP" in workspace_screen and b"2 Workspaces" in workspace_screen
     assert b"WORKSPACE ORDER" in workspace_screen
     assert b"SELECTED WORKSPACE" in workspace_screen, "Wide view should show inspector"
     assert b"SHORTCUT" in workspace_screen and b"GLYPH" in workspace_screen
@@ -224,11 +225,23 @@ try:
     read_until(lambda b: b"MAC SETUP" in active_screen(b)
                and b"WORKSPACE EDITOR" not in active_screen(b))
 
+    # Continue from feature selection automatically enters the same workspace
+    # step if AeroSpace is selected. Keeping defaults makes no file changes.
     os.write(master, b"\r")
-    read_until(lambda b: b"REVIEW SELECTION" in active_screen(b))
+    read_until(lambda b: b"WORKSPACE EDITOR" in active_screen(b)
+               and b"Keep layout" in active_screen(b)
+               and b"2 Workspaces" in active_screen(b))
+    os.write(master, b"k")
+    read_until(lambda b: b"REVIEW SELECTION" in active_screen(b)
+               and b"3 Review" in active_screen(b))
     os.write(master, b"\x1b")  # Escape returns to selection, not setup
     read_until(lambda b: b"REVIEW SELECTION" not in active_screen(b)
                and b"Select features" in active_screen(b))
+    # Having kept settings once should not reopen the workspace step.
+    os.write(master, b"\r")
+    read_until(lambda b: b"REVIEW SELECTION" in active_screen(b))
+    os.write(master, b"\x1b")
+    read_until(lambda b: b"Select features" in active_screen(b))
     os.write(master, b"q")
     # Continue draining the pseudo-terminal while the picker exits; otherwise a
     # final screen write can fill the PTY buffer and block the child process.

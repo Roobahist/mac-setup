@@ -5,11 +5,20 @@ import MacSetupCore
 /// Reuses the existing raw terminal so entering from the setup checklist does not
 /// tear down and recreate the terminal or lose key presses.
 struct WorkspacePickerUI {
+    enum Context { case setup, standalone }
+    enum Outcome {
+        case saved(WorkspaceConfiguration)
+        case kept
+        case cancelled
+    }
+
     private typealias Page = WorkspacePickerView.Page
 
     private var layout: WorkspaceConfiguration
     private let initialLayout: WorkspaceConfiguration
     private let installed: [InstalledApplication]
+    private let context: Context
+    private let maximumWorkspaces: Int
     private var page: Page = .workspaces
     private var selected = 0
     private var resultCursor = 0
@@ -17,13 +26,17 @@ struct WorkspacePickerUI {
     private var editing = ""
     private var message = ""
 
-    init(layout: WorkspaceConfiguration, installed: [InstalledApplication]) {
+    init(layout: WorkspaceConfiguration, installed: [InstalledApplication],
+         context: Context = .standalone,
+         maximumWorkspaces: Int = WorkspaceConfiguration.keys.count) {
         self.layout = layout
         self.initialLayout = layout
         self.installed = installed
+        self.context = context
+        self.maximumWorkspaces = maximumWorkspaces
     }
 
-    mutating func run(in terminal: RawTerminal) -> WorkspaceConfiguration? {
+    mutating func run(in terminal: RawTerminal) -> Outcome {
         var redraw = true
         while true {
             if redraw {
@@ -36,26 +49,31 @@ struct WorkspacePickerUI {
             redraw = true
             message = ""
 
-            if case .interrupt = key { return nil }
+            if case .interrupt = key { return .cancelled }
             switch page {
             case .workspaces:
                 switch key {
                 case .up: selected = max(0, selected - 1)
                 case .down: selected = min(layout.workspaces.count - 1, selected + 1)
                 case .escape:
-                    if layout == initialLayout { return nil }
+                    if layout == initialLayout { return .cancelled }
                     page = .confirmCancel
                 case .character(let c):
                     switch c {
                     case "q":
-                        if layout == initialLayout { return nil }
+                        if layout == initialLayout { return .cancelled }
                         page = .confirmCancel
+                    case "k":
+                        if context == .setup {
+                            if layout == initialLayout { return .kept }
+                            message = "Save edits with S, or Q to discard them before keeping the current layout."
+                        }
                     case "s":
-                        do { try layout.validate(); return layout }
+                        do { try layout.validate(); return .saved(layout) }
                         catch { message = String(describing: error) }
                     case "a":
-                        guard layout.workspaces.count < WorkspaceConfiguration.keys.count else {
-                            message = "All 13 keyboard shortcuts are in use."; break
+                        guard layout.workspaces.count < maximumWorkspaces else {
+                            message = "All available workspace slots are in use. Optional disabled workspaces are preserved."; break
                         }
                         var id = "workspace"
                         var index = 2
@@ -91,11 +109,16 @@ struct WorkspacePickerUI {
                         }
                     default: break
                     }
+                case .enter:
+                    if context == .setup {
+                        if layout == initialLayout { return .kept }
+                        message = "Press S to save changes and continue, or Q to return without saving."
+                    }
                 default: break
                 }
             case .confirmCancel:
                 switch key {
-                case .character("y"): return nil
+                case .character("y"): return .cancelled
                 case .character("n"), .escape: page = .workspaces
                 default: break
                 }
@@ -223,6 +246,8 @@ struct WorkspacePickerUI {
             editing: editing,
             message: message,
             modified: layout != initialLayout,
+            guidedSetup: context == .setup,
+            maximumWorkspaces: maximumWorkspaces,
             width: width,
             height: height
         ).render()

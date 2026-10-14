@@ -18,6 +18,8 @@ struct WorkspacePickerView {
     let editing: String
     let message: String
     let modified: Bool
+    let guidedSetup: Bool
+    let maximumWorkspaces: Int
     let width: Int
     let height: Int
 
@@ -365,7 +367,9 @@ struct WorkspacePickerView {
         case .workspaces:
             return [
                 Line("↑↓ Select   [ ] Reorder   A Add   D Remove   R ID   N Label   G Glyph   P Apps", .accent),
-                Line("S Save  ·  Q Cancel     Changes are saved locally; apply AeroSpace / SketchyBar profiles afterward.", .muted)
+                guidedSetup
+                    ? Line("Enter / K Keep layout   S Save & Continue   Esc Back to features", .muted)
+                    : Line("S Save   Q Cancel   Apply AeroSpace / SketchyBar profiles afterward.", .muted)
             ]
         case .glyphs:
             return [Line("↑↓ Select     Enter Use glyph     Type to search     Esc Clear search / Back", .accent),
@@ -382,12 +386,12 @@ struct WorkspacePickerView {
 
     func render() -> String {
         let saveState = modified ? "UNSAVED CHANGES" : "NO UNSAVED CHANGES"
-        var output: [String] = [
-            styled(Line("WORKSPACE EDITOR    /    mac-setup", .title), width: availableWidth),
-            styled(Line("\(layout.workspaces.count) of \(WorkspaceConfiguration.keys.count) workspace slots    |    \(saveState)", modified ? .caution : .muted), width: availableWidth),
-            styled(divider(), width: availableWidth),
-            ""
-        ]
+        var output = SetupChrome.header(
+            step: .workspaces,
+            summary: "WORKSPACE EDITOR   |   \(layout.workspaces.count) of \(maximumWorkspaces) editable slots",
+            context: "\(saveState)   |   \(guidedSetup ? "Keep existing layout or customize before review" : "Standalone configuration")",
+            width: width
+        )
 
         let body: [String]
         switch page {
@@ -402,7 +406,7 @@ struct WorkspacePickerView {
         let bodySpace = max(0, height - output.count - footers.count - 3)
         output += Array(body.prefix(bodySpace))
         while output.count < height - footers.count - 3 { output.append("") }
-        output += [styled(divider(), width: availableWidth), status] + footers
+        output += [SetupChrome.rule(width: width), status] + footers
         if output.count > height { output = Array(output.prefix(height)) }
         // Prefix lines are limited in terminal cells before styling, so ANSI
         // sequences can never be sliced or leave the next redraw colored.
