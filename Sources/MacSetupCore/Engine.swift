@@ -96,8 +96,12 @@ public final class Engine {
             guard executable("sketchybar") != nil else { return .blocked }
             return try journal.serviceStarted() ? .done : .ready
         case .wallpaperWatcher:
-            guard WallpaperWatcher.executable(paths: paths) != nil else { return .blocked }
-            return try journal.launchAgentLoaded(WallpaperWatcher.label) ? .done : .ready
+            if try journal.launchAgentLoaded(WallpaperWatcher.label) ||
+                journal.launchAgentLoaded(WallpaperWatcher.replacementLabel) {
+                return .done
+            }
+            return WallpaperWatcher.executable(paths: paths) != nil ||
+                WallpaperWatcher.bundledExecutable(paths: paths) != nil ? .ready : .blocked
         case let .loginItems(names):
             // Inspect only our own journal during initial inventory, never
             // prompt System Events just to draw the feature-selection screen.
@@ -169,8 +173,8 @@ public final class Engine {
             lines += installed.map { "Add at login if missing: \($0)" }
             lines.append("System Events may request macOS Automation approval. SketchyBar starts through Homebrew and WallpaperAccentWatcher through its LaunchAgent; no duplicate entries are created for those background jobs.")
         case .wallpaperWatcher:
-            lines.append("Use the existing WallpaperAccentWatcher.app in ~/Applications or /Applications. Preserve its two-second checks and debounce behavior; no replacement runtime is installed.")
-            lines.append("An already registered app and its launch configuration are left unchanged. Otherwise, register it at login after backing up its existing plist.")
+            lines.append("Preserve an existing WallpaperAccentWatcher.app. If absent, use the watcher helper bundled with Mac Setup.")
+            lines.append("Register only one user-level LaunchAgent with a two-second wallpaper-change check; existing SketchyBar and dotfiles configuration stays unchanged.")
             lines.append("Use watcher-status to check logs, watcher-disable to disable it across logins, and watcher-enable to resume. Restore only undoes changes recorded by mac-setup.")
         case let .guide(url, app, instructions):
             if let app { lines.append("Open \(app).") }

@@ -164,13 +164,13 @@ public enum Catalog {
         SetupTask("desktop-widgets", "Appearance", "Hide desktop widgets", "Disable desktop widgets while preserving Stage Manager widget settings. Log out if widgets have not refreshed.", action: desktopWidgetAction(macOSMajorVersion: ProcessInfo.processInfo.operatingSystemVersion.majorVersion)),
         SetupTask("wallpaper-tools", "Appearance", "Wallpaper color dependencies", "Install Python and ImageMagick for local accent extraction.", dependencies: ["homebrew"], action: .install(packages: ["python", "imagemagick"], cask: false, app: nil)),
         SetupTask("wallpaper-colors", "Appearance", "Match SketchyBar accent to wallpaper", "Extract an accent locally from the current wallpaper and update SketchyBar. Run again after a wallpaper change.", dependencies: ["wallpaper-tools", "sketchybar-profile"], action: .accent),
-        SetupTask("wallpaper-watcher", "Appearance", "Automatic wallpaper color updates", "Use the existing WallpaperAccentWatcher.app and its user-level login service. No replacement watcher is installed.", dependencies: ["wallpaper-tools", "sketchybar-start"], action: .wallpaperWatcher),
-        SetupTask("wallpaper-access", "Appearance", "WallpaperAccentWatcher permissions and test", "Approve wallpaper access for WallpaperAccentWatcher itself, then verify automatic color changes.", dependencies: ["wallpaper-watcher"], action: .guide(url: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles", app: nil, instructions: [
+        SetupTask("wallpaper-watcher", "Appearance", "Automatic wallpaper color updates", "Preserve an existing WallpaperAccentWatcher, or register the watcher helper bundled with Mac Setup if none is installed.", dependencies: ["wallpaper-tools", "sketchybar-start"], action: .wallpaperWatcher),
+        SetupTask("wallpaper-access", "Appearance", "Wallpaper watcher permissions and test", "Verify automatic color changes and approve wallpaper access for the active watcher if needed.", dependencies: ["wallpaper-watcher"], action: .guide(url: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles", app: nil, instructions: [
             "Change to another static wallpaper and check that the focused SketchyBar workspace changes color after a few seconds.",
-            "If the accent does not change, open permission settings below. Add WallpaperAccentWatcher.app from Applications (or your user Applications folder) and enable it when your wallpaper provider needs protected-file access.",
-            "Approve the macOS authentication prompt yourself; permission given to Mac Setup does not authorize WallpaperAccentWatcher.",
-            "Quit and reopen WallpaperAccentWatcher after approving access. Change the wallpaper again and mark this task complete only after you see the accent update.",
-            "Do not run another wallpaper watcher alongside WallpaperAccentWatcher. Permissions are never granted automatically."
+            "If the accent does not change, inspect mac-setup watcher-status logs and approve wallpaper file access for the active watcher when macOS requires it.",
+            "An existing WallpaperAccentWatcher uses its own permissions. Mac Setup's bundled watcher has its own process permissions. Approval of one does not automatically authorize the other.",
+            "Restart the active watcher after approval and change your wallpaper again to verify that the accent refreshes.",
+            "Only one watcher runs at a time. Permissions are never granted automatically."
         ])),
         SetupTask("startup-login", "Apps", "Start essential apps at login",
                   "Register installed AeroSpace, Karabiner-Elements and Raycast in Open at Login without removing existing items. SketchyBar and the wallpaper accent watcher keep their own background services.",
