@@ -20,7 +20,7 @@ public enum SetupPreset: String, CaseIterable {
         let ids: Set<String>
         switch self {
         case .repair:
-            ids = ["fonts", "aerospace-profile", "mission-control", "aerospace-access",
+            ids = ["fonts", "tomito", "aerospace-profile", "mission-control", "aerospace-access",
                    "sketchybar-profile", "sketchybar-start", "vorssaint-profile", "vorssaint-access",
                    "raycast-profile", "raycast-access", "karabiner-profile", "karabiner-access",
                    "alacritty-profile", "dock-hide", "menu-bar"]

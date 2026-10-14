@@ -123,7 +123,14 @@ private final class SetupModel: ObservableObject {
                         }
                     }
                 }
-                // Guides are always revisited: previous yes/no answers are not a hardware test.
+                if case .appStore = task.action, try engine.state(task) == .done {
+                    DispatchQueue.main.async {
+                        self.results[task.id] = "Already configured"
+                        self.busy = false; self.index += 1; self.advance()
+                    }
+                    return
+                }
+                // Permission guides are always revisited: previous answers are not a hardware test.
                 if task.guided {
                     try engine.openGuide(task)
                     let check = try engine.checkGuide(task)
