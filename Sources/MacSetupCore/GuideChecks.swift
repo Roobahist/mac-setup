@@ -74,3 +74,58 @@ public extension Engine {
         try runner.checked("/usr/bin/open", [url])
     }
 }
+
+public struct GuideStepDestination: Equatable {
+    public let title: String
+    public let url: String?
+    public let app: String?
+
+    public init(title: String, url: String? = nil, app: String? = nil) {
+        self.title = title
+        self.url = url
+        self.app = app
+    }
+}
+
+/// Routes permission instructions to the matching macOS pane.
+/// One row's button should not open an unrelated permission screen.
+public enum GuideStepRouting {
+    public static func destination(task: SetupTask, index: Int) -> GuideStepDestination? {
+        guard index >= 0 else { return nil }
+        if task.id == "karabiner-access" {
+            switch index {
+            case 0: return .init(title: "Open login items",
+                                 url: "x-apple.systempreferences:com.apple.LoginItems-Settings.extension")
+            case 1: return .init(title: "Open driver extensions",
+                                 url: "x-apple.systempreferences:com.apple.LoginItems-Settings.extension")
+            case 2: return .init(title: "Open Accessibility",
+                                 url: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+            case 3: return .init(title: "Open Input Monitoring",
+                                 url: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")
+            case 4, 5: return .init(title: "Open Karabiner", app: "Karabiner-Elements")
+            default: return nil
+            }
+        }
+        switch task.action {
+        case let .guide(url, app, instructions):
+            guard instructions.indices.contains(index) else { return nil }
+            if let url { return .init(title: "Open settings", url: url) }
+            if let app { return .init(title: "Open \(app)", app: app) }
+            return nil
+        case let .appStore(_, url):
+            return index == 0 ? .init(title: "Open App Store", url: url) : nil
+        default: return nil
+        }
+    }
+}
+
+public extension Engine {
+    func openGuideStep(_ task: SetupTask, index: Int) throws {
+        guard let destination = GuideStepRouting.destination(task: task, index: index) else { return }
+        if let url = destination.url {
+            try runner.checked("/usr/bin/open", [url])
+        } else if let app = destination.app {
+            try runner.checked("/usr/bin/open", ["-a", app])
+        }
+    }
+}
