@@ -170,11 +170,27 @@ public final class TweakService {
         guard let process = tweak.restart else { return nil }
         do {
             let result = try runner.run("/usr/bin/killall", [process])
+            // An active macOS Dock normally relaunches through launchd.
+            // If the relaunch fails, try to recover it, then warn the user.
+            if process == "Dock" {
+                for _ in 0..<4 {
+                    Thread.sleep(forTimeInterval: 0.3)
+                    if (try? runner.run("/usr/bin/pgrep", ["-x", "Dock"]))?.status == 0 {
+                        return nil
+                    }
+                }
+                _ = try? runner.run("/usr/bin/open", ["-a", "Dock"])
+                Thread.sleep(forTimeInterval: 0.4)
+                if (try? runner.run("/usr/bin/pgrep", ["-x", "Dock"]))?.status == 0 {
+                    return nil
+                }
+                return "The preference was saved, but Dock has not restarted. Try 'killall Dock' or restart Dock from Activity Monitor."
+            }
             if result.status != 0 {
-                return "\\(process) could not be restarted. The setting was saved, but it may not be visible yet. Try: killall \\(process)"
+                return "\(process) did not restart. The preference was saved, but its visible effect may be delayed."
             }
         } catch {
-            return "The setting was saved, but \\(process) could not restart: \\(error). Try: killall \\(process)"
+            return "The preference was saved, but \(process) could not restart: \(error)"
         }
         return nil
     }
@@ -188,7 +204,7 @@ public final class TweakService {
             return NSNumber(value: (bounded / step).rounded() * step)
         case let .selection(choices):
             guard choices.contains(where: { $0.value == value.intValue }) else {
-                throw SetupError("Unsupported value for \\(tweak.title).")
+                throw SetupError("Unsupported value for \(tweak.title).")
             }
             return NSNumber(value: value.intValue)
         }

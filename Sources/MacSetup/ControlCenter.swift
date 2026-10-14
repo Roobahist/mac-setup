@@ -165,8 +165,8 @@ struct ControlCenterView: View {
             }
             Spacer(minLength: 0)
             HStack {
-                if !compactSidebar { Text("Version \\(MacSetupVersion.installed)") }
-                else { Image(systemName: "info.circle").help("Version \\(MacSetupVersion.installed)") }
+                if !compactSidebar { Text("Version \(MacSetupVersion.installed)") }
+                else { Image(systemName: "info.circle").help("Version \(MacSetupVersion.installed)") }
                 Spacer(minLength: 2)
                 Circle().fill(model.busy ? Color.orange : Color.green)
                     .frame(width: 7, height: 7)
@@ -223,7 +223,7 @@ struct ControlCenterView: View {
                     VStack(alignment: .leading, spacing: 9) {
                         Label("Setup status", systemImage: "checkmark.circle")
                             .font(.headline)
-                        Text("\\(configured) of \\(total) setup components verified")
+                        Text("\(configured) of \(total) setup components verified")
                             .font(.title3.weight(.medium))
                         Text("Detected from this Mac. Unconfigured tasks are not errors.")
                             .font(.callout).foregroundStyle(.secondary)

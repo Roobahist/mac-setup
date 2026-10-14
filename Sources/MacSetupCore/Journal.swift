@@ -197,10 +197,10 @@ public final class Journal {
         do {
             try setPreference(domain, key, nil)
         } catch {
-            throw SetupError("Cannot reset preference \\(domain) / \\(key): \\(error)")
+            throw SetupError("Cannot reset preference \(domain) / \(key): \(error)")
         }
         guard try preference(domain, key) == nil else {
-            throw SetupError("Preference reset verification failed: \\(domain) / \\(key).")
+            throw SetupError("Preference reset verification failed: \(domain) / \(key).")
         }
     }
 

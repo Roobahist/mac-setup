@@ -296,6 +296,31 @@ final class EngineTests: XCTestCase {
         XCTAssertEqual(runner.preferences["test"]?["unrelated"] as? String, "untouched")
     }
 
+    func testBlueAccentClearsOverrideAndUndoRestoresPreviousColor() throws {
+        runner.preferences["NSGlobalDomain"] = ["AppleAccentColor": 6]
+        let accent = try XCTUnwrap(TweakRegistry.all.first { $0.id == "appearance.accent" })
+        let service = TweakService(journal: engine.journal, runner: runner, paths: paths)
+        let outcome = try service.apply(accent, value: NSNumber(value: 4))
+        XCTAssertNil(runner.preferences["NSGlobalDomain"]?["AppleAccentColor"])
+        XCTAssertNil(outcome.refreshWarning)
+        try service.restore(outcome.transaction, tweak: accent)
+        XCTAssertEqual((runner.preferences["NSGlobalDomain"]?["AppleAccentColor"] as? NSNumber)?.intValue, 6)
+    }
+
+    func testRecentAppsToggleLeavesDockVisibilityAndDelayUnchanged() throws {
+        runner.preferences["com.apple.dock"] = [
+            "autohide": true, "autohide-delay": 0.0, "show-recents": true
+        ]
+        let tweak = try XCTUnwrap(TweakRegistry.all.first { $0.id == "dock.recents" })
+        let service = TweakService(journal: engine.journal, runner: runner, paths: paths)
+        let outcome = try service.apply(tweak, value: NSNumber(value: false))
+        XCTAssertEqual((runner.preferences["com.apple.dock"]?["show-recents"] as? NSNumber)?.boolValue, false)
+        XCTAssertEqual((runner.preferences["com.apple.dock"]?["autohide"] as? NSNumber)?.boolValue, true)
+        XCTAssertEqual((runner.preferences["com.apple.dock"]?["autohide-delay"] as? NSNumber)?.doubleValue, 0)
+        try service.restore(outcome.transaction, tweak: tweak)
+        XCTAssertEqual((runner.preferences["com.apple.dock"]?["show-recents"] as? NSNumber)?.boolValue, true)
+    }
+
     func testMissionControlWritesValidBooleanArgumentsAndCanRestore() throws {
         // The real defaults CLI accepts true/false, not NSNumber.stringValue's 0/1.
         let task = try Catalog.task("mission-control")

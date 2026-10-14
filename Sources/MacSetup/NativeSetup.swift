@@ -643,78 +643,12 @@ struct SetupView: View {
                 .foregroundStyle(.tertiary)
                 .frame(width: 24, height: 36)
                 .help("Drag to reorder workspace")
-                .accessibilityLabel("Drag to reorder \\(item.name)")
-
-            VStack(alignment: .leading, spacing: 5) {
-                Text("GLYPH").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
-                Button { glyphWorkspaceID = item.id } label: {
-                    Group {
-                        if icon.symbol == "?" {
-                            Image(systemName: "plus.square.dashed").font(.system(size: 18))
-                        } else {
-                            Text(icon.symbol).font(.custom(icon.font.postScriptName, size: 20))
-                        }
-                    }
-                    .frame(width: 48, height: 34)
-                    .background(Color.accentColor.opacity(0.09), in: RoundedRectangle(cornerRadius: 7))
-                }
-                .help("Choose a glyph for \\(item.name)")
-                .accessibilityLabel("Change glyph for \\(item.name)")
-            }
-
-            VStack(alignment: .leading, spacing: 5) {
-                Text("WORKSPACE NAME").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
-                TextField("Workspace name", text: $model.layout.workspaces[i].name)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(size: 14, weight: .medium))
-                    .frame(minWidth: 145)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            VStack(alignment: .leading, spacing: 5) {
-                Text("ASSIGNED APPS").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
-                Button {
-                    model.selectedWorkspace = i
-                    model.appSheet = true
-                } label: {
-                    Label("\\(assignedCount) apps", systemImage: "square.stack.3d.up")
-                        .frame(minWidth: 82, minHeight: 30)
-                }
-                .help("Choose apps for \\(item.name)")
-                .accessibilityLabel("Edit assigned apps for \\(item.name)")
-            }
-
-            VStack(alignment: .leading, spacing: 5) {
-                Text("SHORTCUT KEY").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
-                Picker("Shortcut key", selection: Binding(
-                    get: {
-                        item.shortcutKey ?? item.shortcuts?.switchTo?.key
-                            ?? (WorkspaceConfiguration.keys.indices.contains(i) ? WorkspaceConfiguration.keys[i] : "")
-                    },
-                    set: { key in
-                        model.layout.workspaces[i].shortcutKey = key
-                        model.layout.workspaces[i].shortcuts = nil
-                    })) {
-                    Text("None").tag("")
-                    ForEach(workspaceKeys, id: \\.self) { key in
-                        Text(WorkspaceShortcut.keyLabel(key)).tag(key)
-                    }
-                }
-                .pickerStyle(.menu)
-                .frame(width: 92)
-                .help("Shortcut destination key for \\(item.name)")
-            }
-
-            VStack(alignment: .leading, spacing: 5) {
-                Text("REMOVE").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
-                Button { model.layout.workspaces.remove(at: i) } label: {
-                    Image(systemName: "trash")
-                        .frame(width: 34, height: 31)
-                }
-                .disabled(model.layout.workspaces.count == 1)
-                .help("Remove \\(item.name)")
-                .accessibilityLabel("Remove workspace \\(item.name)")
-            }
+                .accessibilityLabel("Drag to reorder \(item.name)")
+            glyphField(at: i)
+            workspaceNameField(at: i)
+            assignedAppsField(at: i, count: assignedCount)
+            shortcutKeyField(at: i)
+            removeWorkspaceField(at: i)
         }
         .buttonStyle(.plain)
         .controlSize(.small)
@@ -756,12 +690,98 @@ struct SetupView: View {
                   value.hasPrefix(prefix) else { return false }
             let source = String(value.dropFirst(prefix.count))
             guard visibleWorkspaceIDs.contains(source) else { return false }
-            model.layout.insertWorkspace(source, at: location.y > 24 ? i + 1 : i)
+            model.layout.insertWorkspace(source, at: location.y > 36 ? i + 1 : i)
             dropTargetWorkspaceID = nil
             return true
         } isTargeted: { hovering in
             if hovering { dropTargetWorkspaceID = item.id }
             else if dropTargetWorkspaceID == item.id { dropTargetWorkspaceID = nil }
+        }
+    }
+
+    private func glyphField(at index: Int) -> some View {
+        let item = model.layout.workspaces[index]
+        let icon = item.resolvedIcon
+        return VStack(alignment: .leading, spacing: 5) {
+            Text("GLYPH").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+            Button { glyphWorkspaceID = item.id } label: {
+                Group {
+                    if icon.symbol == "?" {
+                        Image(systemName: "plus.square.dashed").font(.system(size: 18))
+                    } else {
+                        Text(icon.symbol).font(.custom(icon.font.postScriptName, size: 20))
+                    }
+                }
+                .frame(width: 48, height: 34)
+                .background(Color.accentColor.opacity(0.09), in: RoundedRectangle(cornerRadius: 7))
+            }
+            .help("Choose a glyph for \(item.name)")
+            .accessibilityLabel("Change glyph for \(item.name)")
+        }
+    }
+
+    private func workspaceNameField(at index: Int) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("WORKSPACE NAME").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+            TextField("Workspace name", text: $model.layout.workspaces[index].name)
+                .textFieldStyle(.roundedBorder)
+                .font(.system(size: 14, weight: .medium))
+                .frame(minWidth: 145)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func assignedAppsField(at index: Int, count: Int) -> some View {
+        let name = model.layout.workspaces[index].name
+        return VStack(alignment: .leading, spacing: 5) {
+            Text("ASSIGNED APPS").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+            Button {
+                model.selectedWorkspace = index
+                model.appSheet = true
+            } label: {
+                Label("\(count) apps", systemImage: "square.stack.3d.up")
+                    .frame(minWidth: 82, minHeight: 30)
+            }
+            .help("Choose apps for \(name)")
+            .accessibilityLabel("Edit assigned apps for \(name)")
+        }
+    }
+
+    private func shortcutKeyField(at index: Int) -> some View {
+        let item = model.layout.workspaces[index]
+        let binding = Binding<String>(
+            get: {
+                item.shortcutKey ?? item.shortcuts?.switchTo?.key
+                    ?? (WorkspaceConfiguration.keys.indices.contains(index) ? WorkspaceConfiguration.keys[index] : "")
+            },
+            set: { key in
+                model.layout.workspaces[index].shortcutKey = key
+                model.layout.workspaces[index].shortcuts = nil
+            })
+        return VStack(alignment: .leading, spacing: 5) {
+            Text("SHORTCUT KEY").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+            Picker("Shortcut key", selection: binding) {
+                Text("None").tag("")
+                ForEach(workspaceKeys, id: \.self) { key in
+                    Text(WorkspaceShortcut.keyLabel(key)).tag(key)
+                }
+            }
+            .pickerStyle(.menu)
+            .frame(width: 92)
+            .help("Shortcut destination key for \(item.name)")
+        }
+    }
+
+    private func removeWorkspaceField(at index: Int) -> some View {
+        let name = model.layout.workspaces[index].name
+        return VStack(alignment: .leading, spacing: 5) {
+            Text("REMOVE").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+            Button { model.layout.workspaces.remove(at: index) } label: {
+                Image(systemName: "trash").frame(width: 34, height: 31)
+            }
+            .disabled(model.layout.workspaces.count == 1)
+            .help("Remove \(name)")
+            .accessibilityLabel("Remove workspace \(name)")
         }
     }
 

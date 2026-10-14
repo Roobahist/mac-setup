@@ -95,10 +95,10 @@ struct TweakControl: View {
             DispatchQueue.main.async {
                 working = false
                 switch result {
-                case .success(let id):
-                    lastTransaction = id
+                case .success(let outcome):
+                    lastTransaction = outcome.transaction
                     load()
-                    status = "Applied. Recovery record: \(id)"
+                    status = outcome.refreshWarning ?? "Saved and verified. Undo is available."
                 case .failure(let error): status = "Not applied: \(error)"
                 }
             }
@@ -132,7 +132,7 @@ struct TweakControl: View {
                     lastTransaction = outcome.transaction
                     load()
                     status = outcome.refreshWarning ?? "System default restored. Undo is available."
-                case .failure(let error): status = "Could not reset: \\(error)"
+                case .failure(let error): status = "Could not reset: \(error)"
                 }
             }
         }
