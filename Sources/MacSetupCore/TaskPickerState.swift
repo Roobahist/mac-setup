@@ -26,8 +26,8 @@ public enum SetupPreset: String, CaseIterable {
                    "dock-hide", "menu-bar"]
         case .complete:
             // Terminal choice is explicit: disabled casks must not break a full setup.
-            let optionalTerminals: Set<String> = ["alacritty", "alacritty-profile", "ghostty", "wezterm", "kitty"]
-            ids = Set(tasks.map(\.id)).subtracting(optionalTerminals)
+            let optIn: Set<String> = ["alacritty", "alacritty-profile", "ghostty", "wezterm", "kitty", "finder-reset-views"]
+            ids = Set(tasks.map(\.id)).subtracting(optIn)
         case .minimal:
             ids = ["homebrew", "fonts", "dark-mode", "git-ignore"]
         case .productivity:

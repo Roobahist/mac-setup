@@ -10,6 +10,7 @@ public struct Preference {
 public enum TaskAction {
     case homebrew
     case finderIcons
+    case finderResetFolderViews
     case install(packages: [String], cask: Bool, app: String?)
     case profile([String])
     case appStore(app: String, url: String)
@@ -123,6 +124,9 @@ public enum Catalog {
             Preference("com.apple.finder", "FinderWindowTabs", false), Preference("NSGlobalDomain", "AppleWindowTabbingMode", "manual")
         ], restart: "Finder")),
         SetupTask("finder-icons", "Finder", "Finder list-view settings", "Match the reference: list view, no groups, Date Modified sorting, large icons, text 13, selected columns, relative dates and previews. Existing folder overrides may remain.", dependencies: ["finder-list"], action: .finderIcons),
+        SetupTask("finder-reset-views", "Finder", "Reset saved folder view overrides (optional)",
+                  "Back up and clear .DS_Store view metadata in Desktop, Documents, Downloads, Movies, Music and Pictures. Resets folder icon positions and other per-folder customizations; excludes Library, hidden directories, packages and symlinks.",
+                  dependencies: ["finder-icons"], action: .finderResetFolderViews),
         SetupTask("finder-view-check", "Finder", "Folder list-view behavior", "Check the folder-specific Always open and Browse in list view options from the reference.", dependencies: ["finder-icons"], action: .guide(url: nil, app: "Finder", instructions: [
             "Open Macintosh HD (or your startup disk) and press Command+J. Enable Always open in list view and Browse in list view.",
             "Check Group By: None; Sort By: Date Modified; large icons; text size 13; only Date Modified, Size and Kind columns besides Name; relative dates and icon previews enabled; Calculate all sizes disabled. Click Use as Defaults.",

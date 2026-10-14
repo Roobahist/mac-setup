@@ -27,6 +27,8 @@ public final class Engine {
     public func state(_ task: SetupTask) throws -> TaskState {
         switch task.action {
         case .homebrew: return tools("brew") != nil ? .done : .ready
+        case .finderResetFolderViews:
+            return .ready // This opt-in operation always requires an explicit run.
         case .finderIcons:
             let views = try journal.preference("com.apple.finder", "StandardViewSettings") as? [String: Any] ?? [:]
             let grouping = try journal.preference("com.apple.finder", "FXPreferredGroupBy")
@@ -112,6 +114,9 @@ public final class Engine {
             lines.append("Download https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh to a temporary file, then run the official installer interactively with /bin/bash.")
             lines.append("The installer may request administrator authentication or Command Line Tools approval. mac-setup stays a normal user process.")
             lines.append("Back up and append a managed brew shellenv block to zsh's .zprofile. Installation itself is not undone by restore; shell configuration is.")
+        case .finderResetFolderViews:
+            lines.append("Opt-in reset for existing Finder per-folder view overrides under user folders. All removed .DS_Store files are backed up for restore.")
+            lines.append("Also resets folder icon layout and other per-folder customizations. Hidden paths, packages, symlinks, system and Library folders are excluded.")
         case .finderIcons:
             lines.append("Back up Finder view defaults. Apply list view, no grouping, Date Modified sorting, large icons, text size 13, Date Modified/Size/Kind columns, relative dates and previews. Preserve widths and unrelated settings. Restart Finder; finish active file operations first.")
         case let .install(packages, cask, _):
@@ -166,6 +171,12 @@ public final class Engine {
         do {
             switch task.action {
             case .homebrew: try installHomebrew(transaction: id)
+            case .finderResetFolderViews:
+                let roots = ["Desktop", "Documents", "Downloads", "Movies", "Music", "Pictures"]
+                    .map { paths.home.appendingPathComponent($0) }
+                let files = try FolderViewOverrides.discover(in: roots)
+                for file in files { try journal.remove(file, transaction: id) }
+                try restart("Finder")
             case .finderIcons:
                 var views = try journal.preference("com.apple.finder", "StandardViewSettings") as? [String: Any] ?? [:]
                 views = Self.finderListDefaults(views)
