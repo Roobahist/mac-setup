@@ -10,6 +10,7 @@ final class FakeRunner: CommandRunning {
     var disabledJobs = Set<String>()
     var managedPackages = Set<String>()
     var homebrewInstalled = false
+    var simulatedInstalledApps = Set<String>()
 
     func run(_ executable: String, _ args: [String], interactive: Bool, input: Data?) throws -> CommandResult {
         calls.append([executable] + args)
@@ -26,6 +27,9 @@ final class FakeRunner: CommandRunning {
             if args.first == "list" {
                 return CommandResult(status: managedPackages.contains(args.last!) ? 0 : 1,
                                      output: Data((managedPackages.contains(args.last!) ? "1.0" : "").utf8))
+            }
+            if ["install", "reinstall"].contains(args.first ?? ""), let name = args.last {
+                managedPackages.insert(name)
             }
             return CommandResult(status: 0)
         }
@@ -110,6 +114,42 @@ final class EngineTests: XCTestCase {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data(text.utf8).write(to: url)
         return url
+    }
+
+
+    func testInterruptedCaskIsReinstalledAndRerunIsIdempotent() throws {
+        let task = try Catalog.task("karabiner")
+        runner.managedPackages.insert("karabiner-elements")
+        engine = try Engine(paths: paths, runner: runner, tools: { $0 == "brew" ? "/fake/brew" : nil })
+
+        // Homebrew's cask registry can survive a failed privileged pkg installer.
+        XCTAssertEqual(try engine.state(task), .ready)
+        XCTAssertThrowsError(try engine.apply(task)) { error in
+            XCTAssertTrue(String(describing: error).contains("Installation could not be verified"))
+        }
+        XCTAssertTrue(runner.calls.contains {
+            $0 == ["/fake/brew", "reinstall", "--cask", "karabiner-elements"]
+        })
+        let reinstallCount = runner.calls.filter { $0.first == "/fake/brew" && $0.dropFirst().first == "reinstall" }.count
+        XCTAssertEqual(reinstallCount, 1)
+
+        _ = try write("Applications/Karabiner-Elements.app/Contents/Info.plist", "fake app")
+        XCTAssertEqual(try engine.state(task), .done)
+        _ = try engine.apply(task)
+        XCTAssertEqual(runner.calls.filter {
+            $0.first == "/fake/brew" && ["install", "reinstall"].contains($0.dropFirst().first ?? "")
+        }.count, 1)
+    }
+
+    func testInstalledFormulaIsSkippedWhenReapplying() throws {
+        let task = try Catalog.task("atuin")
+        runner.managedPackages.insert("atuin")
+        engine = try Engine(paths: paths, runner: runner, tools: { $0 == "brew" ? "/fake/brew" : nil })
+        XCTAssertEqual(try engine.state(task), .done)
+        _ = try engine.apply(task)
+        XCTAssertFalse(runner.calls.contains {
+            $0.first == "/fake/brew" && ["install", "reinstall"].contains($0.dropFirst().first ?? "")
+        })
     }
 
     func testTomitoAppStoreTaskIsGuidedUntilInstalled() throws {
