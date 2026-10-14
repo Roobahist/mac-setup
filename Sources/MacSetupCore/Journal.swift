@@ -141,8 +141,11 @@ public final class Journal {
             try runner.checked("/usr/bin/defaults", ["write", domain, key, "-string", string])
         } else if let number = value as? NSNumber {
             let type = String(cString: number.objCType)
-            let flag = CFGetTypeID(number) == CFBooleanGetTypeID() ? "-bool" : (["f", "d"].contains(type) ? "-float" : "-int")
-            try runner.checked("/usr/bin/defaults", ["write", domain, key, flag, number.stringValue])
+            let isBoolean = CFGetTypeID(number) == CFBooleanGetTypeID()
+            let flag = isBoolean ? "-bool" : (["f", "d"].contains(type) ? "-float" : "-int")
+            // macOS defaults requires true/false for -bool, not NSNumber's 1/0.
+            let argument = isBoolean ? (number.boolValue ? "true" : "false") : number.stringValue
+            try runner.checked("/usr/bin/defaults", ["write", domain, key, flag, argument])
         } else {
             try runner.checked("/usr/bin/defaults", ["write", domain, key, String(decoding: data, as: UTF8.self)])
         }
@@ -152,7 +155,12 @@ public final class Journal {
         let old = try preference(domain, key)
         guard !equalPlist(old, value) else { return }
         try add(SavedChange(kind: .preference, target: domain, key: key, backup: nil, before: try old.map(plistData), after: try plistData(value), restored: false), to: transaction)
-        try setPreference(domain, key, value)
+        do {
+            try setPreference(domain, key, value)
+        } catch {
+            // Include the target preference, not its potentially sensitive value.
+            throw SetupError("Cannot update preference \(domain) / \(key): \(error)")
+        }
         guard equalPlist(try preference(domain, key), value) else { throw SetupError("Preference verification failed: \(domain) \(key)") }
     }
 
