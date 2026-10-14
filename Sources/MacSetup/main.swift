@@ -228,7 +228,8 @@ do {
     let engine = try Engine()
     if options.command == "menu" || options.command == "gui" || (options.command == "setup" && !options.yes && !options.dryRun) {
         let ids = options.all ? Catalog.tasks.map(\.id) : (options.ids.isEmpty ? nil : options.ids)
-        try NativeSetup.run(ids: ids, preset: options.preset)
+        try NativeSetup.run(ids: ids, preset: options.preset,
+                            guided: options.command == "setup" || options.preset != nil || options.all)
         exit(0)
     }
     if options.command == "workspaces" {
