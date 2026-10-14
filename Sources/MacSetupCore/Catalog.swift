@@ -146,6 +146,11 @@ public enum Catalog {
             Preference("NSGlobalDomain", "AppleMenuBarVisibleInFullscreen", false),
             Preference("NSGlobalDomain", "AppleMenuBarVisibleInDesktop", false)
         ], restart: "SystemUIServer")),
+        SetupTask("menu-bar-background", "Appearance", "Native menu bar background",
+                  "On macOS 26 and newer, make the system menu bar visually distinct from SketchyBar when revealed.",
+                  dependencies: ["menu-bar"],
+                  action: menuBarBackgroundAction(macOSMajorVersion:
+                      ProcessInfo.processInfo.operatingSystemVersion.majorVersion)),
         SetupTask("trackpad", "Appearance", "Two-finger secondary click", "Enable two-finger right-click and disable corner secondary clicks for built-in and Bluetooth trackpads. Tap-to-click is preserved; a logout may be needed.", action: .preferences([
             Preference("com.apple.AppleMultitouchTrackpad", "TrackpadRightClick", true),
             Preference("com.apple.AppleMultitouchTrackpad", "TrackpadCornerSecondaryClick", 0),
@@ -167,6 +172,22 @@ public enum Catalog {
             "Do not run another wallpaper watcher alongside WallpaperAccentWatcher. Permissions are never granted automatically."
         ]))
     ]
+
+    /// Apple exposes this switch through System Settings rather than a documented
+    /// stable defaults key. Avoid writing speculative preferences system-wide.
+    public static func menuBarBackgroundAction(macOSMajorVersion: Int) -> TaskAction {
+        guard macOSMajorVersion >= 26 else {
+            return .guide(url: nil, app: nil, instructions: [
+                "This macOS version already provides a native menu bar background. No extra setting is required."
+            ])
+        }
+        return .guide(url: "x-apple.systempreferences:com.apple.MenuBar-Settings.extension",
+                      app: nil, instructions: [
+            "Open System Settings > Menu Bar.",
+            "Enable Show menu bar background. This adds a native blurred layer when the auto-hidden menu bar is revealed over SketchyBar.",
+            "Move the pointer to the top edge to confirm that macOS menu titles are legible. This keeps Liquid Glass and SketchyBar's own design unchanged."
+        ])
+    }
 
     public static func appearanceInstructions(macOSMajorVersion: Int) -> [String] {
         var instructions = [

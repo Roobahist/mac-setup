@@ -179,11 +179,11 @@ cmd-alt-h = []
 # macOS presents lightweight suggestions as separate windows without reliable titles.
 [[on-window-detected]]
 if = 'test %{app-bundle-id} = com.apple.ScreenContinuity'
-run = 'layout floating'
+run = 'layout tiling'
 
 [[on-window-detected]]
 if = 'test %{app-bundle-id} = com.apple.systempreferences'
-run = 'layout floating'
+run = 'layout tiling'
 
 [[on-window-detected]]
 if = 'test %{app-bundle-id} = ru.keepcoder.Telegram'
