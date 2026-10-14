@@ -68,9 +68,7 @@ else
   echo "This package contains command-line tools only. Run: $BIN_ROOT/mac-setup"
 fi
 
-# Upgrade an active watcher with the same runtime shipped in this package.
-# A fresh installation or a stopped/disabled watcher remains opt-in.
-if /bin/launchctl print "gui/$(id -u)/com.roobahist.wallpaper-watcher" >/dev/null 2>&1 ||
-   /bin/launchctl print "gui/$(id -u)/io.github.roobahist.mac-setup.wallpaper" >/dev/null 2>&1; then
-  "$INSTALL_DIR/mac-setup" watcher-enable --yes
-fi
+# Installation only places the optional wallpaper helper beside the app.
+# Do not query, launch, restart, migrate, or disable any watcher here.
+# The user opts in or out from Appearance / Guided Setup or an explicit CLI
+# command. An existing LaunchAgent must remain untouched during app updates.
