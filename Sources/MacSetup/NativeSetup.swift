@@ -2,10 +2,10 @@ import AppKit
 import SwiftUI
 import MacSetupCore
 
-private enum SetupPage: Hashable { case features, shortcuts, workspaces, review, running, guide, failed, finished }
+enum SetupPage: Hashable { case features, shortcuts, workspaces, review, running, guide, failed, finished }
 enum SetupScope { case full, workspaces, shortcuts }
 
-private final class SetupModel: ObservableObject {
+final class SetupModel: ObservableObject {
     @Published var page: SetupPage = .features
     @Published var picker = TaskPickerState(preset: .repair)
     @Published var states: [String: String] = [:]
@@ -362,8 +362,16 @@ private final class SetupModel: ObservableObject {
     func sendInput() { runner.send(response); response = "" }
 }
 
-private struct SetupView: View {
+struct SetupView: View {
     @ObservedObject var model: SetupModel
+    let embedded: Bool
+    let onReturn: (() -> Void)?
+
+    init(model: SetupModel, embedded: Bool = false, onReturn: (() -> Void)? = nil) {
+        self.model = model
+        self.embedded = embedded
+        self.onReturn = onReturn
+    }
     @LocalViewState private var glyphWorkspaceID: String?
     @LocalViewState private var workspaceDragSession = UUID().uuidString
     @LocalViewState private var dropTargetWorkspaceID: String?
@@ -397,6 +405,7 @@ private struct SetupView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            if !embedded {
             HStack {
                 Image(systemName: "desktopcomputer").font(.system(size: 28)).foregroundStyle(Color.accentColor)
                 VStack(alignment: .leading, spacing: 4) {
@@ -415,6 +424,7 @@ private struct SetupView: View {
                 }
             }.padding(.horizontal, 24).padding(.bottom, 20)
             Divider()
+            }
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     switch model.page {
@@ -431,10 +441,13 @@ private struct SetupView: View {
             }
             .id(model.page)
             Divider()
-            footer.padding(20)
+            Group {
+                if embedded { embeddedFooter }
+                else { footer }
+            }.padding(20)
         }
         .font(.system(size: 15))
-        .frame(minWidth: 820, minHeight: 660)
+        .frame(minWidth: embedded ? 610 : 820, minHeight: embedded ? 610 : 660)
         .sheet(isPresented: $model.appSheet) { appAssignments }
         .sheet(isPresented: Binding(get: { glyphWorkspaceID != nil }, set: { if !$0 { glyphWorkspaceID = nil } })) {
             if let i = model.layout.workspaces.firstIndex(where: { $0.id == glyphWorkspaceID }) {
@@ -891,6 +904,54 @@ private struct SetupView: View {
         }
     }
 
+    @ViewBuilder private var embeddedFooter: some View {
+        HStack {
+            switch model.page {
+            case .workspaces, .shortcuts:
+                Text("Only this configuration will be applied.")
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button(model.page == .workspaces ? "Apply workspaces" : "Apply shortcuts") {
+                    model.review()
+                    if model.page == .review { model.start() }
+                }
+                .disabled(model.busy || model.workspaceError(in: model.layout) != nil)
+                .keyboardShortcut(.defaultAction)
+            case .review:
+                Button("Back to features") { onReturn?() }
+                Spacer()
+                Button("Apply selected feature") { model.start() }
+                    .disabled(model.busy).keyboardShortcut(.defaultAction)
+            case .running:
+                Text("Applying your changes.").foregroundStyle(.secondary)
+                Spacer()
+            case .guide:
+                Button("Leave pending") { model.skip() }.disabled(model.busy)
+                Spacer()
+                Button("Test passed") { model.completeGuide() }
+                    .disabled(model.busy || !model.checkReady || model.checkedSteps.count != model.steps.count)
+            case .failed:
+                Button("Back") { onReturn?() }
+                if model.current != nil {
+                    Button("Leave pending") { model.skip() }
+                }
+                Spacer()
+                Button("Retry") { model.advance() }.disabled(model.busy)
+            case .finished:
+                Text("Your changes have been saved.").foregroundStyle(.secondary)
+                Spacer()
+                Button("Continue customizing") {
+                    if model.scope == .workspaces { model.openEditor(.workspaces) }
+                    else if model.scope == .shortcuts { model.openEditor(.shortcuts) }
+                    else { onReturn?() }
+                }.keyboardShortcut(.defaultAction)
+            case .features:
+                Spacer()
+                Button("Back to features") { onReturn?() }
+            }
+        }
+    }
+
     @ViewBuilder private var footer: some View {
         HStack {
             switch model.page {
@@ -951,7 +1012,8 @@ private struct SetupView: View {
 
 enum NativeSetup {
     static func run(ids: [String]? = nil, preset: SetupPreset? = nil,
-                    workspaceEditor: Bool = false, shortcutEditor: Bool = false) throws {
+                    workspaceEditor: Bool = false, shortcutEditor: Bool = false,
+                    guided: Bool = false) throws {
         let app = NSApplication.shared
         app.setActivationPolicy(.regular)
         if let icon = AppResources.iconURL, let image = NSImage(contentsOf: icon) { app.applicationIconImage = image }
@@ -960,7 +1022,13 @@ enum NativeSetup {
         if shortcutEditor { model.openEditor(.shortcuts) }
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 930, height: 760), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         window.title = "Mac Setup"
-        window.contentView = NSHostingView(rootView: SetupView(model: model))
+        let initial: ControlDestination = workspaceEditor ? .workspaces
+            : (shortcutEditor ? .shortcuts : .home)
+        if guided {
+            window.contentView = NSHostingView(rootView: SetupView(model: model))
+        } else {
+            window.contentView = NSHostingView(rootView: ControlCenterView(model: model, initialDestination: initial))
+        }
         window.center()
         window.makeKeyAndOrderFront(nil)
         app.activate(ignoringOtherApps: true)
