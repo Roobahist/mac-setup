@@ -48,7 +48,8 @@ public final class DesktopAccentService {
         let data = Data(("0xff" + cleaned.uppercased() + "\n").utf8)
         try engine.journal.write(manualColorFile, data: data, transaction: transaction)
         try engine.journal.finish(transaction)
-        try refreshSketchyBar()
+        // A missing or temporarily unresponsive bar must not invalidate a saved color.
+        try? refreshSketchyBar()
         return transaction
     }
 
