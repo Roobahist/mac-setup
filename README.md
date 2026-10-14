@@ -75,6 +75,16 @@ mac-setup shortcuts
 
 These paths apply only the relevant provider profiles, rather than restarting the entire installer. `mac-setup setup` opens the contextual guide, while `mac-setup` opens the dashboard. The older terminal editor remains available through `mac-setup terminal`.
 
+### Consistent layout and applying workspace changes
+
+All customization sections share a centered content column, title size, spacing, and a stable icon rail when the sidebar is collapsed. The sidebar uses the same icon rows at both widths, hiding only text labels.
+
+The workspace list uses one six-dot drag handle per row, without redundant up/down arrows. The assigned-apps button and shortcut-key menu are visibly interactive, and reordering retains the keys assigned to each workspace.
+
+**Reordering changes an in-app draft only.** To update the live desktop, select **Review & apply workspaces**, inspect the operation, then choose **Apply changes now**. The app regenerates both AeroSpace and SketchyBar configurations and asks the running services to refresh, even if the previous profiles were already installed. A success message confirms the files and refresh request, not that every running application redrew immediately.
+
+Workspace editing validates workspace names, glyphs and key collisions, but **does not require unrelated Karabiner actions or rules to be valid**. Karabiner errors belong in Keyboard Shortcuts, where full shortcut validation still runs. An invalid workspace shortcut is still reported where you edit it.
+
 ### Workspace cards and shortcut readability
 
 Workspaces are edited as compact, individually bordered rows. The grip icon at the left indicates that the entire row can be dragged to insert it at a different position. Workspace icon, application assignment, destination key, and removal controls are compact and have descriptive accessibility labels and hover help.

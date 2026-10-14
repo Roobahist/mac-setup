@@ -32,7 +32,7 @@ struct ShortcutStudio: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Keyboard shortcuts").font(.title2.bold())
+                Text("Keyboard shortcuts").font(SetupDesign.pageTitle)
                 Spacer()
                 Text("\(settings.entries.filter(\.enabled).count) active")
                     .font(.subheadline).foregroundStyle(.secondary)
