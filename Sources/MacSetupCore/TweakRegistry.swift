@@ -102,10 +102,10 @@ public enum TweakRegistry {
               domain: "NSGlobalDomain", key: "AppleAccentColor", fallback: NSNumber(value: 4),
               kind: .selection([
                 .init("Graphite", -1), .init("Red", 0), .init("Orange", 1),
-                .init("Yellow", 2), .init("Green", 3), .init("Blue", 4),
+                .init("Yellow", 2), .init("Green", 3), .init("Blue (default)", 4),
                 .init("Purple", 5), .init("Pink", 6)
               ]),
-              warning: "The desktop theme and SketchyBar wallpaper watcher use a separate accent color.")
+              warning: "Blue restores the macOS system default. Running apps may need to reopen to pick up the change. This does not change SketchyBar colors.")
     ]
 
     public static var categories: [String] {
@@ -119,6 +119,18 @@ public enum TweakRegistry {
             (needle.isEmpty || [tweak.title, tweak.summary, tweak.category, tweak.id]
                 .contains { $0.localizedCaseInsensitiveContains(needle) })
         }
+    }
+}
+
+/// An operation can save correctly even when macOS refuses to refresh an
+/// already-running process. Keep the recovery record and show that distinction.
+public struct TweakChangeResult {
+    public let transaction: String
+    public let refreshWarning: String?
+
+    public init(transaction: String, refreshWarning: String?) {
+        self.transaction = transaction
+        self.refreshWarning = refreshWarning
     }
 }
 
@@ -143,40 +155,92 @@ public final class TweakService {
         try storedValue(for: tweak) ?? tweak.fallback
     }
 
-    @discardableResult
-    public func apply(_ tweak: TweakDescriptor, value: NSNumber) throws -> String {
-        let prepared: NSNumber
+    public static func usesSystemDefault(_ tweak: TweakDescriptor, value: NSNumber) -> Bool {
+        tweak.id == "appearance.accent" && value.intValue == 4
+    }
+
+    private func refreshed(_ tweak: TweakDescriptor) -> String? {
+        if tweak.id == "appearance.accent" {
+            // Notify running apps after changing global accent preferences.
+            for name in ["AppleColorPreferencesChangedNotification", "AppleAquaColorVariantChanged"] {
+                DistributedNotificationCenter.default().post(
+                    name: Notification.Name(name), object: nil)
+            }
+        }
+        guard let process = tweak.restart else { return nil }
+        do {
+            let result = try runner.run("/usr/bin/killall", [process])
+            // An active macOS Dock normally relaunches through launchd.
+            // If the relaunch fails, try to recover it, then warn the user.
+            if process == "Dock" {
+                for _ in 0..<4 {
+                    Thread.sleep(forTimeInterval: 0.3)
+                    if (try? runner.run("/usr/bin/pgrep", ["-x", "Dock"]))?.status == 0 {
+                        return nil
+                    }
+                }
+                _ = try? runner.run("/usr/bin/open", ["-a", "Dock"])
+                Thread.sleep(forTimeInterval: 0.4)
+                if (try? runner.run("/usr/bin/pgrep", ["-x", "Dock"]))?.status == 0 {
+                    return nil
+                }
+                return "The preference was saved, but Dock has not restarted. Try 'killall Dock' or restart Dock from Activity Monitor."
+            }
+            if result.status != 0 {
+                return "\(process) did not restart. The preference was saved, but its visible effect may be delayed."
+            }
+        } catch {
+            return "The preference was saved, but \(process) could not restart: \(error)"
+        }
+        return nil
+    }
+
+    private func validate(_ tweak: TweakDescriptor, value: NSNumber) throws -> NSNumber {
         switch tweak.kind {
         case .toggle:
-            prepared = NSNumber(value: value.boolValue)
+            return NSNumber(value: value.boolValue)
         case let .slider(minimum, maximum, step):
             let bounded = min(max(value.doubleValue, minimum), maximum)
-            prepared = NSNumber(value: (bounded / step).rounded() * step)
+            return NSNumber(value: (bounded / step).rounded() * step)
         case let .selection(choices):
             guard choices.contains(where: { $0.value == value.intValue }) else {
                 throw SetupError("Unsupported value for \(tweak.title).")
             }
-            prepared = NSNumber(value: value.intValue)
+            return NSNumber(value: value.intValue)
         }
+    }
 
+    @discardableResult
+    public func apply(_ tweak: TweakDescriptor, value: NSNumber) throws -> TweakChangeResult {
+        let prepared = try validate(tweak, value: value)
         let lock = try SetupLock(paths: paths)
         defer { withExtendedLifetime(lock) {} }
         let transaction = try journal.begin(tweak.id)
-        try journal.setPreference(tweak.domain, tweak.key, prepared, transaction: transaction)
-        try journal.finish(transaction)
-        if let process = tweak.restart {
-            // A closed Finder or Dock is not a failed setting change.
-            _ = try? runner.run("/usr/bin/killall", [process])
+        if Self.usesSystemDefault(tweak, value: prepared) {
+            try journal.clearPreference(tweak.domain, tweak.key, transaction: transaction)
+        } else {
+            try journal.setPreference(tweak.domain, tweak.key, prepared, transaction: transaction)
         }
-        return transaction
+        try journal.finish(transaction)
+        return TweakChangeResult(transaction: transaction, refreshWarning: refreshed(tweak))
     }
 
-    public func restore(_ transaction: String, tweak: TweakDescriptor) throws {
+    @discardableResult
+    public func resetToSystemDefault(_ tweak: TweakDescriptor) throws -> TweakChangeResult {
+        let lock = try SetupLock(paths: paths)
+        defer { withExtendedLifetime(lock) {} }
+        let transaction = try journal.begin(tweak.id + ".reset")
+        try journal.clearPreference(tweak.domain, tweak.key, transaction: transaction)
+        try journal.finish(transaction)
+        return TweakChangeResult(transaction: transaction, refreshWarning: refreshed(tweak))
+    }
+
+    @discardableResult
+    public func restore(_ transaction: String, tweak: TweakDescriptor) throws -> String? {
         let lock = try SetupLock(paths: paths)
         defer { withExtendedLifetime(lock) {} }
         try journal.restore(transaction)
-        if let process = tweak.restart {
-            _ = try? runner.run("/usr/bin/killall", [process])
-        }
+        return refreshed(tweak)
     }
+
 }

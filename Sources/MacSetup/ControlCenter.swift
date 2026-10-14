@@ -42,6 +42,7 @@ struct ControlCenterView: View {
     @LocalViewState private var previousDestination: ControlDestination = .home
     @LocalViewState private var query = ""
     @LocalViewState private var activeFeature: String?
+    @LocalViewState private var compactSidebar = false
 
     init(model: SetupModel, initialDestination: ControlDestination = .home) {
         self.model = model
@@ -49,52 +50,17 @@ struct ControlCenterView: View {
         _previousDestination = LocalViewState(initialValue: initialDestination)
     }
 
+    private let customization: [ControlDestination] = [
+        .home, .appearance, .dock, .menuBar, .finder, .workspaces, .shortcuts, .apps
+    ]
+    private let management: [ControlDestination] = [.guidedSetup, .updates]
+
     var body: some View {
-        NavigationSplitView {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 10) {
-                    Image(systemName: "slider.horizontal.3")
-                        .font(.system(size: 20, weight: .medium))
-                        .foregroundStyle(Color.accentColor)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Mac Setup").font(.headline)
-                        Text("Your Mac, your way").font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-                .padding(.horizontal, 12).padding(.top, 20).padding(.bottom, 10)
-
-                TextField("Search settings", text: $query)
-                    .textFieldStyle(.roundedBorder)
-                    .padding(.horizontal, 12)
-                    .accessibilityLabel("Search settings and features")
-
-                List(selection: $destination) {
-                    Section("Customize") {
-                        ForEach([ControlDestination.home, .appearance, .dock, .menuBar, .finder,
-                                 .workspaces, .shortcuts, .apps]) { item in
-                            Label(item.title, systemImage: item.symbol).tag(item)
-                        }
-                    }
-                    Section("Mac Setup") {
-                        ForEach([ControlDestination.guidedSetup, .updates]) { item in
-                            Label(item.title, systemImage: item.symbol).tag(item)
-                        }
-                    }
-                }
-                .listStyle(.sidebar)
-
-                HStack {
-                    Text("Version \(MacSetupVersion.installed)")
-                    Spacer()
-                    Circle().fill(model.busy ? Color.orange : Color.green)
-                        .frame(width: 7, height: 7)
-                        .accessibilityLabel(model.busy ? "Checking or applying settings" : "Ready")
-                }
-                .font(.caption2).foregroundStyle(.secondary)
-                .padding(.horizontal, 16).padding(.bottom, 12)
-            }
-            .frame(minWidth: 220)
-        } detail: {
+        HStack(spacing: 0) {
+            sidebar
+                .frame(width: compactSidebar ? 70 : 248)
+                .background(Color(nsColor: .controlBackgroundColor))
+            Divider()
             Group {
                 if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     searchResults
@@ -114,11 +80,11 @@ struct ControlCenterView: View {
                     }
                 }
             }
-            .frame(minWidth: 680, minHeight: 670)
+            // Do not let content scroll under the opaque macOS title bar.
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color(nsColor: .windowBackgroundColor))
         }
-        .navigationSplitViewStyle(.balanced)
-        .frame(minWidth: 1050, minHeight: 740)
+        .frame(minWidth: 1040, minHeight: 740)
         .onChange(of: destination) { next in
             // A running installer owns its editor until its operation completes.
             if model.page == .running || model.page == .guide {
@@ -139,74 +105,166 @@ struct ControlCenterView: View {
         }
     }
 
+    private var sidebar: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 12) {
+                Button {
+                    compactSidebar.toggle()
+                    if compactSidebar { query = "" }
+                } label: {
+                    Image(systemName: "sidebar.left")
+                        .font(.system(size: 17, weight: .medium))
+                        .frame(width: 30, height: 30)
+                }
+                .buttonStyle(.plain)
+                .help(compactSidebar ? "Expand sidebar" : "Collapse sidebar")
+                .accessibilityLabel(compactSidebar ? "Expand sidebar" : "Collapse sidebar")
+
+                if !compactSidebar {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Mac Setup").font(.headline)
+                        Text("Customize your Mac").font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 15)
+
+            if compactSidebar {
+                Button { compactSidebar = false } label: {
+                    Image(systemName: "magnifyingglass").frame(width: 36, height: 32)
+                }
+                .buttonStyle(.plain)
+                .help("Expand to search settings")
+                .padding(.horizontal, 16)
+            } else {
+                TextField("Search settings", text: $query)
+                    .textFieldStyle(.roundedBorder)
+                    .accessibilityLabel("Search settings and features")
+                    .padding(.horizontal, 12)
+            }
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 5) {
+                    if !compactSidebar {
+                        Text("CUSTOMIZE")
+                            .font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+                            .padding(.horizontal, 16).padding(.top, 4)
+                    }
+                    ForEach(customization) { item in sidebarRow(item) }
+                    Divider().padding(.vertical, 7)
+                    if !compactSidebar {
+                        Text("MAC SETUP")
+                            .font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+                            .padding(.horizontal, 16)
+                    }
+                    ForEach(management) { item in sidebarRow(item) }
+                }
+                .padding(.horizontal, 9)
+            }
+            Spacer(minLength: 0)
+            HStack {
+                if !compactSidebar { Text("Version \(MacSetupVersion.installed)") }
+                else { Image(systemName: "info.circle").help("Version \(MacSetupVersion.installed)") }
+                Spacer(minLength: 2)
+                Circle().fill(model.busy ? Color.orange : Color.green)
+                    .frame(width: 7, height: 7)
+                    .accessibilityLabel(model.busy ? "Checking settings" : "Ready")
+            }
+            .font(.caption2).foregroundStyle(.secondary)
+            .padding(.horizontal, 16).padding(.bottom, 14)
+        }
+    }
+
+    private func sidebarRow(_ item: ControlDestination) -> some View {
+        Button { jump(item) } label: {
+            HStack(spacing: 12) {
+                Image(systemName: item.symbol)
+                    .font(.system(size: 17, weight: .regular))
+                    .frame(width: 30, height: 30)
+                if !compactSidebar {
+                    Text(item.title)
+                        .font(.system(size: 13, weight: destination == item ? .semibold : .regular))
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, compactSidebar ? 9 : 12)
+            .frame(height: 39)
+            .foregroundStyle(destination == item ? Color.accentColor : Color.primary)
+            .background(
+                destination == item ? Color.accentColor.opacity(0.14) : Color.clear,
+                in: RoundedRectangle(cornerRadius: 9)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 9))
+        }
+        .buttonStyle(.plain)
+        .help(item.title)
+        .accessibilityLabel(item.title)
+    }
+
     private func jump(_ item: ControlDestination) {
         destination = item
     }
 
     private var overview: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Make this Mac yours").font(.system(size: 29, weight: .semibold))
-                        Text("Customize one thing at a time, or apply the entire setup.")
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Button("Guided setup") { jump(.guidedSetup) }
-                        .buttonStyle(.borderedProminent)
+        let configured = Catalog.tasks.filter { model.states[$0.id] == TaskState.done.rawValue }.count
+        let total = Catalog.tasks.count
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 23) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Mac Setup at a glance")
+                        .font(.system(size: 29, weight: .semibold))
+                    Text("Your customization dashboard. Choose a setting from the sidebar, review what is installed, or run the guided setup on a new Mac.")
+                        .font(.callout).foregroundStyle(.secondary)
                 }
-                Text("PERSONALIZE")
-                    .font(.caption.weight(.semibold)).tracking(1.4).foregroundStyle(.secondary)
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 14)], spacing: 14) {
-                    ForEach([ControlDestination.appearance, .dock, .menuBar, .finder,
-                             .workspaces, .shortcuts, .apps]) { item in
-                        Button { jump(item) } label: {
-                            VStack(alignment: .leading, spacing: 14) {
-                                Image(systemName: item.symbol)
-                                    .font(.system(size: 22, weight: .medium))
-                                    .frame(width: 38, height: 38)
-                                    .foregroundStyle(Color.accentColor)
-                                Text(item.title).font(.headline).foregroundStyle(.primary)
-                                Text(description(for: item))
-                                    .font(.callout).foregroundStyle(.secondary)
-                                    .multilineTextAlignment(.leading).frame(maxWidth: .infinity, alignment: .leading)
-                                Spacer(minLength: 0)
-                                HStack {
-                                    Text("Customize").font(.caption.weight(.medium))
-                                    Spacer()
-                                    Image(systemName: "arrow.up.right")
-                                }.foregroundStyle(Color.accentColor)
-                            }
-                            .padding(18).frame(maxWidth: .infinity, minHeight: 178, alignment: .topLeading)
-                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+                HStack(spacing: 16) {
+                    VStack(alignment: .leading, spacing: 9) {
+                        Label("Setup status", systemImage: "checkmark.circle")
+                            .font(.headline)
+                        Text("\(configured) of \(total) setup components verified")
+                            .font(.title3.weight(.medium))
+                        Text("Detected from this Mac. Unconfigured tasks are not errors.")
+                            .font(.callout).foregroundStyle(.secondary)
+                        HStack(spacing: 10) {
+                            Button("Review components") { jump(.apps) }
+                                .buttonStyle(.borderedProminent)
+                            Button("Refresh status") { model.refreshInventory() }
+                                .disabled(model.busy)
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Customize \(item.title)")
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(22)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+                    VStack(alignment: .leading, spacing: 9) {
+                        Label("New to Mac Setup?", systemImage: "wand.and.stars")
+                            .font(.headline)
+                        Text("Use Guided Setup once to choose apps, shortcuts, and workspaces. You can change each area independently afterward.")
+                            .font(.callout).foregroundStyle(.secondary)
+                        Button("Open guided setup") { jump(.guidedSetup) }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(22)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
                 }
-                HStack {
-                    Image(systemName: "arrow.triangle.2.circlepath").foregroundStyle(.secondary)
-                    Text("New features are delivered through versioned updates.")
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Button("Check updates") { jump(.updates) }
-                }.font(.callout).padding(16)
-                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
-            }.padding(28)
-        }
-    }
-
-    private func description(for destination: ControlDestination) -> String {
-        switch destination {
-        case .appearance: return "Wallpaper colors, accent watcher and native accent."
-        case .dock: return "Reveal timing, animations and icon size."
-        case .menuBar: return "Clock format and visible menu bar details."
-        case .finder: return "Paths, hidden files and window information."
-        case .workspaces: return "Arrange desktops and route applications."
-        case .shortcuts: return "Manage the shared keyboard layout."
-        case .apps: return "Install and configure individual components."
-        default: return ""
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("How changes work").font(.title3.weight(.semibold))
+                    Label("Each setting is saved separately, with Undo and a system-default reset.", systemImage: "slider.horizontal.3")
+                    Label("An unsuccessful refresh is reported instead of claiming macOS applied a change.", systemImage: "exclamationmark.circle")
+                    Label("Optional services stay off until you explicitly enable them.", systemImage: "power")
+                    Label("Changes to this app are delivered through versioned GitHub releases.", systemImage: "arrow.triangle.2.circlepath")
+                    Button("Check for updates") { jump(.updates) }
+                        .padding(.top, 4)
+                }
+                .font(.callout)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(22)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+            }
+            .padding(28)
+            .frame(maxWidth: 950, alignment: .leading)
+            .frame(maxWidth: .infinity)
         }
     }
 

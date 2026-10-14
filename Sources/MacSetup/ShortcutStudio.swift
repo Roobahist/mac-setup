@@ -195,32 +195,53 @@ struct ShortcutStudio: View {
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
     }
 
-    private func appForShortcut(_ entry: ManagedShortcut) -> InstalledApplication? {
-        let bundleID: String?
+    private func bundleIDForShortcut(_ entry: ManagedShortcut) -> String? {
         switch entry.provider {
-        case .aerospace: bundleID = "bobko.aerospace"
-        case .raycast: bundleID = "com.raycast.macos"
+        case .aerospace: return "bobko.aerospace"
+        case .raycast: return "com.raycast.macos"
         case .karabiner:
-            bundleID = entry.action.hasPrefix("open:") ? String(entry.action.dropFirst(5)) : nil
-        }
-        return apps.first { candidate in
-            candidate.bundleID == bundleID ||
-                (entry.provider == .karabiner && candidate.name == entry.action)
+            if entry.action.hasPrefix("open:") {
+                return String(entry.action.dropFirst(5))
+            }
+            // Bundled Karabiner scripts refer to an app by its friendly name.
+            switch entry.action {
+            case "Finder": return "com.apple.finder"
+            case "Visual Studio Code": return "com.microsoft.VSCode"
+            case "Alacritty": return "org.alacritty"
+            default: return nil
+            }
         }
     }
 
     @ViewBuilder private func shortcutIcon(_ entry: ManagedShortcut) -> some View {
-        if let app = appForShortcut(entry) {
-            Image(nsImage: NSWorkspace.shared.icon(forFile: app.path))
-                .resizable()
-                .interpolation(.high)
-                .frame(width: 23, height: 23)
+        let bundleID = bundleIDForShortcut(entry)
+        let installed = apps.first { $0.bundleID == bundleID }
+        let url = bundleID.flatMap { NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) }
+        let builtInFinder = entry.action == "Finder"
+            ? URL(fileURLWithPath: "/System/Library/CoreServices/Finder.app") : nil
+        if let path = installed?.path ?? url?.path ?? builtInFinder?.path,
+           FileManager.default.fileExists(atPath: path) {
+            Image(nsImage: NSWorkspace.shared.icon(forFile: path))
+                .resizable().interpolation(.high)
+                .scaledToFit()
+                .frame(width: 24, height: 24)
+                .help("Application icon")
         } else {
-            Image(systemName: entry.provider == .aerospace ? "rectangle.3.group" :
-                    entry.provider == .raycast ? "magnifyingglass" : "app")
-                .font(.system(size: 18))
+            let symbol: String = {
+                if entry.action == "Finder" { return "folder.fill" }
+                if entry.action == "Visual Studio Code" { return "chevron.left.forwardslash.chevron.right" }
+                if entry.action == "Alacritty" { return "terminal.fill" }
+                switch entry.provider {
+                case .aerospace: return "rectangle.3.group"
+                case .raycast: return "magnifyingglass"
+                case .karabiner: return "app.fill"
+                }
+            }()
+            Image(systemName: symbol)
+                .font(.system(size: 17, weight: .medium))
                 .foregroundStyle(.secondary)
-                .frame(width: 23, height: 23)
+                .frame(width: 24, height: 24)
+                .help("Shortcut action")
         }
     }
 

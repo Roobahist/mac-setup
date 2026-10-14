@@ -49,6 +49,14 @@ final class ControlCenterTests: XCTestCase {
         }
     }
 
+    func testDefaultBlueUsesAnAbsentOverrideInsteadOfWritingFour() throws {
+        let accent = try XCTUnwrap(TweakRegistry.all.first { $0.id == "appearance.accent" })
+        XCTAssertTrue(TweakService.usesSystemDefault(accent, value: NSNumber(value: 4)))
+        XCTAssertFalse(TweakService.usesSystemDefault(accent, value: NSNumber(value: 6)))
+        let recent = try XCTUnwrap(TweakRegistry.all.first { $0.id == "dock.recents" })
+        XCTAssertFalse(TweakService.usesSystemDefault(recent, value: NSNumber(value: 4)))
+    }
+
     func testVersionComparisonUsesNumericComponents() {
         XCTAssertTrue(MacSetupVersion.isNewer("v0.10.0", than: "0.9.9"))
         XCTAssertTrue(MacSetupVersion.isNewer("v1.0.0", than: "0.9.9"))
