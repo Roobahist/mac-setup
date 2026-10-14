@@ -12,6 +12,7 @@ private final class SetupModel: ObservableObject {
     @Published var layout = WorkspaceConfiguration.defaultLayout
     @Published var shortcuts = ShortcutSettings(entries: [])
     let aerospaceTemplate: String
+    let karabinerTemplate: Data
     @Published var apps: [InstalledApplication] = []
     @Published var index = 0
     @Published var tasks: [SetupTask] = []
@@ -40,6 +41,7 @@ private final class SetupModel: ObservableObject {
         engine = try Engine(runner: runner)
         engine.deferRestarts = true
         aerospaceTemplate = try String(contentsOf: engine.paths.profile.appendingPathComponent("aerospace/aerospace.toml"), encoding: .utf8)
+        karabinerTemplate = try Data(contentsOf: engine.paths.profile.appendingPathComponent("karabiner/karabiner.json"))
         shortcuts = try ShortcutSettings.load(from: engine.paths, aerospaceTemplate: aerospaceTemplate)
         layout = try WorkspaceConfiguration.load(from: engine.paths)
         guideProgress = try GuideProgress.load(from: engine.paths)
@@ -464,7 +466,8 @@ private struct SetupView: View {
     private var shortcuts: some View {
         VStack(alignment: .leading, spacing: 16) {
             ShortcutStudio(settings: $model.shortcuts, layout: $model.layout,
-                           apps: model.apps, aerospaceTemplate: model.aerospaceTemplate)
+                           apps: model.apps, aerospaceTemplate: model.aerospaceTemplate,
+                           karabinerTemplate: model.karabinerTemplate)
             if let error = model.workspaceError(in: model.layout) {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red).font(.callout)
