@@ -33,6 +33,9 @@ codesign --force --sign - "$APP_DIR/Contents/Helpers/mac-setup-display"
 codesign --force --sign - "$APP_DIR/Contents/Helpers/mac-setup-wallpaper-watcher"
 codesign --force --sign - "$APP_DIR/Contents/MacOS/mac-setup"
 codesign --force --sign - "$APP_DIR"
+# Verify resources can be resolved by the helper from inside the actual
+# packaged .app, not only from the SwiftPM build directory.
+"$APP_DIR/Contents/Helpers/mac-setup-wallpaper-watcher" --self-check
 
 if [[ -e "$DEST_APP" || -L "$DEST_APP" ]]; then
   EXISTING_ID="$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$DEST_APP/Contents/Info.plist" 2>/dev/null || true)"
