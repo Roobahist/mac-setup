@@ -32,6 +32,9 @@ public final class Engine {
         case let .install(packages, cask, app):
             if let app, appPath(app, home: paths.home) != nil { return .done }
             guard let brew = tools("brew") else { return .blocked }
+            // A failed cask pkg install can leave a Homebrew registration behind,
+            // even though the application itself was never installed.
+            if app != nil { return .ready }
             return try packages.allSatisfy { package in
                 let result = try runner.run(brew, ["list", cask ? "--cask" : "--formula", "--versions", package])
                 return result.status == 0 && !result.text.isEmpty
@@ -164,6 +167,10 @@ public final class Engine {
                         let installed = try runner.run(brew, ["list", cask ? "--cask" : "--formula", "--versions", package])
                         if installed.status != 0 || installed.text.isEmpty {
                             try runner.checked(brew, ["install"] + (cask ? ["--cask"] : []) + [package], interactive: true)
+                        } else if cask, let app, appPath(app, home: paths.home) == nil {
+                            // Resume a partially installed cask without disturbing
+                            // packages whose installed application is already present.
+                            try runner.checked(brew, ["reinstall", "--cask", package], interactive: true)
                         }
                     }
                 }
