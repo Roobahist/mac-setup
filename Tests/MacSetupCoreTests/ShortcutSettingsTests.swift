@@ -23,6 +23,23 @@ final class ShortcutSettingsTests: XCTestCase {
         try settings.validate(workspaces: .defaultLayout, aerospaceTemplate: aerospaceTemplate())
     }
 
+    func testGeneratedAeroSpaceProfileNeverRedeclaresModifierPermutations() throws {
+        let source = try aerospaceTemplate()
+        let managed = try settings().aerospaceTemplateApplying(to: source)
+        XCTAssertFalse(managed.contains("alt-ctrl-down ="))
+        XCTAssertTrue(managed.contains("ctrl-alt-down ="))
+        let generated = try WorkspaceConfiguration.defaultLayout.aerospaceTOML(from: managed)
+        try WorkspaceConfiguration.verifyGeneratedBindings(generated)
+        let count = generated.components(separatedBy: "\n")
+            .filter { $0.trimmingCharacters(in: .whitespaces).hasPrefix("ctrl-alt-down =") }.count
+        XCTAssertEqual(count, 1)
+        let broken = generated.replacingOccurrences(
+            of: "ctrl-alt-down = 'move down'",
+            with: "ctrl-alt-down = 'move down'\nalt-ctrl-down = 'move down'"
+        )
+        XCTAssertThrowsError(try WorkspaceConfiguration.verifyGeneratedBindings(broken))
+    }
+
     func testModifiedAerospaceBindingAppearsInGeneratedProfile() throws {
         var settings = try settings()
         let index = try XCTUnwrap(settings.entries.firstIndex {

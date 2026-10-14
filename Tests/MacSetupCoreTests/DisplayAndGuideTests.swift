@@ -2,6 +2,23 @@ import XCTest
 @testable import MacSetupCore
 
 final class DisplayAndGuideTests: XCTestCase {
+    func testRoundedFloatingPreferencesPreserveMeaningfulDifferences() {
+        let expected = NSNumber(value: 0.73999999999999999)
+        let float32 = NSNumber(value: Float(0.74))
+        XCTAssertTrue(equalPreference(float32, expected))
+        XCTAssertFalse(equalPreference(NSNumber(value: 0.70), expected))
+        XCTAssertFalse(equalPreference(NSNumber(value: true), expected))
+        XCTAssertTrue(equalPreference("resolution", "resolution"))
+    }
+
+    func testAppearanceInstructionsRespectOSAvailability() {
+        let earlier = Catalog.appearanceInstructions(macOSMajorVersion: 15)
+        let newer = Catalog.appearanceInstructions(macOSMajorVersion: 26)
+        XCTAssertTrue(earlier.joined(separator: " ").contains("only available"))
+        XCTAssertFalse(earlier.joined(separator: " ").contains("Select Clear Liquid Glass"))
+        XCTAssertTrue(newer.joined(separator: " ").contains("Clear Liquid Glass"))
+    }
+
     func testReferenceGlyphsAndFontsMatchTheHost() {
         let expected = ["robot": "􀴽", "music": "􀑬", "chat": "􀌲", "notes": "􀈫", "clock": "􀐯"]
         for (name, character) in expected {

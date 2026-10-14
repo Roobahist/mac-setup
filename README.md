@@ -40,6 +40,14 @@ mac-setup shortcuts
 
 These paths apply only the relevant provider profiles, rather than restarting the entire installer. The full setup is available with `mac-setup`. The older terminal editor remains available through `mac-setup terminal`.
 
+### Workspace cards and shortcut readability
+
+Workspaces are edited as compact, individually bordered rows. The grip icon at the left indicates that the entire row can be dragged to insert it at a different position. Workspace icon, application assignment, destination key, and removal controls are compact and have descriptive accessibility labels and hover help.
+
+Keyboard shortcuts have larger key-combination chips; the editor shows installed app icons for application shortcuts and provider icons otherwise. AeroSpace bindings are canonicalized before generation, so modifier-order permutations such as `alt-ctrl-down` and `ctrl-alt-down` cannot both be emitted. Generated bindings are checked for duplicates before writing the configuration.
+
+Vorssaint floating-point settings use a small numeric tolerance when verifying macOS `defaults` writes; strings, booleans, and meaningful numeric differences still require exact values. Appearance checklists only instruct users to configure Liquid Glass on supported macOS versions.
+
 ### Shortcut behavior
 
 All supported AeroSpace bindings in the bundled main-mode configuration are editable. Additional shortcuts may reuse available actions. Karabiner application shortcuts can use built-in app-opening scripts or a validated application bundle ID. Advanced stateful Karabiner rules, such as the Chrome chord remapping, remain preserved in the Portable profile and can be disabled or edited through a validated JSON editor. They cannot be represented faithfully as ordinary single-chord shortcuts. The Raycast launcher combination is editable and synchronized with its macOS preference.
