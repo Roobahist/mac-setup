@@ -262,7 +262,7 @@ private struct SetupView: View {
     @ObservedObject var model: SetupModel
     @LocalViewState private var shortcutWorkspaceID: String?
     @LocalViewState private var glyphWorkspaceID: String?
-    @LocalViewState private var draggingWorkspaceID: String?
+    @LocalViewState private var workspaceDragSession = UUID().uuidString
     @LocalViewState private var dropTargetWorkspaceID: String?
 
     private var previewTime: String {
@@ -411,15 +411,7 @@ private struct SetupView: View {
                         .contentShape(Rectangle())
                         .foregroundStyle(.secondary).help("Drag to reorder \(model.layout.workspaces[i].name)")
                         .accessibilityLabel("Drag to reorder \(model.layout.workspaces[i].name)")
-                        .onDrag {
-                            draggingWorkspaceID = id
-                            dropTargetWorkspaceID = nil
-                            let provider = NSItemProvider(object: id as NSString)
-                            provider.registerDataRepresentation(forTypeIdentifier: workspaceDragType.identifier, visibility: .all) { completion in
-                                completion(Data(id.utf8), nil); return nil
-                            }
-                            return provider
-                        }
+                        .draggable("mac-setup-workspace:\(workspaceDragSession):\(id)")
                     TextField("Name", text: $model.layout.workspaces[i].name).frame(width: 130).accessibilityLabel("Workspace name")
                     Button { glyphWorkspaceID = id } label: {
                         HStack {
@@ -443,9 +435,18 @@ private struct SetupView: View {
                     .font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1)
                 }.padding(12).background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
                  .overlay(RoundedRectangle(cornerRadius: 8).stroke(dropTargetWorkspaceID == id ? Color.accentColor : .clear))
-                 .onDrop(of: [workspaceDragType], delegate: WorkspaceDropDelegate(targetID: id,
-                    selectedTasks: model.picker.selected, layout: $model.layout, draggingID: $draggingWorkspaceID,
-                    dropTargetID: $dropTargetWorkspaceID))
+                 .dropDestination(for: String.self) { items, _ in
+                    let prefix = "mac-setup-workspace:\(workspaceDragSession):"
+                    guard items.count == 1, let value = items.first, value.hasPrefix(prefix) else { return false }
+                    let source = String(value.dropFirst(prefix.count))
+                    guard visibleWorkspaceIDs.contains(source) else { return false }
+                    model.layout.moveWorkspace(source, to: id, selectedTasks: model.picker.selected)
+                    dropTargetWorkspaceID = nil
+                    return true
+                 } isTargeted: { targeted in
+                    if targeted { dropTargetWorkspaceID = id }
+                    else if dropTargetWorkspaceID == id { dropTargetWorkspaceID = nil }
+                 }
                 }
             }
             Button("Add workspace") {
