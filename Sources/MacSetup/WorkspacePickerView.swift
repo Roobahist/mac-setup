@@ -117,7 +117,7 @@ struct WorkspacePickerView {
         let glyphWidth = width >= 63 ? 13 : 10
         let appsWidth = 5
         let idWidth = includeID ? min(20, max(12, width / 4)) : 0
-        let fixed = 3 + keyWidth + 2 + glyphWidth + 2 + appsWidth + (includeID ? 2 + idWidth : 0)
+        let fixed = 3 + keyWidth + 4 + glyphWidth + 2 + appsWidth + (includeID ? 2 + idWidth : 0)
         let nameWidth = max(7, width - fixed)
         let text = " \(highlighted ? ">" : " ") "
             + fit(shortcut(at: index), to: keyWidth, padded: true) + "  "
@@ -133,7 +133,7 @@ struct WorkspacePickerView {
         let glyphWidth = width >= 63 ? 13 : 10
         let appsWidth = 5
         let idWidth = includeID ? min(20, max(12, width / 4)) : 0
-        let fixed = 3 + keyWidth + 2 + glyphWidth + 2 + appsWidth + (includeID ? 2 + idWidth : 0)
+        let fixed = 3 + keyWidth + 4 + glyphWidth + 2 + appsWidth + (includeID ? 2 + idWidth : 0)
         let nameWidth = max(7, width - fixed)
         let text = "   "
             + fit("SHORTCUT", to: keyWidth, padded: true) + "  "
@@ -184,7 +184,7 @@ struct WorkspacePickerView {
         let leftWidth = wide ? max(62, (availableWidth * 63) / 100) : availableWidth
         let rightWidth = wide ? availableWidth - leftWidth - 3 : 0
         let includeID = leftWidth >= 66
-        let listHeight = max(3, height - (wide ? 12 : 18))
+        let listHeight = max(1, height - (wide ? 12 : 15))
         let range = selectionRange(total: layout.workspaces.count, limit: listHeight, cursor: selected)
         var left: [Line] = [
             Line("WORKSPACE ORDER", .accent),
@@ -262,7 +262,7 @@ struct WorkspacePickerView {
         let usable = availableWidth
         let appWidth = max(14, usable * 32 / 100)
         let ownerWidth = max(12, usable * 23 / 100)
-        let bundleWidth = max(10, usable - appWidth - ownerWidth - 9)
+        let bundleWidth = max(10, usable - appWidth - ownerWidth - 11)
         var lines: [Line] = [
             Line("APP ROUTING   /   \(workspace.name)", .accent),
             Line("Type to filter installed apps or bundle IDs", .muted),
