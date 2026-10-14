@@ -404,10 +404,28 @@ public struct WorkspaceConfiguration: Codable, Equatable {
         if !workspaces.contains(where: { $0.id == "2" }) {
             result = result.replacingOccurrences(of: "2 = 'secondary'", with: "")
         }
+        try Self.verifyGeneratedBindings(result)
         return result
     }
 
-    public func sketchybarShell(from template: String) throws -> String {
+    /// Reject equivalent modifier permutations before writing AeroSpace TOML.
+    public static func verifyGeneratedBindings(_ toml: String) throws {
+        var inMain = false
+        var seen: [String: String] = [:]
+        for raw in toml.components(separatedBy: .newlines) {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            if line == "[mode.main.binding]" { inMain = true; continue }
+            if inMain && line.hasPrefix("[") { break }
+            guard inMain, !line.hasPrefix("#"), let equals = line.firstIndex(of: "=") else { continue }
+            let source = String(line[..<equals]).trimmingCharacters(in: .whitespaces)
+            guard let key = WorkspaceShortcut.parse(source)?.binding else { continue }
+            if let previous = seen.updateValue(source, forKey: key) {
+                throw SetupError("AeroSpace binding \(source) duplicates \(previous). Change one shortcut before applying.")
+            }
+        }
+    }
+
+    public func sketchybarShell(from template: String) throws {
         try validate()
         let icons = workspaces.map { item in
             return "    \(item.id)) printf '%s\\n' \(Self.shellQuote(item.resolvedIcon.symbol)) ;;"

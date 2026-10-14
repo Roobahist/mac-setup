@@ -174,7 +174,7 @@ public final class Journal {
 
     public func setPreference(_ domain: String, _ key: String, _ value: Any, transaction: String) throws {
         let old = try preference(domain, key)
-        guard !equalPlist(old, value) else { return }
+        guard !equalPreference(old, value) else { return }
         try add(SavedChange(kind: .preference, target: domain, key: key, backup: nil, before: try old.map(plistData), after: try plistData(value), restored: false), to: transaction)
         do {
             try setPreference(domain, key, value)
@@ -182,7 +182,9 @@ public final class Journal {
             // Include the target preference, not its potentially sensitive value.
             throw SetupError("Cannot update preference \(domain) / \(key): \(error)")
         }
-        guard equalPlist(try preference(domain, key), value) else { throw SetupError("Preference verification failed: \(domain) \(key)") }
+        guard equalPreference(try preference(domain, key), value) else {
+            throw SetupError("Preference verification failed: \(domain) \(key). macOS may have rejected the value or the app may have rewritten its preferences.")
+        }
     }
 
     public func launchAgentLoaded(_ label: String) throws -> Bool {
