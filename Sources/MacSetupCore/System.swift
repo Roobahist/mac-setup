@@ -35,6 +35,7 @@ public struct ProcessRunner: CommandRunning {
     public init() {}
     public func run(_ executable: String, _ arguments: [String], interactive: Bool, input: Data?) throws -> CommandResult {
         let process = Process()
+        var interactiveStatusFile: URL?
         if interactive {
             // Privileged installers need a controlling terminal for sudo prompts.
             // Foundation's child process may otherwise be placed in a background
@@ -42,8 +43,12 @@ public struct ProcessRunner: CommandRunning {
             guard isatty(STDIN_FILENO) == 1, isatty(STDOUT_FILENO) == 1 else {
                 throw SetupError("Interactive installation requires a terminal. Run mac-setup in Terminal and retry.")
             }
+            let statusFile = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            interactiveStatusFile = statusFile
             process.executableURL = URL(fileURLWithPath: "/usr/bin/script")
-            process.arguments = ["-q", "/dev/null", executable] + arguments
+            process.arguments = ["-q", "/dev/null", "/bin/sh", "-c",
+                "\"$@\"; status=$?; printf '%s' \"$status\" > \"$MAC_SETUP_STATUS_FILE\"; exit \"$status\"",
+                "mac-setup-interactive", executable] + arguments
         } else {
             process.executableURL = URL(fileURLWithPath: executable)
             process.arguments = arguments
@@ -51,6 +56,7 @@ public struct ProcessRunner: CommandRunning {
         var environment = ProcessInfo.processInfo.environment
         // GUI-launched tools and launch agents may not inherit the user's shell PATH.
         environment["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:" + (environment["PATH"] ?? "")
+        if let interactiveStatusFile { environment["MAC_SETUP_STATUS_FILE"] = interactiveStatusFile.path }
         process.environment = environment
         // A file avoids pipe-buffer deadlocks on verbose subprocesses.
         let outputURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -70,7 +76,17 @@ public struct ProcessRunner: CommandRunning {
         defer { try? inputHandle?.close(); if let inputURL { try? FileManager.default.removeItem(at: inputURL) } }
         try process.run()
         process.waitUntilExit()
-        return CommandResult(status: process.terminationStatus, output: interactive ? Data() : try Data(contentsOf: outputURL))
+        defer {
+            if let interactiveStatusFile { try? FileManager.default.removeItem(at: interactiveStatusFile) }
+        }
+        if let interactiveStatusFile {
+            guard let contents = try? String(contentsOf: interactiveStatusFile, encoding: .utf8),
+                  let status = Int32(contents.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+                throw SetupError("Interactive installer ended without a verified exit status. Check the installation before retrying.")
+            }
+            return CommandResult(status: status)
+        }
+        return CommandResult(status: process.terminationStatus, output: try Data(contentsOf: outputURL))
     }
 }
 
