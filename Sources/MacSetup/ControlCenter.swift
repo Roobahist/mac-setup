@@ -42,6 +42,11 @@ struct ControlCenterView: View {
     @State private var query = ""
     @State private var activeFeature: String?
 
+    init(model: SetupModel, initialDestination: ControlDestination = .home) {
+        self.model = model
+        _destination = State(initialValue: initialDestination)
+    }
+
     var body: some View {
         NavigationSplitView {
             VStack(alignment: .leading, spacing: 10) {
@@ -248,8 +253,12 @@ struct ControlCenterView: View {
                     }.buttonStyle(.plain)
                 }
                 if matches.isEmpty && tasks.isEmpty {
-                    ContentUnavailableView("No matching controls", systemImage: "magnifyingglass",
-                                           description: Text("Try Dock, clock, accent, or workspaces."))
+                    VStack(spacing: 8) {
+                        Image(systemName: "magnifyingglass").font(.title2)
+                        Text("No matching controls").font(.headline)
+                        Text("Try Dock, clock, accent, or workspaces.")
+                            .font(.callout).foregroundStyle(.secondary)
+                    }.frame(maxWidth: .infinity).padding(40)
                 }
             }.padding(28).frame(maxWidth: 880, alignment: .leading)
                 .frame(maxWidth: .infinity)
