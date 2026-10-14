@@ -3,7 +3,7 @@ import SwiftUI
 import MacSetupCore
 
 enum SetupPage: Hashable { case features, shortcuts, workspaces, review, running, guide, failed, finished }
-enum SetupScope { case full, workspaces, shortcuts }
+enum SetupScope { case full, workspaces, shortcuts, feature }
 
 final class SetupModel: ObservableObject {
     @Published var page: SetupPage = .features
@@ -100,12 +100,13 @@ final class SetupModel: ObservableObject {
 
     func review() {
         do {
-            if let error = workspaceError(in: layout) { throw SetupError(error) }
+            if scope != .feature, let error = workspaceError(in: layout) { throw SetupError(error) }
             let chosen: [String]
             switch scope {
             case .full: chosen = picker.orderedSelection
             case .workspaces: chosen = ["aerospace-profile", "sketchybar-profile", "sketchybar-start"]
             case .shortcuts: chosen = ["aerospace-profile", "karabiner-profile", "raycast-profile"]
+            case .feature: chosen = tasks.map(\.id)
             }
             tasks = try Catalog.ordered(chosen, includingDependencies: false)
             message = ""
@@ -127,9 +128,11 @@ final class SetupModel: ObservableObject {
     func start() {
         do {
             setupLock = try SetupLock(paths: engine.paths)
-            if let error = workspaceError(in: layout) { throw SetupError(error) }
-            try shortcuts.save(to: engine.paths)
-            try layout.save(to: engine.paths)
+            if scope != .feature {
+                if let error = workspaceError(in: layout) { throw SetupError(error) }
+                try shortcuts.save(to: engine.paths)
+                try layout.save(to: engine.paths)
+            }
             engine.selectedWorkspaceTaskIDs = scope == .full ? picker.selected : nil
             pausedSetup = false
             index = 0; results = [:]; runLog = ""
