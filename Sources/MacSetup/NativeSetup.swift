@@ -10,6 +10,8 @@ private final class SetupModel: ObservableObject {
     @Published var picker = TaskPickerState(preset: .repair)
     @Published var states: [String: String] = [:]
     @Published var layout = WorkspaceConfiguration.defaultLayout
+    @Published var shortcuts = ShortcutSettings(entries: [])
+    let aerospaceTemplate: String
     @Published var apps: [InstalledApplication] = []
     @Published var index = 0
     @Published var tasks: [SetupTask] = []
@@ -38,6 +40,8 @@ private final class SetupModel: ObservableObject {
     init(ids: [String]?, preset: SetupPreset?) throws {
         engine = try Engine(runner: runner)
         engine.deferRestarts = true
+        aerospaceTemplate = try String(contentsOf: engine.paths.profile.appendingPathComponent("aerospace/aerospace.toml"), encoding: .utf8)
+        shortcuts = try ShortcutSettings.load(from: engine.paths, aerospaceTemplate: aerospaceTemplate)
         layout = try WorkspaceConfiguration.load(from: engine.paths)
         guideProgress = try GuideProgress.load(from: engine.paths)
         apps = ApplicationDiscovery.scan(home: engine.paths.home)
@@ -96,7 +100,7 @@ private final class SetupModel: ObservableObject {
             switch scope {
             case .full: chosen = picker.orderedSelection
             case .workspaces: chosen = ["aerospace-profile", "sketchybar-profile", "sketchybar-start"]
-            case .shortcuts: chosen = ["aerospace-profile"]
+            case .shortcuts: chosen = ["aerospace-profile", "karabiner-profile", "raycast-profile"]
             }
             tasks = try Catalog.ordered(chosen, includingDependencies: false)
             message = ""
@@ -110,9 +114,7 @@ private final class SetupModel: ObservableObject {
 
     func workspaceError(in layout: WorkspaceConfiguration, shortcutWorkspaceID: String? = nil) -> String? {
         do {
-            try layout.validate(checkingShortcutsFor: shortcutWorkspaceID)
-            let template = try String(contentsOf: engine.paths.profile.appendingPathComponent("aerospace/aerospace.toml"), encoding: .utf8)
-            try layout.forSelectedTasks(picker.selected).validate(aerospaceTemplate: template, checkingShortcutsFor: shortcutWorkspaceID)
+            try shortcuts.validate(workspaces: layout, aerospaceTemplate: aerospaceTemplate)
             return nil
         } catch { return String(describing: error) }
     }
@@ -120,6 +122,8 @@ private final class SetupModel: ObservableObject {
     func start() {
         do {
             setupLock = try SetupLock(paths: engine.paths)
+            if let error = workspaceError(in: layout) { throw SetupError(error) }
+            try shortcuts.save(to: engine.paths)
             try layout.save(to: engine.paths)
             engine.selectedWorkspaceTaskIDs = scope == .full ? picker.selected : nil
             index = 0; results = [:]; runLog = ""
@@ -408,59 +412,12 @@ private struct SetupView: View {
     }
 
     private var shortcuts: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Text("Keyboard shortcuts").font(.title2.bold())
-            Text("Confirm the shared key combinations before editing your workspace layout. Each workspace only chooses its destination key.")
-                .foregroundStyle(.secondary)
-
-            VStack(alignment: .leading, spacing: 18) {
-                Text("AeroSpace  ·  Workspace navigation").font(.headline)
-                HStack(spacing: 24) {
-                    shortcutModifiers(title: "Switch workspace", modifiers: $model.layout.keymap.switchModifiers)
-                    shortcutModifiers(title: "Move window to workspace", modifiers: $model.layout.keymap.moveModifiers)
-                }
-                Text("The same letter or number is used for both actions. Only the modifiers differ.")
-                    .foregroundStyle(.secondary)
-            }.padding(20).frame(maxWidth: .infinity, alignment: .leading)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Other configured shortcuts").font(.headline)
-                shortcutSummary("AeroSpace", "Focus window: ⌥ Arrows  ·  Move window: ⌥⌃ Arrows  ·  Resize: ⌥⇧ Arrows  ·  Balance: ⌥⇧ B")
-                shortcutSummary("Karabiner", "App launch shortcuts come from the Portable profile, including ⌥ Return for Alacritty, ⌥ E for Finder and ⌥ V for VS Code.")
-                shortcutSummary("Raycast", "⌘ Space opens Raycast. Spotlight's conflicting shortcut is backed up before it is disabled.")
-            }.padding(20).frame(maxWidth: .infinity, alignment: .leading)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-            Text("Workspace modifiers are editable here. Other shortcuts shown above are currently managed by their respective profiles.")
-                .font(.callout).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 16) {
+            ShortcutStudio(settings: $model.shortcuts, layout: $model.layout,
+                           apps: model.apps, aerospaceTemplate: model.aerospaceTemplate)
             if let error = model.workspaceError(in: model.layout) {
-                Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
-            }
-            Toggle("I have reviewed these key combinations", isOn: $model.shortcutsConfirmed)
-                .toggleStyle(.checkbox)
-        }
-    }
-
-    private func shortcutSummary(_ provider: String, _ summary: String) -> some View {
-        HStack(alignment: .top, spacing: 16) {
-            Text(provider).fontWeight(.medium).frame(width: 100, alignment: .leading)
-            Text(summary).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    private func shortcutModifiers(title: String, modifiers: Binding<[String]>) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title).fontWeight(.medium)
-            HStack(spacing: 14) {
-                ForEach(["ctrl", "alt", "shift", "cmd"], id: \.self) { modifier in
-                    Toggle(["ctrl": "Control", "alt": "Option", "shift": "Shift", "cmd": "Command"][modifier]!,
-                           isOn: Binding(get: { modifiers.wrappedValue.contains(modifier) }, set: { on in
-                        if on && !modifiers.wrappedValue.contains(modifier) {
-                            modifiers.wrappedValue.append(modifier)
-                        } else if !on { modifiers.wrappedValue.removeAll { $0 == modifier } }
-                        model.shortcutsConfirmed = false
-                    })).toggleStyle(.checkbox)
-                }
+                Label(error, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.red).font(.callout)
             }
         }
     }
@@ -728,7 +685,7 @@ private struct SetupView: View {
                     if model.scope == .shortcuts { model.review() }
                     else if model.picker.selected.contains("aerospace-profile") { model.page = .workspaces }
                     else { model.review() }
-                }.disabled(!model.shortcutsConfirmed || model.workspaceError(in: model.layout) != nil)
+                }.disabled(model.workspaceError(in: model.layout) != nil)
                     .keyboardShortcut(.defaultAction)
             case .workspaces:
                 Button("Back") { model.page = model.scope == .full ? .shortcuts : .features }; Spacer()
