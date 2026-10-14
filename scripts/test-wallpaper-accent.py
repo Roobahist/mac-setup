@@ -9,6 +9,10 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
+# Tests import a profile script directly. Never leave .pyc files inside the
+# public profile, where portability validation expects portable text files.
+sys.dont_write_bytecode = True
+
 SOURCE = Path(__file__).resolve().parents[1] / (
     "Sources/MacSetupCore/Resources/Profile/unsplash/get_wallpaper_accent.py"
 )
