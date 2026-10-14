@@ -3,7 +3,7 @@ import SwiftUI
 import MacSetupCore
 
 private enum SetupPage: Hashable { case features, shortcuts, workspaces, review, running, guide, failed, finished }
-private enum SetupScope { case full, workspaces, shortcuts }
+enum SetupScope { case full, workspaces, shortcuts }
 
 private final class SetupModel: ObservableObject {
     @Published var page: SetupPage = .features
@@ -582,7 +582,7 @@ private struct SetupView: View {
             Button { 
                 var number = 1
                 while model.layout.workspaces.contains(where: { $0.id == "custom\(number)" }) { number += 1 }
-                model.layout.workspaces.append(.init(id: "custom\(number)", name: "Workspace \(number)", glyph: "star"))
+                model.layout.workspaces.append(.init(id: "custom\(number)", name: "Workspace \(number)", glyph: "star", shortcutKey: ""))
             } label: { Label("Add workspace", systemImage: "plus") }
             if let error = model.workspaceError(in: model.layout) {
                 Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
@@ -609,7 +609,7 @@ private struct SetupView: View {
     private var review: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Ready to apply \(model.tasks.count) tasks").font(.title2.bold())
-            Text("Automatic tasks run together after you start. Setup pauses for each permission or visible test. Existing files and preferences are backed up before changes. Finder, Dock and menu bar refresh once at the end.")
+            Text("Only the listed tasks will run. Changed files are backed up, permission checks require confirmation, and the apply log can be copied.")
             ForEach(model.tasks, id: \.id) { task in
                 HStack(alignment: .top) {
                     Image(systemName: task.guided ? "hand.tap" : "gearshape")
@@ -696,7 +696,7 @@ private struct SetupView: View {
             Text(model.results.values.contains("Pending") ? "Setup saved; some tasks still need attention" : "Setup complete").font(.title2.bold())
             Button { copyLog() } label: { Label("Copy apply log", systemImage: "doc.on.doc") }
             Text("Move the pointer to the bottom edge: the Dock should reveal after about one second. The macOS menu bar should hide when the pointer leaves the top. Its reveal timing is controlled by macOS. If it still stays visible, set Automatically hide and show the menu bar to Always in System Settings, then log out and back in.")
-            Text("Press Option+1 and check the workspace highlight. Press Command+Tab to a window in another workspace and verify that the workspace follows. Check that glyphs and numbers are readable beside the clock.")
+            Text("Check the workspace highlight with your chosen modifiers and destination key, then use the move-window shortcut to send a window to another workspace.")
             ForEach(model.tasks, id: \.id) { task in
                 HStack { Text(task.title); Spacer(); Text(model.results[task.id] ?? "Pending").foregroundStyle(model.results[task.id] == "Pending" ? Color.orange : Color.secondary) }
             }
@@ -734,7 +734,7 @@ private struct SetupView: View {
                 Button("Back") { model.page = model.scope == .full ? .shortcuts : .features }; Spacer()
                 Button("Review changes") { model.review() }.keyboardShortcut(.defaultAction)
             case .review:
-                Button("Back") { model.page = .shortcuts }; Spacer()
+                Button("Back") { model.page = model.scope == .workspaces ? .workspaces : .shortcuts }; Spacer()
                 Button("Start setup") { model.start() }.keyboardShortcut(.defaultAction)
             case .guide:
                 Button("Leave pending & continue") { model.skip() }.disabled(model.busy); Spacer()
@@ -757,12 +757,14 @@ private struct SetupView: View {
 }
 
 enum NativeSetup {
-    static func run(ids: [String]? = nil, preset: SetupPreset? = nil, workspaceEditor: Bool = false) throws {
+    static func run(ids: [String]? = nil, preset: SetupPreset? = nil,
+                    workspaceEditor: Bool = false, shortcutEditor: Bool = false) throws {
         let app = NSApplication.shared
         app.setActivationPolicy(.regular)
         if let icon = AppResources.iconURL, let image = NSImage(contentsOf: icon) { app.applicationIconImage = image }
         let model = try SetupModel(ids: ids, preset: preset)
         if workspaceEditor { model.openEditor(.workspaces) }
+        if shortcutEditor { model.openEditor(.shortcuts) }
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 930, height: 760), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         window.title = "Mac Setup"
         window.contentView = NSHostingView(rootView: SetupView(model: model))

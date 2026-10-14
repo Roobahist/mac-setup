@@ -214,18 +214,11 @@ public struct WorkspaceConfiguration: Codable, Equatable {
         return copy
     }
 
-    /// Save visible edits without silently deleting workspaces hidden by an
-    /// optional application task that the user unchecked in this setup run.
+    /// Keep the complete editable layout. Optional workspaces are never hidden.
     public func mergingVisible(_ visible: WorkspaceConfiguration,
                                selectedTasks: Set<String>) throws -> WorkspaceConfiguration {
-        var workspaces = visible.workspaces
-        for (index, item) in self.workspaces.enumerated() {
-            guard let task = item.requiresTask, !selectedTasks.contains(task) else { continue }
-            workspaces.insert(item, at: min(index, workspaces.count))
-        }
-        let merged = WorkspaceConfiguration(workspaces: workspaces, keymap: visible.keymap)
-        try merged.validate()
-        return merged
+        try visible.validate()
+        return visible
     }
 
     public static func path(in paths: Paths) -> URL {
@@ -270,18 +263,10 @@ public struct WorkspaceConfiguration: Codable, Equatable {
         workspaces.insert(item, at: index)
     }
 
-    /// Move within the displayed order while preserving hidden optional workspaces.
+    /// Move before the destination while preserving the entire workspace card.
     public mutating func moveWorkspace(_ sourceID: String, to targetID: String, selectedTasks: Set<String>? = nil) {
-        var visible = forSelectedTasks(selectedTasks).workspaces
-        guard let source = visible.firstIndex(where: { $0.id == sourceID }),
-              let target = visible.firstIndex(where: { $0.id == targetID }), source != target else { return }
-        let item = visible.remove(at: source)
-        visible.insert(item, at: target)
-        let visibleIDs = Set(visible.map(\.id))
-        var next = 0
-        for index in workspaces.indices where visibleIDs.contains(workspaces[index].id) {
-            workspaces[index] = visible[next]; next += 1
-        }
+        guard let destination = workspaces.firstIndex(where: { $0.id == targetID }) else { return }
+        insertWorkspace(sourceID, at: destination)
     }
 
     public func validate(aerospaceTemplate: String? = nil, checkingShortcutsFor workspaceID: String? = nil) throws {

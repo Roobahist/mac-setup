@@ -14,7 +14,8 @@ Usage:
   mac-setup setup --all          Walk through all tasks (including unfinished)
   mac-setup setup --preset minimal    Run a curated selection
   mac-setup profiles             Show available selection presets
-  mac-setup workspaces           Customize workspace order, glyphs, names and apps
+  mac-setup workspaces           Edit only workspace layout and app routing
+  mac-setup shortcuts            Edit only shared workspace shortcuts
   mac-setup dotfiles status      Inspect local public dotfiles checkout
   mac-setup dotfiles update      Pull new dotfiles using Git fast-forward
   mac-setup update              Reapply previously installed bundled profiles
@@ -57,7 +58,7 @@ struct Options {
         if args.contains("--help") || args.first == "help" { command = "help"; return }
         if args.contains("--version") { command = "version"; return }
         if let first = args.first, !first.hasPrefix("--") { command = args.removeFirst() }
-        let commands = ["menu", "gui", "terminal", "list", "status", "plan", "setup", "update", "backups", "restore", "profiles", "workspaces", "dotfiles", "watch", "watcher-status", "watcher-stop", "watcher-disable", "watcher-enable"]
+        let commands = ["menu", "gui", "terminal", "list", "status", "plan", "setup", "update", "backups", "restore", "profiles", "workspaces", "shortcuts", "dotfiles", "watch", "watcher-status", "watcher-stop", "watcher-disable", "watcher-enable"]
         guard commands.contains(command) else { throw SetupError("Unknown command '\(command)'. Run mac-setup --help.") }
         while !args.isEmpty {
             let value = args.removeFirst()
@@ -90,7 +91,7 @@ struct Options {
             throw SetupError("--preset applies only to setup or plan.")
         }
         if image != nil && !["setup", "plan", "watch"].contains(command) { throw SetupError("--image is only valid with setup, plan or watch.") }
-        if ["status", "list", "backups", "menu", "profiles", "workspaces", "watch", "watcher-status", "watcher-stop", "watcher-disable", "watcher-enable"].contains(command) && !ids.isEmpty { throw SetupError("\(command) takes no task IDs.") }
+        if ["status", "list", "backups", "menu", "profiles", "workspaces", "shortcuts", "watch", "watcher-status", "watcher-stop", "watcher-disable", "watcher-enable"].contains(command) && !ids.isEmpty { throw SetupError("\(command) takes no task IDs.") }
         if once && command != "watch" { throw SetupError("--once is only valid with watch.") }
         if command == "watch" && (dryRun || yes) { throw SetupError("Use plan wallpaper-watcher to preview; watch runs directly.") }
         if command == "restore" && ids.count > 1 { throw SetupError("Restore one backup at a time, newest first.") }
@@ -231,7 +232,11 @@ do {
         exit(0)
     }
     if options.command == "workspaces" {
-        try NativeSetup.run(ids: ["aerospace-profile", "sketchybar-profile", "aerospace-access", "sketchybar-start"], workspaceEditor: true)
+        try NativeSetup.run(workspaceEditor: true)
+        exit(0)
+    }
+    if options.command == "shortcuts" {
+        try NativeSetup.run(shortcutEditor: true)
         exit(0)
     }
     switch options.command {
