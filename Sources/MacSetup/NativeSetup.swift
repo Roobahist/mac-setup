@@ -141,7 +141,7 @@ final class SetupModel: ObservableObject {
             case .workspaces:
                 var pending = layout
                 pending.keymap = appliedLayout.keymap
-                try appliedShortcuts.validate(workspaces: pending, aerospaceTemplate: aerospaceTemplate)
+                try appliedShortcuts.validateWorkspaceBindings(pending, aerospaceTemplate: aerospaceTemplate)
             case .shortcuts:
                 var pending = appliedLayout
                 pending.keymap = layout.keymap
@@ -164,7 +164,7 @@ final class SetupModel: ObservableObject {
             case .workspaces:
                 var chosen = layout
                 chosen.keymap = appliedLayout.keymap
-                try appliedShortcuts.validate(workspaces: chosen, aerospaceTemplate: aerospaceTemplate)
+                try appliedShortcuts.validateWorkspaceBindings(chosen, aerospaceTemplate: aerospaceTemplate)
                 try chosen.save(to: engine.paths)
             case .shortcuts:
                 var chosen = appliedLayout
@@ -201,7 +201,7 @@ final class SetupModel: ObservableObject {
                     let updatedShortcuts = try? ShortcutSettings.load(
                         from: engine.paths, aerospaceTemplate: aerospaceTemplate)
                     DispatchQueue.main.async {
-                        self.log("Finished successfully. Saved and refreshed selected configuration.")
+                        self.log("Selected files verified and refresh requested. Confirm the live desktop reflects them.")
                         if let updatedLayout { self.appliedLayout = updatedLayout }
                         if let updatedShortcuts { self.appliedShortcuts = updatedShortcuts }
                         self.busy = false
@@ -252,7 +252,12 @@ final class SetupModel: ObservableObject {
                 }
                 // A selected service task refreshes an existing bar after configuration changes.
                 let state = try engine.state(task)
-                let already = state == .done && task.id != "sketchybar-start"
+                let refreshEditedProfile = scope == .workspaces
+                    && ["aerospace-profile", "sketchybar-profile"].contains(task.id)
+                    || scope == .shortcuts
+                    && ["aerospace-profile", "karabiner-profile"].contains(task.id)
+                let already = state == .done
+                    && task.id != "sketchybar-start" && !refreshEditedProfile
                 if !already { _ = try engine.apply(task) }
                 DispatchQueue.main.async {
                     self.log("\(task.id): \(already ? "already configured" : "applied")")
@@ -711,7 +716,7 @@ struct SetupView: View {
                 Label("Add workspace", systemImage: "plus")
             }
             .padding(.top, 4)
-            if let error = model.workspaceError(in: model.layout) {
+            if let error = model.configurationError(for: .workspaces) {
                 Label(error, systemImage: "exclamationmark.triangle")
                     .font(.callout).foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1021,7 +1026,12 @@ struct SetupView: View {
                 .disabled(model.busy || model.configurationError(for: model.scope) != nil)
                 .keyboardShortcut(.defaultAction)
             case .review:
-                Button("Back to features") { onReturn?() }
+                Button(model.scope == .workspaces ? "Back to workspaces" :
+                       (model.scope == .shortcuts ? "Back to shortcuts" : "Back to features")) {
+                    if model.scope == .workspaces { model.openEditor(.workspaces) }
+                    else if model.scope == .shortcuts { model.openEditor(.shortcuts) }
+                    else { onReturn?() }
+                }
                 Spacer()
                 Button(model.scope == .full ? "Apply selected setup" :
                        (model.scope == .feature ? "Apply selected feature" : "Apply changes now")) { model.start() }
@@ -1042,7 +1052,8 @@ struct SetupView: View {
                 Spacer()
                 Button("Retry") { model.advance() }.disabled(model.busy)
             case .finished:
-                Text("Your changes have been saved.").foregroundStyle(.secondary)
+                Text("Configuration saved. Desktop reload requested. Check SketchyBar and AeroSpace to confirm the live result.")
+                    .foregroundStyle(.secondary)
                 Spacer()
                 Button("Continue customizing") {
                     if model.scope == .workspaces { model.openEditor(.workspaces) }
