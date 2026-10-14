@@ -106,6 +106,27 @@ public enum GuideStepRouting {
             default: return nil
             }
         }
+        if task.id == "raycast-access" {
+            return (0...2).contains(index) ? .init(title: "Open Raycast", app: "Raycast") : nil
+        }
+        if task.id == "vorssaint-access" {
+            switch index {
+            case 0: return .init(title: "Open Vorssaint", app: "Vorssaint")
+            case 1: return .init(title: "Open Accessibility",
+                                 url: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+            case 2: return .init(title: "Open login items",
+                                 url: "x-apple.systempreferences:com.apple.LoginItems-Settings.extension")
+            default: return nil
+            }
+        }
+        if task.id == "wallpaper-access" {
+            switch index {
+            case 1, 2: return .init(title: "Open privacy settings",
+                                    url: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")
+            case 3: return .init(title: "Open watcher", app: "WallpaperAccentWatcher")
+            default: return nil
+            }
+        }
         switch task.action {
         case let .guide(url, app, instructions):
             guard instructions.indices.contains(index) else { return nil }
