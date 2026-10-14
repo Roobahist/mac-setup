@@ -39,14 +39,17 @@ public final class Engine {
             if directories.contains("aerospace"), Journal.exists(paths.home.appendingPathComponent(".aerospace.toml")) { return .blocked }
             for name in directories {
                 let target = paths.config.appendingPathComponent(name)
+                let generated = name == "aerospace" || name == "sketchybar"
                 if dotfiles.isSymlink(target) {
                     if dotfiles.source.isLinked(name, config: paths.config),
                        Journal.exists(dotfiles.source.checkout.appendingPathComponent(name)) {
+                        // Managed workspace profiles are local copies, not links into a Git checkout.
+                        if generated { return .ready }
                         continue
                     }
                     return .blocked
                 }
-                if dotfiles.status() == .done { return .ready }
+                if dotfiles.status() == .done && !generated { return .ready }
                 if try !profileMatches(name) { return .ready }
             }
             return .done
@@ -98,7 +101,7 @@ public final class Engine {
             for name in directories {
                 lines.append("Merge bundled files into \(paths.config.appendingPathComponent(name).path). Existing unrelated files are preserved.")
             }
-            lines.append("Selected profiles use links when dot-files is checked out, otherwise bundled snapshots.")
+            lines.append("Portable application profiles can be linked from dot-files. AeroSpace and SketchyBar are rendered as local, backed-up copies so personal workspace selections never change your Git checkout.")
             lines.append("Existing directories are backed up. Unrelated symlinks are never overwritten.")
         case let .preferences(preferences, restart):
             lines += preferences.map { "\($0.domain) / \($0.key) → \($0.value)" }
@@ -169,7 +172,7 @@ public final class Engine {
                     throw SetupError("~/.aerospace.toml exists. AeroSpace refuses ambiguous config locations. Move that file aside yourself, then retry.")
                 }
                 for name in directories {
-                    if dotfiles.status() == .done {
+                    if dotfiles.status() == .done && name != "aerospace" && name != "sketchybar" {
                         try dotfiles.link(name, transaction: id)
                     } else {
                         try installProfile(name, transaction: id)
@@ -343,6 +346,15 @@ public final class Engine {
 
     private func materialized(_ file: URL) throws -> Data {
         let original = try String(contentsOf: file, encoding: .utf8)
+        // Render user-specific workspace settings without writing into public dotfiles.
+        if file.lastPathComponent == "aerospace.toml",
+           file.deletingLastPathComponent().lastPathComponent == "aerospace" {
+            return Data(try WorkspaceConfiguration.load(from: paths).aerospaceTOML(from: original).utf8)
+        }
+        if file.lastPathComponent == "sketchybarrc",
+           file.deletingLastPathComponent().lastPathComponent == "sketchybar" {
+            return Data(try WorkspaceConfiguration.load(from: paths).sketchybarShell(from: original).utf8)
+        }
         // Alacritty's import path is resolved against the recipient's configuration directory.
         if file.lastPathComponent == "alacritty.toml" {
             let importPath = paths.config.appendingPathComponent("alacritty/themes/themes/github_dark.toml").path
