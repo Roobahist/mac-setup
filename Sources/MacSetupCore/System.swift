@@ -90,7 +90,7 @@ public struct ProcessRunner: CommandRunning {
                 process.waitUntilExit()
                 throw SetupError("Could not give the interactive installer terminal control.")
             }
-            _ = kill(-childGroup, SIGCONT)
+            if childGroup != foregroundGroup { _ = kill(-childGroup, SIGCONT) }
             process.waitUntilExit()
         } else {
             process.waitUntilExit()
