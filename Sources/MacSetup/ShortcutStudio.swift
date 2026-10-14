@@ -2,13 +2,23 @@ import SwiftUI
 import MacSetupCore
 
 /// A single editor for the shortcuts that Mac Setup writes to the three
-/// providers. Complex Karabiner sequences remain in its original profile.
+/// providers. Advanced Karabiner rules can be edited as JSON without flattening state machines.
 struct ShortcutStudio: View {
     @Binding var settings: ShortcutSettings
     @Binding var layout: WorkspaceConfiguration
     let apps: [InstalledApplication]
     let aerospaceTemplate: String
+    let karabinerTemplate: Data
     @State private var editing: ManagedShortcut?
+    @State private var editingAdvanced: AdvancedKarabinerRule?
+
+    private var advancedTemplates: [AdvancedKarabinerRule] {
+        ShortcutSettings.bundledAdvancedKarabinerRules(from: karabinerTemplate)
+    }
+
+    private func currentAdvanced(_ item: AdvancedKarabinerRule) -> AdvancedKarabinerRule {
+        settings.advancedKarabiner?.first(where: { $0.id == item.id }) ?? item
+    }
 
     private var aerospaceActions: [(title: String, action: String)] {
         var seen = Set<String>()
@@ -33,8 +43,11 @@ struct ShortcutStudio: View {
 
             ForEach(ShortcutProvider.allCases, id: \.self) { provider in
                 providerSection(provider)
+                if provider == .karabiner {
+                    advancedKarabinerSection
+                }
             }
-            Text("AeroSpace manages window commands, Karabiner handles application shortcuts, and Raycast exposes one launcher hotkey. Advanced Karabiner state-based and sequence rules are preserved in its Portable profile.")
+            Text("Advanced Karabiner rules are editable as JSON to retain their stateful behavior. Edit only rules you understand. Mac Setup checks structure before saving.")
                 .font(.callout).foregroundStyle(.secondary)
         }
         .sheet(item: $editing) { item in
@@ -59,6 +72,50 @@ struct ShortcutStudio: View {
                 editing = nil
             }, cancel: { editing = nil })
         }
+        .sheet(item: $editingAdvanced) { item in
+            AdvancedKarabinerEditor(item: item, validate: { candidate in
+                var updated = settings
+                updated.updateAdvancedRule(candidate)
+                do {
+                    try updated.validate(workspaces: layout, aerospaceTemplate: aerospaceTemplate)
+                    return nil
+                } catch { return String(describing: error) }
+            }, save: { candidate in
+                settings.updateAdvancedRule(candidate)
+                editingAdvanced = nil
+            }, cancel: { editingAdvanced = nil })
+        }
+    }
+
+    private var advancedKarabinerSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Advanced Karabiner rules").font(.headline)
+            Text("Complex multi-key sequences and state-based remappings from the Portable profile.")
+                .font(.callout).foregroundStyle(.secondary)
+            ForEach(advancedTemplates) { item in
+                let rule = currentAdvanced(item)
+                HStack(spacing: 14) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(item.id).fontWeight(.medium)
+                        Text("Edit the rule as JSON").font(.caption).foregroundStyle(.secondary)
+                    }.frame(maxWidth: .infinity, alignment: .leading)
+                    Toggle("Enabled", isOn: Binding(
+                        get: { currentAdvanced(item).enabled },
+                        set: { enabled in
+                            var changed = currentAdvanced(item)
+                            changed.enabled = enabled
+                            settings.updateAdvancedRule(changed)
+                        }))
+                        .labelsHidden()
+                    Button("Edit rule") { editingAdvanced = rule }
+                        .buttonStyle(.borderless)
+                }
+                if item.id != advancedTemplates.last?.id { Divider().opacity(0.5) }
+            }
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
     }
 
     private var workspaceSection: some View {
@@ -293,5 +350,51 @@ private struct ShortcutItemEditor: View {
         }
         .padding(24)
         .frame(width: 650, height: 480)
+    }
+}
+
+private struct AdvancedKarabinerEditor: View {
+    let validate: (AdvancedKarabinerRule) -> String?
+    let save: (AdvancedKarabinerRule) -> Void
+    let cancel: () -> Void
+    @State private var value: AdvancedKarabinerRule
+    @State private var message = ""
+
+    init(item: AdvancedKarabinerRule,
+         validate: @escaping (AdvancedKarabinerRule) -> String?,
+         save: @escaping (AdvancedKarabinerRule) -> Void,
+         cancel: @escaping () -> Void) {
+        self.validate = validate
+        self.save = save
+        self.cancel = cancel
+        _value = State(initialValue: item)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(value.id).font(.title2.bold())
+            Text("Advanced Karabiner configuration. The rule description must remain unchanged, and each manipulator needs from and to fields.")
+                .font(.callout).foregroundStyle(.secondary)
+            TextEditor(text: $value.json)
+                .font(.system(size: 12, design: .monospaced))
+                .frame(minHeight: 340)
+                .overlay(RoundedRectangle(cornerRadius: 10)
+                    .stroke(.quaternary, lineWidth: 1))
+            if !message.isEmpty {
+                Label(message, systemImage: "exclamationmark.triangle")
+                    .font(.callout).foregroundStyle(.red)
+            }
+            HStack {
+                Toggle("Enabled", isOn: $value.enabled).toggleStyle(.checkbox)
+                Spacer()
+                Button("Cancel", action: cancel).keyboardShortcut(.cancelAction)
+                Button("Save rule") {
+                    if let error = validate(value) { message = error }
+                    else { save(value) }
+                }.keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(24)
+        .frame(width: 720, height: 570)
     }
 }
