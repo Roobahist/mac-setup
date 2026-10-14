@@ -87,12 +87,9 @@ below the table instead. The workspace list distinguishes shortcut, friendly
 label, glyph name, AeroSpace workspace ID and assigned application count. Color
 highlights the focused row and unsaved changes; `NO_COLOR` and `TERM=dumb`
 are supported, and each row retains an ASCII focus marker without color.
-Glyph previews and their searchable names are both displayed when Hack Nerd Font
-is installed. If it is unavailable, the icon preview column is hidden and the
-names remain readable. macOS terminals cannot reliably report the font actually
-selected in their settings, so set `MAC_SETUP_GLYPHS=show` to force previews or
-`MAC_SETUP_GLYPHS=hide` to suppress them. For example,
-`MAC_SETUP_GLYPHS=show mac-setup workspaces`. Set your terminal font to Hack Nerd
+Glyph previews are always shown alongside their searchable names, even if the
+terminal cannot display Hack Nerd Font glyphs. In that case, the icons may appear
+as rectangles, but the names remain readable. Set your terminal font to Hack Nerd
 Font for correct rendering, independently of SketchyBar's font.
 
 The editor supports these keyboard controls:
