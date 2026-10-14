@@ -85,39 +85,106 @@ public enum WallpaperWatcher {
         }
     }
 
-    /// Poll metadata every two seconds, and extract only after a stable change.
-    /// This matches the intent of the existing watcher without a second service.
-    public static func runBuiltIn(engine: Engine, image: URL? = nil, once: Bool = false) throws {
+    public struct Observation: Equatable {
+        public let url: URL
+        public let stamp: WallpaperStamp
+
+        public init(url: URL, stamp: WallpaperStamp) {
+            self.url = url
+            self.stamp = stamp
+        }
+    }
+
+    /// Run the watcher with injectable observation, clock, and waiting policies.
+    /// Sampling again after the debounce ensures we process the wallpaper that
+    /// is actually visible, not an outdated URL captured before a Space change.
+    public static func monitor(
+        once: Bool = false,
+        maxPolls: Int? = nil,
+        observe: () throws -> Observation,
+        apply: (URL) throws -> Void,
+        wait: (TimeInterval) -> Void,
+        now: () -> Date = Date.init,
+        report: (String) -> Void
+    ) throws {
         var lastApplied: WallpaperStamp?
         var failedStamp: WallpaperStamp?
-        var nextRetry = Date.distantPast
-        while true {
+        var retryAt = Date.distantPast
+        var lastObserved: WallpaperStamp?
+        var lastHeartbeat = now()
+        var pollNumber = 0
+
+        while maxPolls.map({ pollNumber < $0 }) ?? true {
+            pollNumber += 1
             do {
-                let wallpaper = try image ?? currentWallpaper()
-                let stamp = try WallpaperStamp.read(wallpaper)
-                if stamp != lastApplied && (stamp != failedStamp || Date() >= nextRetry) {
+                let candidate = try observe()
+                if candidate.stamp != lastObserved {
+                    report("Detected wallpaper: \(candidate.url.lastPathComponent) (size=\(candidate.stamp.size), modified=\(candidate.stamp.modified.timeIntervalSince1970))")
+                    lastObserved = candidate.stamp
+                }
+                if candidate.stamp != lastApplied &&
+                   (candidate.stamp != failedStamp || now() >= retryAt) {
                     if !once {
-                        Thread.sleep(forTimeInterval: 2)
-                        guard try WallpaperStamp.read(wallpaper) == stamp else { continue }
+                        wait(2)
+                        let confirmed = try observe()
+                        if confirmed != candidate {
+                            report("Wallpaper changed during debounce; checking the latest image")
+                            continue
+                        }
                     }
                     do {
-                        try engine.refreshWallpaperAccent(image: wallpaper)
-                        print("Wallpaper accent updated: \(wallpaper.lastPathComponent)")
-                        fflush(stdout)
-                        lastApplied = stamp
+                        try apply(candidate.url)
+                        lastApplied = candidate.stamp
                         failedStamp = nil
+                        report("Accent updated: \(candidate.url.lastPathComponent)")
                     } catch {
-                        fputs("Wallpaper accent update failed: \(error)\n", stderr)
-                        failedStamp = stamp
-                        nextRetry = Date().addingTimeInterval(60)
+                        report("Accent update failed: \(error)")
+                        failedStamp = candidate.stamp
+                        retryAt = now().addingTimeInterval(60)
+                        if once { throw error }
                     }
                 }
+
+                if now().timeIntervalSince(lastHeartbeat) >= 60 {
+                    report("Watcher alive; current wallpaper: \(candidate.url.lastPathComponent)")
+                    lastHeartbeat = now()
+                }
             } catch {
-                fputs("Wallpaper watcher waiting for desktop image: \(error)\n", stderr)
+                if once { throw error }
+                report("Could not inspect desktop wallpaper: \(error)")
             }
+
             if once { return }
-            Thread.sleep(forTimeInterval: 2)
+            wait(2)
         }
+    }
+
+    /// Keep the main thread's AppKit run loop alive while waiting. Sleeping
+    /// this thread prevents AppKit from processing display and Space updates;
+    /// desktopImageURL(for:) can then keep reporting the first observed image.
+    public static func waitForDesktopEvents(_ seconds: TimeInterval) {
+        let deadline = Date().addingTimeInterval(seconds)
+        let timer = Timer(timeInterval: seconds, repeats: false) { _ in }
+        RunLoop.current.add(timer, forMode: .default)
+        RunLoop.current.run(until: deadline)
+        timer.invalidate()
+    }
+
+    public static func runBuiltIn(engine: Engine, image: URL? = nil, once: Bool = false) throws {
+        let log: (String) -> Void = { message in
+            print("[\(ISO8601DateFormatter().string(from: Date()))] \(message)")
+            fflush(stdout)
+        }
+        try monitor(
+            once: once,
+            observe: {
+                let wallpaper = try image ?? currentWallpaper()
+                return Observation(url: wallpaper, stamp: try WallpaperStamp.read(wallpaper))
+            },
+            apply: { try engine.refreshWallpaperAccent(image: $0) },
+            wait: waitForDesktopEvents,
+            report: log
+        )
     }
 
     private static func currentWallpaper() throws -> URL {
