@@ -67,7 +67,9 @@ public final class Engine {
         case let .preferences(preferences, _):
             if task.id == "raycast-profile" {
                 let shortcuts = try shortcutSettings()
-                if shortcuts.usesSpotlightKey && (try spotlightSearchEnabled()) { return .ready }
+                if shortcuts.usesSpotlightKey {
+                    if try spotlightSearchEnabled() { return .ready }
+                }
                 return equalPlist(try journal.preference("com.raycast.macos", "raycastGlobalHotkey"),
                                   shortcuts.raycastHotkey) ? .done : .ready
             }

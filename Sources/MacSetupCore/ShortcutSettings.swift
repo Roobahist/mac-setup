@@ -216,12 +216,12 @@ public struct ShortcutSettings: Codable, Equatable {
         guard var root = try JSONSerialization.jsonObject(with: source) as? [String: Any],
               var profiles = root["profiles"] as? [[String: Any]],
               let index = profiles.firstIndex(where: { ($0["name"] as? String) == "Portable" }),
-              var profile = profiles[index] as [String: Any],
-              var modifications = profile["complex_modifications"] as? [String: Any],
+              var modifications = profiles[index]["complex_modifications"] as? [String: Any],
               var rules = modifications["rules"] as? [[String: Any]] else {
             throw SetupError("Could not locate Karabiner's Portable profile.")
         }
 
+        var profile = profiles[index]
         let scriptNames = Set(Self.scripts.map { $0.name })
         rules.removeAll { scriptNames.contains($0["description"] as? String ?? "") ||
             ($0["description"] as? String) == "Mac Setup: Custom shortcuts" }
