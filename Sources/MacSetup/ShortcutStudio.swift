@@ -74,7 +74,8 @@ struct ShortcutStudio: View {
             modifierRow("Switch to workspace", modifiers: $layout.keymap.switchModifiers)
             modifierRow("Move window to workspace", modifiers: $layout.keymap.moveModifiers)
             Divider()
-            ForEach(Array(layout.workspaces.enumerated()), id: \.element.id) { index, item in
+            ForEach(layout.workspaces.indices, id: \.self) { index in
+                let item = layout.workspaces[index]
                 let pair = layout.shortcuts(at: index)
                 HStack(spacing: 12) {
                     Text(item.name).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
@@ -213,16 +214,16 @@ private struct ShortcutItemEditor: View {
             Text("Edit \(draft.provider.rawValue) shortcut").font(.title2.bold())
             if draft.provider == .aerospace {
                 Picker("Action", selection: $selectedAction) {
-                    ForEach(aerospaceActions, id: \.action) { action in
-                        Text(action.title).tag(action.action)
+                    ForEach(aerospaceActions.map { $0.action }, id: \.self) { action in
+                        Text(ShortcutSettings.actionTitle(action, provider: .aerospace)).tag(action)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             if draft.provider == .karabiner {
                 Picker("Action", selection: $selectedAction) {
-                    ForEach(ShortcutSettings.scripts, id: \.name) { script in
-                        Text("Open " + script.name).tag(script.name)
+                    ForEach(ShortcutSettings.scripts.map { $0.name }, id: \.self) { name in
+                        Text("Open " + name).tag(name)
                     }
                     Text("Open application by bundle ID").tag("open-app")
                 }
