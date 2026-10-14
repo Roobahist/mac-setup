@@ -9,6 +9,9 @@ public struct MacSetupRelease {
 
 public enum MacSetupVersion {
     public static let current = "0.5.0"
+    public static var installed: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? current
+    }
 
     public static func isNewer(_ candidate: String, than current: String) -> Bool {
         let left = candidate.hasPrefix("v") ? String(candidate.dropFirst()) : candidate
