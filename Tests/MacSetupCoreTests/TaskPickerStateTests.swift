@@ -2,6 +2,20 @@ import XCTest
 @testable import MacSetupCore
 
 final class TaskPickerStateTests: XCTestCase {
+    func testTomitoIsOptionalInTheDefaultPresets() throws {
+        let complete = TaskPickerState(preset: .complete)
+        let productivity = TaskPickerState(preset: .productivity)
+        let developer = TaskPickerState(preset: .developer)
+        XCTAssertTrue(complete.selected.contains("tomito"))
+        XCTAssertTrue(productivity.selected.contains("tomito"))
+        XCTAssertFalse(developer.selected.contains("tomito"))
+        var edited = complete
+        edited.available = Set(Catalog.tasks.map(\.id))
+        edited.toggle("tomito")
+        XCTAssertFalse(edited.selected.contains("tomito"))
+        XCTAssertTrue(edited.selected.contains("aerospace-profile"))
+    }
+
     func testCompletePresetIncludesWatcherPermissionsAndExcludesRemovedDockTask() {
         let state = TaskPickerState()
         XCTAssertTrue(state.selected.contains("sketchybar-start"))
