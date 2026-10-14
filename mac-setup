@@ -3,7 +3,11 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 BUILD_DIR="${MAC_SETUP_BUILD_DIR:-.build/native}"
 case "$BUILD_DIR" in /*) BIN="$BUILD_DIR/release/mac-setup" ;; *) BIN="$ROOT/$BUILD_DIR/release/mac-setup" ;; esac
-if [[ ! -x "$BIN" ]]; then
+
+# A git pull may update Swift sources without removing the old executable.
+# Rebuild only when the compiled version is missing or inputs are newer.
+if [[ ! -x "$BIN" ]] || find "$ROOT/Sources" "$ROOT/Package.swift" "$ROOT/scripts/build.sh" \
+  -type f -newer "$BIN" -print -quit | grep -q .; then
   bash "$ROOT/scripts/build.sh" -c release
 fi
 exec "$BIN" "$@"
