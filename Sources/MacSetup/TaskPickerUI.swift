@@ -256,7 +256,8 @@ struct TaskPickerUI {
                     if let task = state.focusedTask, inventory[task.id] == TaskState.done.rawValue { state.toggleUpdate(task.id) }
                 case "w":
                     var editor = WorkspacePickerUI(
-                        layout: try WorkspaceConfiguration.load(from: engine.paths),
+                        layout: try WorkspaceConfiguration.load(from: engine.paths)
+                            .forSelectedTasks(state.selected),
                         installed: ApplicationDiscovery.scan(home: engine.paths.home))
                     if let updated = editor.run(in: terminal) {
                         try updated.save(to: engine.paths)
