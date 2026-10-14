@@ -39,12 +39,14 @@ enum ControlDestination: String, CaseIterable, Identifiable {
 struct ControlCenterView: View {
     @ObservedObject var model: SetupModel
     @State private var destination: ControlDestination? = .home
+    @State private var previousDestination: ControlDestination = .home
     @State private var query = ""
     @State private var activeFeature: String?
 
     init(model: SetupModel, initialDestination: ControlDestination = .home) {
         self.model = model
         _destination = State(initialValue: initialDestination)
+        _previousDestination = State(initialValue: initialDestination)
     }
 
     var body: some View {
@@ -118,6 +120,12 @@ struct ControlCenterView: View {
         .navigationSplitViewStyle(.balanced)
         .frame(minWidth: 1050, minHeight: 740)
         .onChange(of: destination) { next in
+            // A running installer owns its editor until its operation completes.
+            if model.page == .running || model.page == .guide {
+                destination = previousDestination
+                return
+            }
+            previousDestination = next ?? .home
             query = ""
             activeFeature = nil
             switch next {
@@ -240,7 +248,7 @@ struct ControlCenterView: View {
                     Button {
                         query = ""
                         destination = .apps
-                        openFeature(task)
+                        DispatchQueue.main.async { openFeature(task) }
                     } label: {
                         HStack {
                             VStack(alignment: .leading) {
