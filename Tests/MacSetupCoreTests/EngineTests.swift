@@ -611,6 +611,17 @@ final class EngineTests: XCTestCase {
         XCTAssertEqual(runner.calls.filter { $0.dropFirst().first == "bootstrap" }.count, 1)
     }
 
+    func testReplacingHelperAtSamePathRequiresRefresh() throws {
+        let helper = try bundledWatcher()
+        let task = try Catalog.task("wallpaper-watcher")
+        _ = try engine.apply(task)
+        XCTAssertEqual(try engine.state(task), .done)
+        try Data("updated helper".utf8).write(to: helper)
+        XCTAssertEqual(try engine.state(task), .ready)
+        try WallpaperWatcher.setEnabled(true, engine: engine)
+        XCTAssertEqual(try engine.state(task), .done)
+    }
+
     func testDisableStopsBothServicesDuringPartialMigration() throws {
         runner.jobs = [WallpaperWatcher.label, WallpaperWatcher.replacementLabel]
         try WallpaperWatcher.setEnabled(false, engine: engine)

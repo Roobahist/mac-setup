@@ -54,7 +54,17 @@ public enum WallpaperWatcher {
               let data = try? Data(contentsOf: agents.appendingPathComponent("\(replacementLabel).plist")),
               let values = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
         else { return false }
-        return values["ProgramArguments"] as? [String] == [helper.path]
+        let environment = values["EnvironmentVariables"] as? [String: String]
+        let identity = try runtimeIdentity(helper)
+        return values["ProgramArguments"] as? [String] == [helper.path] &&
+            environment?["MAC_SETUP_WATCHER_BUILD"] == identity
+    }
+
+    private static func runtimeIdentity(_ executable: URL) throws -> String {
+        guard let fingerprint = try Journal.fingerprint(executable) else {
+            throw SetupError("The packaged wallpaper watcher disappeared. Reinstall Mac Setup.")
+        }
+        return fingerprint.map { String(format: "%02x", $0) }.joined()
     }
 
     public static func run(engine: Engine, image: URL? = nil, once: Bool = false) throws {
@@ -216,6 +226,7 @@ public enum WallpaperWatcher {
     public static func launchPlist(source: Source, paths: Paths, image: URL? = nil) throws -> Data {
         var environment = [
             "HOME": paths.home.path,
+            "MAC_SETUP_WATCHER_BUILD": try runtimeIdentity(source.executable),
             "PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
         ]
         if let image { environment["WALLPAPER_ACCENT_IMAGE"] = image.path }
