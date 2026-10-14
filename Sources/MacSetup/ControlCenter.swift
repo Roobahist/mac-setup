@@ -211,7 +211,7 @@ struct ControlCenterView: View {
                                     in: RoundedRectangle(cornerRadius: 10))
                         }
                         .buttonStyle(.plain)
-                        .foregroundStyle(Color.primary)
+                        .foregroundStyle(Color.accentColor)
                         .help("Guided Setup")
                         .accessibilityLabel("Guided Setup")
                         compactRow(.updates)
@@ -281,7 +281,7 @@ struct ControlCenterView: View {
                 .frame(width: 50, height: 43)
                 .background(destination == item ? Color.primary.opacity(0.16) : Color.clear,
                             in: RoundedRectangle(cornerRadius: 10))
-                .foregroundStyle(Color.primary)
+                .foregroundStyle(Color.accentColor)
         }
         .buttonStyle(.plain)
         .help(item.title)
