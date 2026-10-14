@@ -190,10 +190,13 @@ func setup(_ ids: [String], engine: Engine, options: Options) throws {
                 if options.yes { print("  Guided task stays pending in --yes mode."); blocked.insert(task.id); continue }
                 if ask("Open the app or settings now?") { try engine.openGuide(task) }
                 if ask("Have you completed and tested these steps?") {
-                    if task.id == "tomito" && try engine.state(task) != .done {
-                        print("Pending: Tomito is not yet installed. Finish installation in the App Store and rerun setup.")
-                        blocked.insert(task.id)
-                        continue
+                    if task.id == "tomito" {
+                        let installed = try engine.state(task) == .done
+                        if !installed {
+                            print("Pending: Tomito is not yet installed. Finish installation in the App Store and rerun setup.")
+                            blocked.insert(task.id)
+                            continue
+                        }
                     }
                     if task.id != "tomito" { try engine.confirm(task) }
                     print(task.id == "tomito" ? "Verified: Tomito is installed." : "Recorded as user confirmed; not automatically verified.")
