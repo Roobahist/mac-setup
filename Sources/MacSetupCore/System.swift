@@ -74,8 +74,27 @@ public struct ProcessRunner: CommandRunning {
             process.standardInput = inputHandle
         }
         defer { try? inputHandle?.close(); if let inputURL { try? FileManager.default.removeItem(at: inputURL) } }
+        let foregroundGroup = interactive ? tcgetpgrp(STDIN_FILENO) : -1
         try process.run()
-        process.waitUntilExit()
+        if interactive {
+            // Swift Process launches the installer in a separate process group.
+            // Give that group terminal access, then restore the setup UI.
+            let oldHandler = signal(SIGTTOU, SIG_IGN)
+            defer {
+                if foregroundGroup > 0 { _ = tcsetpgrp(STDIN_FILENO, foregroundGroup) }
+                _ = signal(SIGTTOU, oldHandler)
+            }
+            let childGroup = getpgid(process.processIdentifier)
+            if childGroup <= 0 || tcsetpgrp(STDIN_FILENO, childGroup) != 0 {
+                _ = kill(process.processIdentifier, SIGTERM)
+                process.waitUntilExit()
+                throw SetupError("Could not give the interactive installer terminal control.")
+            }
+            _ = kill(-childGroup, SIGCONT)
+            process.waitUntilExit()
+        } else {
+            process.waitUntilExit()
+        }
         defer {
             if let interactiveStatusFile { try? FileManager.default.removeItem(at: interactiveStatusFile) }
         }
