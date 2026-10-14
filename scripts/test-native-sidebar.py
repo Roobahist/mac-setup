@@ -37,10 +37,11 @@ assert 'Text("Customize")' in expanded
 assert 'Text("Mac Setup")' in expanded
 assert "sidebarLabel(item).tag(item)" in expanded
 
-# The rail must not show text, display accent-blue glyphs or move navigation.
+# Compact icons must use the same accent blue as the expanded native List.
 helper = sidebar[sidebar.index("    private func compactRow("):]
 assert "Color.primary.opacity(0.16)" in helper
-assert ".foregroundStyle(Color.primary)" in helper
+assert ".foregroundStyle(Color.accentColor)" in helper
+assert '.foregroundStyle(Color.accentColor)\n                        .help("Guided Setup")' in compact
 assert "Text(item.title)" not in helper
 assert "Image(systemName: item.symbol)" in helper
 assert "Button { selectDestination(item) }" in helper
