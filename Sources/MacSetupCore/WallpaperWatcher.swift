@@ -181,7 +181,11 @@ public enum WallpaperWatcher {
                 let wallpaper = try image ?? currentWallpaper()
                 return Observation(url: wallpaper, stamp: try WallpaperStamp.read(wallpaper))
             },
-            apply: { try engine.refreshWallpaperAccent(image: $0) },
+            apply: { wallpaper in
+                if try !engine.refreshWallpaperAccent(image: wallpaper) {
+                    log("The newly selected wallpaper produced the same accent color as the previous image")
+                }
+            },
             wait: waitForDesktopEvents,
             report: log
         )

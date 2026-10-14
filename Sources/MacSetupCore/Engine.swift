@@ -666,13 +666,15 @@ public final class Engine {
 
     /// Runtime updates are derived cache files, not setup preferences. Avoid
     /// creating a backup transaction for every wallpaper transition.
-    public func refreshWallpaperAccent(image: URL?) throws {
+    @discardableResult
+    public func refreshWallpaperAccent(image: URL?) throws -> Bool {
         let (target, data) = try wallpaperAccentData(image: image)
-        if (try? Data(contentsOf: target)) == data { return }
+        if (try? Data(contentsOf: target)) == data { return false }
         try FileManager.default.createDirectory(at: target.deletingLastPathComponent(),
                                                 withIntermediateDirectories: true)
         try data.write(to: target, options: .atomic)
         try notifyWallpaperAccentChange()
+        return true
     }
 
     private func installWallpaperWatcher(transaction: String, image: URL?) throws {
