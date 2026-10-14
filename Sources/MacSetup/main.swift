@@ -21,11 +21,11 @@ Usage:
   mac-setup update              Reapply previously installed bundled profiles
   mac-setup backups             List recovery records
   mac-setup restore [backup ID]  Restore one record (latest by default)
-  mac-setup watch               Run your existing accent watcher in the foreground
+  mac-setup watch               Run the installed or bundled accent watcher in the foreground
   mac-setup watcher-status      Inspect its startup service and logs
   mac-setup watcher-stop        Stop it until login or reload
   mac-setup watcher-disable     Disable it across logins
-  mac-setup watcher-enable      Enable the installed watcher
+  mac-setup watcher-enable      Enable the installed or bundled watcher
 
 Options:
   --preset NAME                 repair, complete, minimal, productivity, developer
@@ -261,7 +261,7 @@ do {
         if let active = try WallpaperWatcher.runningLabel(journal: engine.journal) {
             try engine.journal.stopLaunchAgent(active)
         }
-        print("Stopped. The startup plist remains; setup wallpaper-watcher can register it again. Restore its backup to remove this installation.")
+        print("Stopped. The startup plist remains; watcher-enable will reload it. Restore its backup to remove this installation.")
     case "watcher-disable", "watcher-enable":
         let enabled = options.command == "watcher-enable"
         if options.dryRun { print("Would \(enabled ? "enable" : "disable") \(WallpaperWatcher.label) for this user across logins."); break }
