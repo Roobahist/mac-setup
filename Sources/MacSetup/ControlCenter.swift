@@ -237,15 +237,19 @@ struct ControlCenterView: View {
         .frame(maxWidth: .infinity)
     }
 
-    @ViewBuilder private func sidebarSectionTitle(_ title: String) -> some View {
-        if !compactSidebar {
-            Text(title)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .padding(.leading, 25)
-                .padding(.top, 9)
-                .padding(.bottom, 5)
+    private func sidebarSectionTitle(_ title: String) -> some View {
+        HStack {
+            if !compactSidebar {
+                Text(title)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
         }
+        // Keep the same vertical positions when only the text is hidden.
+        .frame(height:28, alignment: .bottom)
+        .padding(.leading,25)
+        .padding(.bottom,5)
     }
 
     private func sidebarRowContent(_ title: String, symbol: String, selected: Bool) -> some View {
