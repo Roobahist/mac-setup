@@ -171,7 +171,7 @@ struct ControlCenterView: View {
                 }
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 14)
+            .padding(.horizontal, compactSidebar ? 20 : 14)
             .padding(.top, 19)
             .padding(.bottom, 12)
 
@@ -186,7 +186,7 @@ struct ControlCenterView: View {
                 .buttonStyle(.plain)
                 .help("Expand sidebar to search settings")
                 .accessibilityLabel("Expand sidebar to search settings")
-                .padding(.horizontal, 14)
+                .padding(.horizontal, 20)
             } else {
                 TextField("Search settings", text: $query)
                     .textFieldStyle(.roundedBorder)
@@ -194,56 +194,82 @@ struct ControlCenterView: View {
                     .accessibilityLabel("Search settings and features")
             }
 
-            // Always render the original macOS sidebar List. Both widths get
-            // the same rows, icon metrics, selection style and section spacing.
-            // Only the text labels become invisible when collapsed.
-            List(selection: $destination) {
-                Section {
-                    ForEach(customization) { item in
-                        sidebarLabel(item).tag(item)
+            if compactSidebar {
+                // This is an actual icon rail, not a narrow List with cropped labels.
+                // Expanded mode below remains the original native macOS sidebar.
+                ScrollView {
+                    VStack(spacing: 4) {
+                        ForEach(customization) { item in compactRow(item) }
+                        Divider()
+                            .padding(.vertical, 8)
+                        Button(action: beginGuided) {
+                            Image(systemName: ControlDestination.guidedSetup.symbol)
+                                .font(.system(size: 19))
+                                .frame(width: 50, height: 43)
+                                .background(guidedStep != nil
+                                    ? Color.primary.opacity(0.16) : Color.clear,
+                                    in: RoundedRectangle(cornerRadius: 10))
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Color.primary)
+                        .help("Guided Setup")
+                        .accessibilityLabel("Guided Setup")
+                        compactRow(.updates)
                     }
-                } header: {
-                    Text("Customize")
-                        .opacity(compactSidebar ? 0 : 1)
-                        .accessibilityHidden(compactSidebar)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 10)
                 }
-
-                Section {
-                    Button(action: beginGuided) {
-                        sidebarLabel(.guidedSetup)
-                            .foregroundStyle(guidedStep != nil
-                                ? Color.accentColor : Color.primary)
+            } else {
+                List(selection: $destination) {
+                    Section {
+                        ForEach(customization) { item in
+                            sidebarLabel(item).tag(item)
+                        }
+                    } header: {
+                        Text("Customize")
+                            .opacity(compactSidebar ? 0 : 1)
+                            .accessibilityHidden(compactSidebar)
                     }
-                    .buttonStyle(.plain)
-                    .help("Walk through the existing customization sections")
-                    .accessibilityLabel("Guided Setup")
 
-                    sidebarLabel(.updates).tag(ControlDestination.updates)
-                } header: {
-                    Text("Mac Setup")
-                        .opacity(compactSidebar ? 0 : 1)
-                        .accessibilityHidden(compactSidebar)
-                }
-            }
-            .listStyle(.sidebar)
-            .scrollContentBackground(.hidden)
+                    Section {
+                        Button(action: beginGuided) {
+                            sidebarLabel(.guidedSetup)
+                                .foregroundStyle(guidedStep != nil
+                                    ? Color.accentColor : Color.primary)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Walk through the existing customization sections")
+                        .accessibilityLabel("Guided Setup")
 
-            HStack(spacing: 8) {
-                if compactSidebar {
-                    Image(systemName: "info.circle")
-                        .help("Version \(MacSetupVersion.installed)")
-                } else {
-                    Text("Version \(MacSetupVersion.installed)")
+                        sidebarLabel(.updates).tag(ControlDestination.updates)
+                    } header: {
+                        Text("Mac Setup")
+                            .opacity(compactSidebar ? 0 : 1)
+                            .accessibilityHidden(compactSidebar)
+                    }
                 }
-                Spacer(minLength: 0)
-                Circle().fill(model.busy ? Color.orange : Color.green)
-                    .frame(width: 7, height: 7)
-                    .accessibilityLabel(model.busy ? "Checking or applying settings" : "Ready")
+                .listStyle(.sidebar)
+                .scrollContentBackground(.hidden)
             }
-            .font(.caption2)
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 16)
-            .padding(.bottom, 12)
+
+            if !compactSidebar {
+                HStack(spacing: 8) {
+                    if compactSidebar {
+                        Image(systemName: "info.circle")
+                            .help("Version \(MacSetupVersion.installed)")
+                    } else {
+                        Text("Version \(MacSetupVersion.installed)")
+                    }
+                    Spacer(minLength: 0)
+                    Circle().fill(model.busy ? Color.orange : Color.green)
+                        .frame(width: 7, height: 7)
+                        .accessibilityLabel(model.busy ? "Checking or applying settings" : "Ready")
+                }
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 12)
+            }
         }
     }
 
@@ -258,6 +284,21 @@ struct ControlCenterView: View {
         } else {
             Label(item.title, systemImage: item.symbol)
         }
+    }
+
+
+    private func compactRow(_ item: ControlDestination) -> some View {
+        Button { selectDestination(item) } label: {
+            Image(systemName: item.symbol)
+                .font(.system(size: 19))
+                .frame(width: 50, height: 43)
+                .background(destination == item ? Color.primary.opacity(0.16) : Color.clear,
+                            in: RoundedRectangle(cornerRadius: 10))
+                .foregroundStyle(Color.primary)
+        }
+        .buttonStyle(.plain)
+        .help(item.title)
+        .accessibilityLabel(item.title)
     }
 
     private func selectDestination(_ item: ControlDestination) {
