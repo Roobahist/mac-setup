@@ -18,7 +18,6 @@ struct WorkspacePickerView {
     let editing: String
     let message: String
     let modified: Bool
-    let showGlyphs: Bool
     let width: Int
     let height: Int
 
@@ -114,11 +113,11 @@ struct WorkspacePickerView {
     private func workspaceColumns(width: Int, includeID: Bool)
         -> (shortcut: Int, name: Int, icon: Int, glyph: Int, id: Int, apps: Int) {
         let shortcut = 9
-        let icon = showGlyphs ? 4 : 0
+        let icon = 4
         let glyph = width >= 63 ? 13 : 10
         let id = includeID ? min(20, max(12, width / 4)) : 0
         let apps = 5
-        let spacing = 3 + shortcut + 2 + 2 + (showGlyphs ? icon + 2 : 0)
+        let spacing = 3 + shortcut + 2 + 2 + icon + 2
             + glyph + (includeID ? 2 + id : 0) + 2 + apps
         return (shortcut, max(7, width - spacing), icon, glyph, id, apps)
     }
@@ -130,7 +129,7 @@ struct WorkspacePickerView {
         let text = " \(index == selected ? ">" : " ") "
             + fit(shortcut(at: index), to: columns.shortcut, padded: true) + "  "
             + fit(ws.name, to: columns.name, padded: true) + "  "
-            + (showGlyphs ? fit(symbol, to: columns.icon, padded: true) + "  " : "")
+            + fit(symbol, to: columns.icon, padded: true) + "  "
             + fit(ws.glyph, to: columns.glyph, padded: true)
             + (includeID ? "  " + fit(ws.id, to: columns.id, padded: true) : "")
             + "  " + fit(String(ws.apps.count), to: columns.apps, padded: true)
@@ -142,7 +141,7 @@ struct WorkspacePickerView {
         let text = "   "
             + fit("SHORTCUT", to: columns.shortcut, padded: true) + "  "
             + fit("NAME", to: columns.name, padded: true) + "  "
-            + (showGlyphs ? fit("ICON", to: columns.icon, padded: true) + "  " : "")
+            + fit("ICON", to: columns.icon, padded: true) + "  "
             + fit("GLYPH", to: columns.glyph, padded: true)
             + (includeID ? "  " + fit("ID", to: columns.id, padded: true) : "")
             + "  " + fit("APPS", to: columns.apps, padded: true)
@@ -166,7 +165,7 @@ struct WorkspacePickerView {
             Line("AeroSpace ID", .muted),
             Line("  \(workspace.id)", .normal),
             Line("SketchyBar glyph", .muted),
-            Line("  " + (showGlyphs ? "\(WorkspaceConfiguration.symbol(for: workspace.glyph) ?? "?")  " : "") + workspace.glyph, .normal),
+            Line("  \(WorkspaceConfiguration.symbol(for: workspace.glyph) ?? "?")  \(workspace.glyph)", .normal),
             Line(),
             Line("APP RULES  \(workspace.apps.count)", .accent)
         ]
@@ -201,7 +200,7 @@ struct WorkspacePickerView {
             left.append(Line("  Showing \(range.lowerBound + 1)-\(range.upperBound) of \(layout.workspaces.count); use ↑↓ to scroll", .muted))
         }
         if !wide {
-            left += [Line(), Line("SELECTED: \(workspace.name)  |  ID: \(workspace.id)  |  Glyph: " + (showGlyphs ? "\(WorkspaceConfiguration.symbol(for: workspace.glyph) ?? "?") " : "") + workspace.glyph, .accent)]
+            left += [Line(), Line("SELECTED: \(workspace.name)  |  ID: \(workspace.id)  |  Glyph: \(WorkspaceConfiguration.symbol(for: workspace.glyph) ?? "?") \(workspace.glyph)", .accent)]
             if !workspace.apps.isEmpty {
                 left.append(Line("Assigned: " + appNames().joined(separator: ", "), .muted))
             } else {
@@ -227,14 +226,14 @@ struct WorkspacePickerView {
             Line("Type to filter glyph names and keywords", .muted),
             Line("Search: \(query)\(useColor ? "▌" : "_")    \(matches.count) matches", .title),
             Line(),
-            Line(showGlyphs ? "   ICON  GLYPH NAME            KEYWORDS / DESCRIPTION" : "   GLYPH NAME            KEYWORDS / DESCRIPTION", .accent)
+            Line("   ICON  GLYPH NAME            KEYWORDS / DESCRIPTION", .accent)
         ]
         let pageRows = max(3, height - 15)
         for index in selectionRange(total: matches.count, limit: pageRows, cursor: resultCursor) {
             let glyph = matches[index]
             let label = fit(glyph.name, to: 20, padded: true)
             let text = " \(index == resultCursor ? ">" : " ") "
-                + (showGlyphs ? fit(glyph.symbol, to: 4, padded: true) + "  " : "") + label
+                + fit(glyph.symbol, to: 4, padded: true) + "  " + label
                 + "  " + glyph.keywords
             lines.append(Line(text, index == resultCursor ? .selected : .normal))
         }
@@ -244,7 +243,7 @@ struct WorkspacePickerView {
                 Line(),
                 Line("SELECTED GLYPH", .accent),
                 Line("  Name: \(candidate.name)    Code point: U+\(String(candidate.symbol.unicodeScalars.first!.value, radix: 16).uppercased())", .normal),
-                Line(showGlyphs ? "  Preview: \(candidate.symbol)" : "  Preview unavailable: Hack Nerd Font not detected", .muted)
+                Line("  Preview: \(candidate.symbol)", .muted)
             ]
         }
         return lines
@@ -344,7 +343,7 @@ struct WorkspacePickerView {
             ]
         case .glyphs:
             return [Line("↑↓ Select     Enter Use glyph     Type to search     Esc Clear search / Back", .accent),
-                    Line("Icons need Hack Nerd Font in your terminal. MAC_SETUP_GLYPHS=show/hide overrides detection.", .muted)]
+                    Line("Icons are always shown. Set your terminal font to Hack Nerd Font for proper rendering.", .muted)]
         case .apps:
             return [Line("↑↓ Select    Space / Enter Assign or remove    + Manual bundle ID    Esc Clear / Back", .accent),
                     Line("An app belongs to at most one workspace. Reassigning it replaces its old rule.", .muted)]
