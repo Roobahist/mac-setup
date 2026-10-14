@@ -164,6 +164,7 @@ struct TaskPickerUI {
     private var helpVisible = false
     private var reviewMode = false
     private var workspaceMessage: String?
+    private var reviewedWorkspaceSelection: Set<String>?
     private let statusLookup = TaskStatusLookup()
     private let engine: Engine
     private let colorEnabled: Bool
@@ -242,7 +243,16 @@ struct TaskPickerUI {
             case .space: state.toggleFocused()
             case .backspace: state.removeSearchCharacter()
             case .escape: state.clearSearch()
-            case .enter: reviewMode = true
+            case .enter:
+                let relevant = workspaceSelectionSignature()
+                if relevant.contains("aerospace-profile"),
+                   reviewedWorkspaceSelection != relevant {
+                    if try configureWorkspaces(in: terminal, automatic: true) {
+                        reviewMode = true
+                    }
+                } else {
+                    reviewMode = true
+                }
             case .interrupt: return nil
             case .idle: continue
             case let .character(character):
@@ -255,14 +265,7 @@ struct TaskPickerUI {
                 case "u":
                     if let task = state.focusedTask, inventory[task.id] == TaskState.done.rawValue { state.toggleUpdate(task.id) }
                 case "w":
-                    var editor = WorkspacePickerUI(
-                        layout: try WorkspaceConfiguration.load(from: engine.paths)
-                            .forSelectedTasks(state.selected),
-                        installed: ApplicationDiscovery.scan(home: engine.paths.home))
-                    if let updated = editor.run(in: terminal) {
-                        try updated.save(to: engine.paths)
-                        workspaceMessage = "Workspace layout saved. The AeroSpace and SketchyBar profile tasks will apply it."
-                    }
+                    _ = try configureWorkspaces(in: terminal, automatic: false)
                 case "?": helpVisible = true
                 case "1": state.choose(.minimal)
                 case "2": state.choose(.productivity)
@@ -272,6 +275,38 @@ struct TaskPickerUI {
                 }
             }
         }
+    }
+
+    /// Reopen Step 2 only if the relevant app/profile choices have changed.
+    /// This also ensures a user who already configured via W is not interrupted again.
+    private func workspaceSelectionSignature() -> Set<String> {
+        state.selected.intersection(["aerospace-profile", "sketchybar-profile", "tomito"])
+    }
+
+    @discardableResult
+    private mutating func configureWorkspaces(in terminal: RawTerminal,
+                                              automatic: Bool) throws -> Bool {
+        let stored = try WorkspaceConfiguration.load(from: engine.paths)
+        let filtered = stored.forSelectedTasks(state.selected)
+        let hidden = stored.workspaces.count - filtered.workspaces.count
+        var editor = WorkspacePickerUI(
+            layout: filtered,
+            installed: ApplicationDiscovery.scan(home: engine.paths.home),
+            context: automatic ? .setup : .standalone,
+            maximumWorkspaces: WorkspaceConfiguration.keys.count - hidden
+        )
+        switch editor.run(in: terminal) {
+        case .saved(let changed):
+            let merged = try stored.mergingVisible(changed, selectedTasks: state.selected)
+            try merged.save(to: engine.paths)
+            workspaceMessage = "Workspace settings saved for AeroSpace and SketchyBar."
+        case .kept:
+            workspaceMessage = "Existing workspace settings kept."
+        case .cancelled:
+            return false
+        }
+        reviewedWorkspaceSelection = workspaceSelectionSignature()
+        return true
     }
 
     private func taskStatus(_ task: SetupTask) -> String {
