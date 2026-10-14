@@ -55,4 +55,51 @@ final class ControlCenterTests: XCTestCase {
         XCTAssertFalse(MacSetupVersion.isNewer("v0.5.0", than: "0.5.0"))
         XCTAssertFalse(MacSetupVersion.isNewer("v0.4.1", than: "0.5.0"))
     }
+
+    private struct ArchitectureRunner: CommandRunning {
+        func run(_ executable: String, _ arguments: [String], interactive: Bool,
+                 input: Data?) throws -> CommandResult {
+            guard executable == "/usr/bin/uname", arguments == ["-m"] else {
+                throw SetupError("Unexpected command")
+            }
+            return CommandResult(status: 0, output: Data("arm64".utf8))
+        }
+    }
+
+    func testReleaseDiscoveryChoosesMatchingArchitectureAndChecksum() throws {
+        let json = """
+        {
+          "tag_name": "v0.6.0",
+          "assets": [
+            {"name": "mac-setup-v0.6.0-macos-x86_64.tar.gz",
+             "browser_download_url": "https://github.com/Roobahist/mac-setup/releases/download/v0.6.0/mac-setup-v0.6.0-macos-x86_64.tar.gz"},
+            {"name": "mac-setup-v0.6.0-macos-arm64.tar.gz",
+             "browser_download_url": "https://github.com/Roobahist/mac-setup/releases/download/v0.6.0/mac-setup-v0.6.0-macos-arm64.tar.gz"},
+            {"name": "mac-setup-v0.6.0-macos-arm64.tar.gz.sha256",
+             "browser_download_url": "https://github.com/Roobahist/mac-setup/releases/download/v0.6.0/mac-setup-v0.6.0-macos-arm64.tar.gz.sha256"}
+          ]
+        }
+        """
+        let updater = ReleaseUpdater(runner: ArchitectureRunner(), fetch: { _ in Data(json.utf8) })
+        let found = try updater.latestRelease()
+        XCTAssertEqual(found.version, "0.6.0")
+        XCTAssertTrue(found.archive.absoluteString.contains("macos-arm64.tar.gz"))
+        XCTAssertTrue(found.checksum.absoluteString.hasSuffix(".sha256"))
+    }
+
+    func testReleaseDiscoveryRejectsUntrustedDownloadHosts() {
+        let json = """
+        {
+          "tag_name": "v0.6.0",
+          "assets": [
+            {"name": "mac-setup-v0.6.0-macos-arm64.tar.gz",
+             "browser_download_url": "https://example.com/untrusted.tar.gz"},
+            {"name": "mac-setup-v0.6.0-macos-arm64.tar.gz.sha256",
+             "browser_download_url": "https://example.com/untrusted.sha256"}
+          ]
+        }
+        """
+        let updater = ReleaseUpdater(runner: ArchitectureRunner(), fetch: { _ in Data(json.utf8) })
+        XCTAssertThrowsError(try updater.latestRelease())
+    }
 }
