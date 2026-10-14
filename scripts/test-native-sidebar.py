@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Sidebar invariant: one native sidebar of fixed internal size.
 
-The collapsed state is a narrow viewport onto the *same* native List. Never
-switch to a second icon renderer or resize the underlying list. That would
-change selection, hover, tint, insets and the location of each icon.
+The collapsed state is a narrow viewport onto the *same* native List, and
+its label titles must be hidden without changing native icon/layout geometry.
+Never use a second renderer, resize the list, or clip visible text in half.
 Visual alignment still needs manual screenshot verification on macOS.
 """
 
@@ -22,7 +22,19 @@ assert ".clipped()" in source
 # One set of controls for both expanded and collapsed states.
 assert sidebar.count("List(selection: $destination)") == 1
 assert "ForEach(customization)" in sidebar
-assert 'Label(item.title, systemImage: item.symbol).tag(item)' in sidebar
+assert 'sidebarNavigationLabel(item).tag(item)' in sidebar
+assert "sidebarNavigationLabel(.guidedSetup)" in sidebar
+assert "sidebarNavigationLabel(.updates)" in sidebar
+
+# A single native Label keeps the icon spacing and row selection identical.
+# Only its title becomes visually transparent, so no half-cut labels leak
+# through the clipped viewport.
+assert 'Label {' in source
+assert 'Text(item.title)' in source
+assert '.opacity(compactSidebar ? 0 : 1)' in source
+assert 'Image(systemName: item.symbol)' in source
+assert '.accessibilityLabel(item.title)' in source
+assert ".labelStyle(.iconOnly)" not in sidebar
 assert ".listStyle(.sidebar)" in sidebar
 assert ".scrollContentBackground(.hidden)" in sidebar
 assert "compactRow" not in sidebar
