@@ -496,14 +496,7 @@ public final class Engine {
            file.deletingLastPathComponent().lastPathComponent == "plugins",
            file.deletingLastPathComponent().deletingLastPathComponent().lastPathComponent == "sketchybar" {
             let style = try WorkspaceConfiguration.load(from: paths).barStyle
-            let colors = original
-                .replacingOccurrences(of: "export BAR_COLOR=0x35000000",
-                                      with: "export BAR_COLOR=\(style.backgroundColor)")
-                .replacingOccurrences(of: "export BASE_WHITE=0xffffffff",
-                                      with: "export BASE_WHITE=\(style.occupiedColor)")
-                .replacingOccurrences(of: "export BASE_GRAY=0x30000000",
-                                      with: "export BASE_GRAY=\(style.emptyColor)")
-            return Data(colors.utf8)
+            return Data(try style.colorsShell(from: original).utf8)
         }
         // Render user-specific workspace settings without writing into public dotfiles.
         if file.lastPathComponent == "aerospace.toml",
