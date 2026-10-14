@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 public struct SetupError: Error, CustomStringConvertible {
     public let description: String
@@ -34,8 +35,19 @@ public struct ProcessRunner: CommandRunning {
     public init() {}
     public func run(_ executable: String, _ arguments: [String], interactive: Bool, input: Data?) throws -> CommandResult {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: executable)
-        process.arguments = arguments
+        if interactive {
+            // Privileged installers need a controlling terminal for sudo prompts.
+            // Foundation's child process may otherwise be placed in a background
+            // process group and suspended by terminal job control (SIGTTIN).
+            guard isatty(STDIN_FILENO) == 1, isatty(STDOUT_FILENO) == 1 else {
+                throw SetupError("Interactive installation requires a terminal. Run mac-setup in Terminal and retry.")
+            }
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/script")
+            process.arguments = ["-q", "/dev/null", executable] + arguments
+        } else {
+            process.executableURL = URL(fileURLWithPath: executable)
+            process.arguments = arguments
+        }
         var environment = ProcessInfo.processInfo.environment
         // GUI-launched tools and launch agents may not inherit the user's shell PATH.
         environment["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:" + (environment["PATH"] ?? "")
