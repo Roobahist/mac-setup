@@ -1020,7 +1020,7 @@ enum NativeSetup {
         let model = try SetupModel(ids: ids, preset: preset)
         if workspaceEditor { model.openEditor(.workspaces) }
         if shortcutEditor { model.openEditor(.shortcuts) }
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 930, height: 760), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1180, height: 830), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         window.title = "Mac Setup"
         let initial: ControlDestination = workspaceEditor ? .workspaces
             : (shortcutEditor ? .shortcuts : .home)
