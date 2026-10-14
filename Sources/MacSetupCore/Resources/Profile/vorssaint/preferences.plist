@@ -18,9 +18,8 @@
 		<true/>
 		<key>appUpdatesRules</key>
 		<string>[]</string>
-		<key>appVolumes</key>
-		<dict/>
-		<key>audioPriorityDeviceNames</key>
+
+<key>audioPriorityDeviceNames</key>
 		<dict/>
 		<key>audioPriorityInputEnabled</key>
 		<true/>
