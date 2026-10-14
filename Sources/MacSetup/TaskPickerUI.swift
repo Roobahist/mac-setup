@@ -325,68 +325,115 @@ struct TaskPickerUI {
     private mutating func render(size: (width: Int, height: Int)) -> String {
         let width = size.width
         let height = size.height
-        let category = state.category
         let profile = state.preset?.title ?? "Custom"
-        var lines: [String] = []
-        lines.append(tint("  ◈  MAC SETUP", "1;38;5;255") + tint("   /   configure your Mac", "38;5;245"))
-        lines.append(tint("  \(state.selectedCount)/\(state.tasks.count) selected", "1;38;5;81") +
-                     tint("     Profile: \(profile)     Category: \(category)", "38;5;245"))
-        lines.append(tint("  1 Minimal  2 Productivity  3 Developer  4 Complete", "38;5;81"))
-        lines.append(tint("  ↑↓ Move  Space Toggle  W Workspaces  U Update  Tab Category  / Search  Enter Continue  Q Quit", "38;5;245"))
-        lines.append("  " + String(repeating: "─", count: max(5, min(85, width - 4))))
+        let step: SetupChrome.Step = reviewMode ? .review : .features
+        var lines = SetupChrome.header(
+            step: step,
+            summary: reviewMode ? "REVIEW SELECTION   |   \(state.selectedCount) selected tasks"
+                                : "FEATURE SELECTION   |   \(state.selectedCount)/\(state.tasks.count) selected",
+            context: "Profile: \(profile)   |   Category: \(state.category)",
+            width: width
+        )
+
+        let footer: [String]
+        if reviewMode {
+            footer = [
+                SetupChrome.rule(width: width),
+                tint("  Enter Start setup   Esc / B Back to features   Q Cancel", "1;38;5;81"),
+                tint("  You can still change task selections before installation.", "38;5;245")
+            ]
+        } else if helpVisible {
+            footer = [
+                SetupChrome.rule(width: width),
+                tint("  Press any key to return to feature selection", "1;38;5;81"),
+                ""
+            ]
+        } else {
+            footer = [
+                SetupChrome.rule(width: width),
+                tint("  ↑↓ Move   Space Toggle   W Workspaces   Tab Category   / Search   Enter Continue", "1;38;5;81"),
+                tint("  1-4 Presets   A Visible tasks   U Update   ? Help   Q Quit", "38;5;245")
+            ]
+        }
 
         if reviewMode {
             lines.append(tint("  REVIEW SELECTION", "1;38;5;81"))
             lines.append("  \(state.selectedCount) tasks selected in the following categories:")
+            lines.append("")
             for category in state.categories.dropFirst() {
                 let count = state.tasks.filter { $0.category == category && state.selected.contains($0.id) }.count
                 if count > 0 { lines.append("    [x] \(category): \(count)") }
             }
-            lines.append("")
-            lines.append("  Only checked tasks will run; installed unchecked parents satisfy dependencies.")
-            lines.append("  \(state.updates.count) installed task(s) marked for update.")
-            lines.append("  Each task still shows a preview and asks before making changes.")
-            lines.append("  Existing settings are journaled for recovery; apps are not uninstalled.")
-            lines.append(tint("  Enter: start setup   Esc / B: edit selection   Q: cancel", "1;36"))
+            lines += [
+                "",
+                "  Only checked tasks will run; installed unchecked parents satisfy dependencies.",
+                "  \(state.updates.count) installed task(s) marked for update.",
+                "  Every change still asks for confirmation, with recovery records where supported."
+            ]
         } else if helpVisible {
-            lines.append("  HELP")
+            lines.append(tint("  KEYBOARD HELP", "1;38;5;81"))
             for line in [
-                "  Connected branches show children; shared requirements appear below.",
-                "  Installed parents can stay unchecked while their children are selected.",
-                "  Unchecking a missing parent also unchecks children that need it.",
-                "  U toggles updates for an installed Homebrew or package task.",
+                "  Dependencies form an indented tree. Shared prerequisites stay visible.",
+                "  Installed parents can remain unchecked while their children are selected.",
+                "  Unchecking a missing parent also unchecks dependents that require it.",
                 "  1-4 choose a preset. Space toggles the focused task.",
                 "  Tab and Shift+Tab switch categories. / starts a text filter.",
-                "  W opens the workspace editor (order, names, glyphs, app routing).",
-                "  A toggles all visible tasks. Esc clears a filter.",
-                "  Enter reviews the selected steps. Q and Ctrl+C cancel.",
-                "  Press any key to return to the checklist."
+                "  W opens workspace configuration; it also appears automatically before review.",
+                "  A toggles visible tasks. Esc clears the current search.",
+                "  Enter continues through workspace setup (if selected) and review.",
+                "  Q and Ctrl+C cancel."
             ] { lines.append(clip(line, to: width - 1)) }
         } else {
+            lines.append(tint("  INSTALLATION TASKS", "1;38;5;81"))
+            lines.append(tint("  1 Minimal   2 Productivity   3 Developer   4 Complete", "38;5;81"))
             if searchMode || !state.query.isEmpty {
-                lines.append(tint("  Search: \(state.query)" + (searchMode ? "▌" : ""), "36"))
+                lines.append(tint("  Search: \(state.query)" + (searchMode ? "▌" : ""), "1;38;5;81"))
             } else {
-                lines.append(tint("  Select features to install. Changes still require confirmation.", "2"))
+                lines.append(tint("  Select features to install. Changes still require confirmation.", "38;5;245"))
+            }
+
+            var details: [String] = [SetupChrome.rule(width: width)]
+            if let task = state.focusedTask {
+                details.append(tint("  \(task.title)", "1;38;5;81") +
+                               tint("   [\(taskStatus(task))]", "38;5;245"))
+                details.append("  " + clip(task.summary, to: width - 4))
+                for (index, parent) in task.dependencies.enumerated() {
+                    let label = state.tasks.first { $0.id == parent }?.title ?? parent
+                    let readiness = state.available.contains(parent) ? "installed/ready" :
+                        (state.unknown.contains(parent) ? "status unknown" : "not ready")
+                    details.append(tint((index == 0 ? "  Parents: " : "           ") +
+                                        label + " [" + parent + "] : " + readiness, "38;5;245"))
+                }
+            } else {
+                details.append(tint("  Choose a task or switch categories.", "38;5;245"))
+            }
+            let inspected = statusLookup.snapshot.count
+            details.append(tint(inspected < state.tasks.count
+                ? "  Checking installed tasks (\(inspected)/\(state.tasks.count)); selection changes unlock when finished."
+                : "  Inventory checked. Installed tasks are kept; U marks a package for update.", "38;5;245"))
+            if let workspaceMessage {
+                details.append(tint("  " + workspaceMessage, "38;5;114"))
             }
 
             let visible = state.visibleTasks
-            let extraParentLines = max(0, (state.focusedTask?.dependencies.count ?? 0) - 1)
-            let available = max(3, height - 14 - extraParentLines)
             var rows: [(index: Int?, guide: String)] = []
             for (index, task) in visible.enumerated() {
                 rows.append((index, ""))
-                if index + 1 < visible.count, let spacer = state.hierarchySpacer(after: task, before: visible[index + 1]) {
+                if index + 1 < visible.count,
+                   let spacer = state.hierarchySpacer(after: task, before: visible[index + 1]) {
                     rows.append((nil, spacer))
                 }
             }
+
+            let available = max(2, height - lines.count - details.count - footer.count - 1)
             let focusedRow = rows.firstIndex { $0.index == state.cursorIndex } ?? 0
             let start = max(0, min(max(0, rows.count - available), focusedRow - available / 2))
             if visible.isEmpty {
-                lines.append(tint("  No matching tasks. Press Esc to clear the filter.", "33"))
+                lines.append(tint("  No matching tasks. Press Esc to clear the filter.", "38;5;221"))
             }
             for row in rows[start..<min(rows.count, start + available)] {
                 guard let index = row.index else {
-                    lines.append(tint("       " + row.guide, "2;36"))
+                    lines.append(tint("       " + row.guide, "38;5;81"))
                     continue
                 }
                 let task = visible[index]
@@ -401,36 +448,21 @@ struct TaskPickerUI {
                 if focused {
                     lines.append(tint(body + padding + type, "1;38;5;231;48;5;24"))
                 } else {
-                    let checkbox = tint(prefix + marker + " ", checked ? "0" : "2")
-                    let guide = tint(tree, "2;36")
+                    let checkbox = tint(prefix + marker + " ", checked ? "38;5;252" : "38;5;245")
+                    let guide = tint(tree, "38;5;81")
                     let label = String(body.dropFirst((prefix + marker + " " + tree).count))
-                    let style = !checked ? "2" : (tree.isEmpty ? "1" : "0")
-                    lines.append(checkbox + guide + tint(label, style) + padding + tint(type, state.updates.contains(task.id) ? "33" : "2"))
+                    let style = !checked ? "38;5;245" : (tree.isEmpty ? "1;38;5;252" : "38;5;252")
+                    lines.append(checkbox + guide + tint(label, style) + padding +
+                                 tint(type, state.updates.contains(task.id) ? "38;5;221" : "38;5;245"))
                 }
             }
 
-            lines.append("  " + String(repeating: "─", count: max(5, min(85, width - 4))))
-            if let task = state.focusedTask {
-                lines.append(tint("  \(task.title)", "1;38;5;81") +
-                             tint("   [\(taskStatus(task))]", "2"))
-                lines.append("  " + clip(task.summary, to: width - 4))
-                if !task.dependencies.isEmpty {
-                    for (index, parent) in task.dependencies.enumerated() {
-                        let label = state.tasks.first { $0.id == parent }?.title ?? parent
-                        let readiness = state.available.contains(parent) ? "installed/ready" : (state.unknown.contains(parent) ? "status unknown" : "not ready")
-                        lines.append(tint((index == 0 ? "  Parents: " : "           ") + label + " [" + parent + "] — " + readiness, "2"))
-                    }
-                }
-            } else {
-                lines.append(tint("  Choose a task or switch categories.", "2"))
-            }
-            let inspected = statusLookup.snapshot.count
-            lines.append(tint(inspected < state.tasks.count
-                ? "  Checking installed tasks (\(inspected)/\(state.tasks.count)); selection changes unlock when finished."
-                : "  Inventory checked. Installed tasks are kept; U marks a package for update.", "2"))
+            while lines.count < height - footer.count - details.count { lines.append("") }
+            lines += details
         }
 
-        if let workspaceMessage { lines.append(tint("  " + workspaceMessage, "36")) }
+        while lines.count < height - footer.count { lines.append("") }
+        lines += footer
         if lines.count > height { lines = Array(lines.prefix(height)) }
         let output = lines.map { clipANSIText($0, width: width) }.joined(separator: "\r\n")
         return "\u{001B}[H\u{001B}[2J" + output + "\r\n"
