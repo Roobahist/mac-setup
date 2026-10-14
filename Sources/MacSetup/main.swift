@@ -14,6 +14,7 @@ Usage:
   mac-setup setup --all          Walk through all tasks (including unfinished)
   mac-setup setup --preset minimal    Run a curated selection
   mac-setup profiles             Show available selection presets
+  mac-setup workspaces           Customize workspace order, glyphs, names and apps
   mac-setup dotfiles status      Inspect local public dotfiles checkout
   mac-setup dotfiles update      Pull new dotfiles using Git fast-forward
   mac-setup update              Reapply previously installed bundled profiles
@@ -56,7 +57,7 @@ struct Options {
         if args.contains("--help") || args.first == "help" { command = "help"; return }
         if args.contains("--version") { command = "version"; return }
         if let first = args.first, !first.hasPrefix("--") { command = args.removeFirst() }
-        let commands = ["menu", "list", "status", "plan", "setup", "update", "backups", "restore", "profiles", "dotfiles", "watch", "watcher-status", "watcher-stop", "watcher-disable", "watcher-enable"]
+        let commands = ["menu", "list", "status", "plan", "setup", "update", "backups", "restore", "profiles", "workspaces", "dotfiles", "watch", "watcher-status", "watcher-stop", "watcher-disable", "watcher-enable"]
         guard commands.contains(command) else { throw SetupError("Unknown command '\(command)'. Run mac-setup --help.") }
         while !args.isEmpty {
             let value = args.removeFirst()
@@ -89,7 +90,7 @@ struct Options {
             throw SetupError("--preset applies only to setup or plan.")
         }
         if image != nil && !["setup", "plan", "watch"].contains(command) { throw SetupError("--image is only valid with setup, plan or watch.") }
-        if ["status", "list", "backups", "menu", "profiles", "watch", "watcher-status", "watcher-stop", "watcher-disable", "watcher-enable"].contains(command) && !ids.isEmpty { throw SetupError("\(command) takes no task IDs.") }
+        if ["status", "list", "backups", "menu", "profiles", "workspaces", "watch", "watcher-status", "watcher-stop", "watcher-disable", "watcher-enable"].contains(command) && !ids.isEmpty { throw SetupError("\(command) takes no task IDs.") }
         if once && command != "watch" { throw SetupError("--once is only valid with watch.") }
         if command == "watch" && (dryRun || yes) { throw SetupError("Use plan wallpaper-watcher to preview; watch runs directly.") }
         if command == "restore" && ids.count > 1 { throw SetupError("Restore one backup at a time, newest first.") }
@@ -240,6 +241,23 @@ do {
         try WallpaperWatcher.setEnabled(enabled, engine: engine)
         print(enabled ? "Enabled. Change wallpapers and inspect watcher-status to test." : "Disabled across logins. Run watcher-enable to resume, or restore the installation backup to uninstall.")
     case "list": showList()
+    case "workspaces":
+        // Leave the alternate screen before printing a message to the shell.
+        let saved: Bool = try {
+            guard let terminal = RawTerminal() else {
+                throw SetupError("Workspace editing requires an interactive terminal.")
+            }
+            var editor = WorkspacePickerUI(
+                layout: try WorkspaceConfiguration.load(from: engine.paths),
+                installed: ApplicationDiscovery.scan(home: engine.paths.home))
+            guard let updated = editor.run(in: terminal) else { return false }
+            try updated.save(to: engine.paths)
+            return true
+        }()
+        if saved {
+            print("Workspace configuration saved.")
+            print("Run mac-setup setup aerospace-profile sketchybar-profile to apply the changes.")
+        }
     case "profiles":
         for preset in SetupPreset.allCases {
             let count = TaskPickerState(preset: preset).selectedCount

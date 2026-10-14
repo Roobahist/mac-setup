@@ -45,6 +45,7 @@ Run `mac-setup` or `mac-setup setup` in a terminal to open the full-screen picke
 - **/**: search by task name, description, category, or ID. **Esc** clears the filter.
 - **A**: select or clear tasks currently shown by the category and search filters.
 - **1**, **2**, **3**, **4**: Minimal, Productivity, Developer, or Complete preset.
+- **W**: configure workspace order, names, Nerd Font glyphs and app assignments.
 - **?**: keyboard shortcut help.
 - **Enter**: review the selection, then Enter again to begin. **B** returns to editing.
 - **Q** or **Ctrl+C**: cancel without making changes.
@@ -77,6 +78,56 @@ journal. Guided permission steps are not silently marked complete.
 If you are scripting installation, use task IDs or a preset instead of the picker.
 `--yes` approves automated tasks only; guided steps remain pending.
 
+## Customize workspaces
+
+Press **W** in the interactive setup checklist or run `mac-setup workspaces`
+any time. This opens a keyboard-driven workspace editor:
+
+- **Up/Down** selects a workspace; **[** and **]** move it left or right.
+- **A** adds a workspace, **D** removes one (with confirmation).
+- **R** renames its AeroSpace workspace ID; **N** edits its descriptive label.
+  IDs use letters, digits, underscores or hyphens. Labels can contain spaces.
+- **G** opens the searchable Nerd Font glyph browser. Start typing a glyph
+  name or keyword (such as `terminal`, `music`, `code` or `notes`) to filter
+  results; use arrows and Enter to select. The bar uses Hack Nerd Font.
+- **P** opens searchable installed-app routing. Type to filter by app name or
+  bundle ID; use arrows and Space/Enter to assign or unassign the focused
+  application. Reassigning an app moves its rule from its previous workspace.
+  Press **+** with an empty search field to enter a bundle ID manually.
+- **S** validates and saves the layout. **Q**, **Esc** from the top-level editor,
+  or **Ctrl+C** discards unsaved changes. Within search results, Esc clears the
+  filter first, then returns to the workspace list.
+
+At most 13 workspaces are supported, using the familiar Option+backtick,
+Option+1 through Option+0, Option+minus and Option+equal shortcuts in their
+configured order. Option+Shift+key moves a window instead of switching focus.
+The default layout no longer includes the optional Tomito timer workspace or
+its application rule. Add a workspace and assign any timer app if you want one.
+
+The editor discovers applications in `/Applications`, `/System/Applications`
+and `~/Applications`, including apps in subdirectories. Bundle IDs can be
+entered manually for applications elsewhere. **App assignments route windows
+when the application opens; they do not install or automatically launch apps.**
+An unassigned application opens wherever AeroSpace would normally place it.
+
+Your choices are stored locally in
+`~/Library/Application Support/mac-setup/workspaces.json`. Saving from W
+persists these choices even if you subsequently cancel the installation
+checklist, but it does not modify AeroSpace or SketchyBar until their profile
+tasks run. To apply later changes, use:
+
+```sh
+mac-setup workspaces
+mac-setup setup aerospace-profile sketchybar-profile
+```
+
+AeroSpace and SketchyBar profiles are generated as **local, backed-up copies**
+from the bundled templates rather than symlinks into public dotfiles. This
+keeps private customization outside the public repository and prevents
+`dotfiles update` from overwriting it. The existing recovery journal restores
+the previous generated files; it does not erase workspace choices in
+`workspaces.json`. Other application profiles can still link public dotfiles.
+
 ## Download a build
 
 Download the archive for your processor from [Releases](https://github.com/Roobahist/mac-setup/releases):
@@ -97,6 +148,7 @@ The installer does not disable Gatekeeper or remove quarantine attributes.
 
 ```sh
 mac-setup profiles
+mac-setup workspaces
 mac-setup list
 mac-setup status
 mac-setup plan --preset productivity
@@ -156,7 +208,9 @@ There are two ways to install an application profile:
 1. **Linked mode:** select **Link public dotfiles** in the checklist. This clones
    `dot-files` into `~/dot-files`. When you later select an application's profile
    task, only that application's configuration directory is linked into `~/.config`.
-   Subsequent source changes are visible through the same symlink.
+   Subsequent source changes are visible through the same symlink, except for
+   AeroSpace and SketchyBar, which are generated locally to support personal
+   workspace layouts.
 2. **Bundled mode:** leave the linked task unselected and do not have an existing
    `~/dot-files` checkout. The chosen profile is copied from the current `mac-setup`
    release, so setup works without network access.

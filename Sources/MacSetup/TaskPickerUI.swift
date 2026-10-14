@@ -2,12 +2,12 @@ import Foundation
 import Darwin
 import MacSetupCore
 
-private enum PickerKey {
+enum PickerKey {
     case up, down, tab, backTab, enter, space, escape, backspace, character(Character), interrupt, idle
 }
 
 /// Isolates terminal mode changes and restores the original configuration on every exit.
-private final class RawTerminal {
+final class RawTerminal {
     private var saved: termios
     private var pendingByte: UInt8?
 
@@ -163,6 +163,7 @@ struct TaskPickerUI {
     private var searchMode = false
     private var helpVisible = false
     private var reviewMode = false
+    private var workspaceMessage: String?
     private let statusLookup = TaskStatusLookup()
     private let engine: Engine
     private let colorEnabled: Bool
@@ -253,6 +254,14 @@ struct TaskPickerUI {
                 case "a": state.toggleVisible()
                 case "u":
                     if let task = state.focusedTask, inventory[task.id] == TaskState.done.rawValue { state.toggleUpdate(task.id) }
+                case "w":
+                    var editor = WorkspacePickerUI(
+                        layout: try WorkspaceConfiguration.load(from: engine.paths),
+                        installed: ApplicationDiscovery.scan(home: engine.paths.home))
+                    if let updated = editor.run(in: terminal) {
+                        try updated.save(to: engine.paths)
+                        workspaceMessage = "Workspace layout saved. The AeroSpace and SketchyBar profile tasks will apply it."
+                    }
                 case "?": helpVisible = true
                 case "1": state.choose(.minimal)
                 case "2": state.choose(.productivity)
@@ -287,7 +296,7 @@ struct TaskPickerUI {
         lines.append(tint("  \(state.selectedCount)/\(state.tasks.count) selected", "1") +
                      tint("     Profile: \(profile)     Category: \(category)", "2"))
         lines.append(tint("  1 Minimal  2 Productivity  3 Developer  4 Complete", "36"))
-        lines.append(tint("  ↑↓ Move  Space Toggle  U Update  Tab Category  / Search  A All  Enter Continue  Q Quit", "2"))
+        lines.append(tint("  ↑↓ Move  Space Toggle  W Workspaces  U Update  Tab Category  / Search  Enter Continue  Q Quit", "2"))
         lines.append("  " + String(repeating: "─", count: max(5, min(85, width - 4))))
 
         if reviewMode {
@@ -312,6 +321,7 @@ struct TaskPickerUI {
                 "  U toggles updates for an installed Homebrew or package task.",
                 "  1-4 choose a preset. Space toggles the focused task.",
                 "  Tab and Shift+Tab switch categories. / starts a text filter.",
+                "  W opens the workspace editor (order, names, glyphs, app routing).",
                 "  A toggles all visible tasks. Esc clears a filter.",
                 "  Enter reviews the selected steps. Q and Ctrl+C cancel.",
                 "  Press any key to return to the checklist."
@@ -384,6 +394,7 @@ struct TaskPickerUI {
                 : "  Inventory checked. Installed tasks are kept; U marks a package for update.", "2"))
         }
 
+        if let workspaceMessage { lines.append(tint("  " + workspaceMessage, "36")) }
         if lines.count > height { lines = Array(lines.prefix(height)) }
         let output = lines.map { clipANSIText($0, width: width) }.joined(separator: "\r\n")
         return "\u{001B}[H\u{001B}[2J" + output + "\r\n"

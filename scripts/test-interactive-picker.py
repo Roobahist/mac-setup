@@ -89,6 +89,28 @@ try:
         )), timeout=4.0
     )
 
+    # Enter the workspace editor from the main setup checklist.
+    os.write(master, b"w")
+    read_until(lambda b: b"WORKSPACE EDITOR" in active_screen(b), timeout=15.0)
+    os.write(master, b"g")
+    read_until(lambda b: b"Type to filter glyph" in active_screen(b))
+    os.write(master, b"clock")
+    read_until(lambda b: b"Search: clock" in active_screen(b))
+    os.write(master, b"\r")
+    read_until(lambda b: b"G Glyph" in active_screen(b))
+    os.write(master, b"p")
+    read_until(lambda b: b"Type to filter installed apps" in active_screen(b), timeout=15.0)
+    os.write(master, b"zzzzzzz")
+    read_until(lambda b: b"No matching applications" in active_screen(b))
+    os.write(master, b"\x1b")
+    read_until(lambda b: b"installed apps found" in active_screen(b)
+               and b"Search: " in active_screen(b))
+    os.write(master, b"\x1b")
+    read_until(lambda b: b"G Glyph" in active_screen(b))
+    os.write(master, b"\x1b")
+    read_until(lambda b: b"MAC SETUP" in active_screen(b)
+               and b"WORKSPACE EDITOR" not in active_screen(b))
+
     os.write(master, b"\r")
     read_until(lambda b: b"REVIEW SELECTION" in active_screen(b))
     os.write(master, b"\x1b")  # Escape returns to selection, not setup
@@ -104,7 +126,7 @@ try:
         screen = active_screen(bytes(captured)).decode("utf-8", "replace")
         raise AssertionError("Q did not exit the interactive picker; last screen: " + repr(screen[-700:])) from exc
     assert exit_code == 0, f"Picker exited with {exit_code}"
-    print("Interactive terminal smoke test passed (CSI, SS3, review and cancel)")
+    print("Interactive terminal smoke test passed (CSI, SS3, workspace editor, review and cancel)")
 finally:
     if process.poll() is None:
         process.terminate()
