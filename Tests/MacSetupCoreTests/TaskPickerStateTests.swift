@@ -78,6 +78,27 @@ final class TaskPickerStateTests: XCTestCase {
         XCTAssertEqual(state.selected, before)
     }
 
+    func testBatchSelectionAndClearNeverApplyAnything() {
+        var state = TaskPickerState(preset: .minimal)
+        state.clearSelection()
+        XCTAssertTrue(state.selected.isEmpty)
+        XCTAssertNil(state.preset)
+
+        state.selectCategory("Window management", enabled: true)
+        XCTAssertTrue(state.selected.contains("aerospace-profile"))
+        XCTAssertGreaterThan(state.selected.count, 1)
+        XCTAssertNil(state.preset)
+
+        state.selectCategory("Window management", enabled: false)
+        XCTAssertFalse(state.selected.contains("aerospace-profile"))
+
+        state.selectAll()
+        XCTAssertEqual(state.selected, Set(Catalog.tasks.map(\.id)))
+        XCTAssertNil(state.preset)
+        state.clearSelection()
+        XCTAssertEqual(state.selectedCount, 0)
+    }
+
     func testCustomExecutionOrdersOnlyTheSelectedTasks() throws {
         let ids = ["sketchybar-start", "sketchybar-profile"]
         let ordered = try Catalog.ordered(ids, includingDependencies: false).map(\.id)

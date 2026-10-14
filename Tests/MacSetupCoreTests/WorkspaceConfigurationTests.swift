@@ -53,6 +53,19 @@ final class WorkspaceConfigurationTests: XCTestCase {
         XCTAssertTrue(merged.workspaces.contains { $0.id == "timer" })
     }
 
+    func testReorderingChangesGeneratedWorkspaceOrderBeforeSaving() throws {
+        let original = WorkspaceConfiguration.defaultLayout
+        var draft = original
+        let first = try XCTUnwrap(draft.workspaces.first?.id)
+        draft.insertWorkspace(first, at: 3)
+        XCTAssertEqual(draft.workspaces[2].id, first)
+        XCTAssertNotEqual(draft.workspaces.map(\.id), original.workspaces.map(\.id))
+        XCTAssertEqual(draft.workspaces.count, original.workspaces.count)
+        let generated = try draft.sketchybarShell(from: template("sketchybar/sketchybarrc"))
+        let baseline = try original.sketchybarShell(from: template("sketchybar/sketchybarrc"))
+        XCTAssertNotEqual(generated, baseline)
+    }
+
     func testRearrangeRenameDeleteAndAssignApps() throws {
         var config = WorkspaceConfiguration.defaultLayout
         config.workspaces.removeAll { $0.id == "music" || $0.id == "messages" }

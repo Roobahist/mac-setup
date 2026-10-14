@@ -161,6 +161,34 @@ public struct TaskPickerState {
         cursorIndex = 0
     }
 
+    /// Batch selection uses the same dependency rules as selecting one task.
+    public mutating func selectAll() {
+        selected = Self.withDependencies(Set(tasks.map(\.id)), in: tasks,
+                                         available: available.union(unknown))
+        updates.removeAll()
+        preset = nil
+    }
+
+    public mutating func clearSelection() {
+        selected.removeAll()
+        updates.removeAll()
+        preset = nil
+    }
+
+    public mutating func selectCategory(_ category: String, enabled: Bool) {
+        let ids = Set(tasks.filter { $0.category == category }.map(\.id))
+        guard !ids.isEmpty else { return }
+        if enabled {
+            selected.formUnion(Self.withDependencies(ids, in: tasks,
+                                                    available: available.union(unknown)))
+        } else {
+            selected.subtract(ids)
+            removeUnsatisfiedChildren()
+        }
+        updates.formIntersection(selected)
+        preset = nil
+    }
+
     public mutating func toggleFocused() {
         guard let task = focusedTask else { return }
         toggle(task.id)

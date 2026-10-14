@@ -12,14 +12,14 @@ struct GuidedTourStep: Identifiable {
 
     static let steps: [Self] = [
         .init(destination: .apps, title: "Choose your features",
-              explanation: "Review what is already installed and what each component adds. Configure only the components you want. Some features require dependencies and will show a review before applying.",
-              nextAction: "Use Configure on a component to review it. You can leave everything unchanged and continue."),
+              explanation: "Choose a ready-made preset such as Repair, Minimal, Productivity, Developer, or Complete. You can also select an entire category, all optional features, or individual items. Dependencies are included automatically.",
+              nextAction: "Use Review & apply selected features to inspect the batch before anything installs. You can skip this step without installing."),
         .init(destination: .shortcuts, title: "Make your keyboard your own",
               explanation: "Inspect AeroSpace, Karabiner, and Raycast shortcuts in the existing shortcut editor. Change hotkeys, enabled actions, and the workspace modifier keys.",
-              nextAction: "Choose Apply shortcuts at the bottom to save changes. Next never applies settings automatically."),
+              nextAction: "Choose Review & apply shortcuts to save and update the real shortcut profiles. Until then, changes are drafts."),
         .init(destination: .workspaces, title: "Arrange workspaces",
               explanation: "Name workspaces, choose glyphs, assign apps, reorder the cards, and set the keys that switch between them.",
-              nextAction: "Choose Apply workspaces at the bottom only if you want to save the layout."),
+              nextAction: "The menu bar preview updates as you reorder, but the real desktop is unchanged until Review & apply workspaces completes."),
         .init(destination: .appearance, title: "Customize appearance",
               explanation: "Choose the native macOS accent color. Optionally let SketchyBar follow your wallpaper, or select a manual highlight color instead.",
               nextAction: "The wallpaper watcher is optional and remains off until you enable it explicitly."),
@@ -44,6 +44,7 @@ struct GuidedTourBanner: View {
     let total: Int
     let canGoBack: Bool
     let canAdvance: Bool
+    let hasUnappliedEdits: Bool
     let onBack: () -> Void
     let onSkip: () -> Void
     let onNext: () -> Void
@@ -72,6 +73,12 @@ struct GuidedTourBanner: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            if hasUnappliedEdits {
+                Label("Unapplied edits. Review & apply below before Next. Skip leaves the draft unsaved.",
+                      systemImage: "exclamationmark.circle")
+                    .font(.callout).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             HStack(spacing: 12) {
                 Button("End guide", action: onExit).buttonStyle(.borderless)
                 Spacer()
@@ -79,13 +86,13 @@ struct GuidedTourBanner: View {
                     Button("Back", action: onBack).disabled(!canAdvance)
                 }
                 if index < total - 1 {
-                    Button("Skip step", action: onSkip)
+                    Button(hasUnappliedEdits ? "Skip without applying" : "Skip step", action: onSkip)
                         .buttonStyle(.borderless)
                         .disabled(!canAdvance)
                 }
                 Button(index == total - 1 ? "Finish" : "Next", action: onNext)
                     .buttonStyle(.borderedProminent)
-                    .disabled(!canAdvance)
+                    .disabled(!canAdvance || hasUnappliedEdits)
             }
         }
         .padding(18)
