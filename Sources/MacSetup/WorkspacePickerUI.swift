@@ -10,7 +10,6 @@ struct WorkspacePickerUI {
     private var layout: WorkspaceConfiguration
     private let initialLayout: WorkspaceConfiguration
     private let installed: [InstalledApplication]
-    private let showGlyphs: Bool
     private var page: Page = .workspaces
     private var selected = 0
     private var resultCursor = 0
@@ -18,12 +17,10 @@ struct WorkspacePickerUI {
     private var editing = ""
     private var message = ""
 
-    init(layout: WorkspaceConfiguration, installed: [InstalledApplication],
-         showGlyphs: Bool = TerminalGlyphSupport.enabled()) {
+    init(layout: WorkspaceConfiguration, installed: [InstalledApplication]) {
         self.layout = layout
         self.initialLayout = layout
         self.installed = installed
-        self.showGlyphs = showGlyphs
     }
 
     mutating func run(in terminal: RawTerminal) -> WorkspaceConfiguration? {
@@ -226,7 +223,6 @@ struct WorkspacePickerUI {
             editing: editing,
             message: message,
             modified: layout != initialLayout,
-            showGlyphs: showGlyphs,
             width: width,
             height: height
         ).render()
