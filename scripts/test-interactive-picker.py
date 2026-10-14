@@ -91,7 +91,9 @@ try:
 
     # Enter the workspace editor from the main setup checklist.
     os.write(master, b"w")
-    read_until(lambda b: b"WORKSPACE EDITOR" in active_screen(b), timeout=15.0)
+    read_until(lambda b: b"WORKSPACE EDITOR" in active_screen(b)
+               and b"APP RULES" in active_screen(b)
+               and b"G Glyph" in active_screen(b), timeout=15.0)
     workspace_screen = active_screen(bytes(captured))
     assert b"WORKSPACE ORDER" in workspace_screen
     assert b"SELECTED WORKSPACE" in workspace_screen, "Wide view should show inspector"
