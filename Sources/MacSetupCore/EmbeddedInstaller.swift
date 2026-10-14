@@ -14,6 +14,12 @@ public final class EmbeddedInstaller: CommandRunning {
         try? inputHandle?.write(contentsOf: Data((text + "\n").utf8))
     }
 
+    public func runTimed(_ executable: String, _ arguments: [String], timeout: TimeInterval, input: Data?) throws -> CommandResult {
+        // Background tasks use ProcessRunner; only installers need this
+        // class's pseudo-terminal, and they do not use a time limit.
+        try ProcessRunner(timeout: timeout).run(executable, arguments, input: input)
+    }
+
     public func run(_ executable: String, _ arguments: [String], interactive: Bool, input: Data?) throws -> CommandResult {
         guard interactive else { return try ProcessRunner().run(executable, arguments, input: input) }
         let statusFile = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

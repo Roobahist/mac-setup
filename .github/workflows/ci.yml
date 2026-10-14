@@ -23,6 +23,8 @@ jobs:
           swift run --build-system native mac-setup dotfiles status
       - name: Test keyboard-driven terminal navigation
         run: python3 scripts/test-interactive-picker.py "$(swift build --build-system native --show-bin-path)/mac-setup"
+      - name: Test wallpaper accent pipeline
+        run: python3 scripts/test-wallpaper-accent.py
       - name: Validate public profile
         run: python3 scripts/check-profile.py
       - name: Validate shell scripts

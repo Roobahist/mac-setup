@@ -82,6 +82,12 @@ If an installation fails, choose **Change selection** to return to the feature l
 
 The Raycast default is Option + R. Legacy configurations using the former Command + Space default are migrated once; customized launcher shortcuts remain unchanged.
 
+### Guided permissions and wallpaper accents
+
+Multi-step permission guides display instructions as individual rows. Karabiner's background services, driver extension, Accessibility, Input Monitoring, and profile configuration each have an adjacent settings or app shortcut and a local **Check this step** action. Verified states are shown beside their corresponding instructions. macOS still requires users to approve all permissions; setup does not silently grant access.
+
+Wallpaper accent extraction normalizes large images once before performing its analysis, avoiding repeated full-resolution ImageMagick decodes. Each image processing stage has a bounded timeout, and the complete accent task has a longer 120-second budget in both the CLI and native app. Other setup commands retain their existing timeout. When extraction fails, the app shows the specific ImageMagick stage error instead of asking users to open Python as if it were an application. The wallpaper accent is still computed locally and the watcher remains the existing WallpaperAccentWatcher app.
+
 ### Finder folder views
 
 macOS Finder uses global preferences for newly opened folders, but existing directories may keep their own `.DS_Store` view overrides. The optional **Reset saved folder view overrides** task backs up and removes these files under Desktop, Documents, Downloads, Movies, Music and Pictures. It intentionally excludes Library, hidden directories, application packages and symlinks. Clearing `.DS_Store` also resets per-folder icon positions and window layout, so this task requires explicit selection. Prior files can be restored using Mac Setup's recovery journal.

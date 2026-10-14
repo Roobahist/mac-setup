@@ -2,6 +2,41 @@ import XCTest
 @testable import MacSetupCore
 
 final class DisplayAndGuideTests: XCTestCase {
+    func testGuidedPermissionActionsRouteToCorrespondingSettings() throws {
+        let task = try Catalog.task("karabiner-access")
+        let services = GuideStepRouting.destination(task: task, index: 0)
+        let driver = GuideStepRouting.destination(task: task, index: 1)
+        let accessibility = GuideStepRouting.destination(task: task, index: 2)
+        let input = GuideStepRouting.destination(task: task, index: 3)
+        let app = GuideStepRouting.destination(task: task, index: 4)
+        XCTAssertEqual(services?.url, "x-apple.systempreferences:com.apple.LoginItems-Settings.extension")
+        XCTAssertEqual(driver?.url, services?.url)
+        XCTAssertTrue(accessibility?.url?.contains("Privacy_Accessibility") == true)
+        XCTAssertTrue(input?.url?.contains("Privacy_ListenEvent") == true)
+        XCTAssertEqual(app?.app, "Karabiner-Elements")
+        XCTAssertNil(GuideStepRouting.destination(task: task, index: 6))
+        let raycast = try Catalog.task("raycast-access")
+        XCTAssertEqual(GuideStepRouting.destination(task: raycast, index: 1)?.app, "Raycast")
+        let vorssaint = try Catalog.task("vorssaint-access")
+        XCTAssertTrue(GuideStepRouting.destination(task: vorssaint, index: 1)?.url?
+            .contains("Privacy_Accessibility") == true)
+        XCTAssertTrue(GuideStepRouting.destination(task: vorssaint, index: 2)?.url?
+            .contains("LoginItems") == true)
+        XCTAssertNil(GuideStepRouting.destination(task: task, index: -1))
+        let finder = try Catalog.task("finder-sidebar")
+        XCTAssertEqual(GuideStepRouting.destination(task: finder, index: 0)?.app, "Finder")
+    }
+
+    func testTimedCommandsRespectTheirIndividualBudget() throws {
+        let brief = ProcessRunner(timeout: 0.03)
+        let result = try brief.runTimed("/bin/sleep", ["0.12"], timeout: 1, input: nil)
+        XCTAssertEqual(result.status, 0)
+        XCTAssertThrowsError(try brief.runTimed("/bin/sleep", ["0.4"], timeout: 0.05, input: nil)) { error in
+            XCTAssertTrue(String(describing: error).contains("within 0 seconds") ||
+                          String(describing: error).contains("did not respond"))
+        }
+    }
+
     func testRoundedFloatingPreferencesPreserveMeaningfulDifferences() {
         let expected = NSNumber(value: 0.73999999999999999)
         let float32 = NSNumber(value: Float(0.74))

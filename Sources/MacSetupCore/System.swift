@@ -15,9 +15,14 @@ public struct CommandResult {
 
 public protocol CommandRunning {
     func run(_ executable: String, _ arguments: [String], interactive: Bool, input: Data?) throws -> CommandResult
+    func runTimed(_ executable: String, _ arguments: [String], timeout: TimeInterval, input: Data?) throws -> CommandResult
 }
 
 public extension CommandRunning {
+    func runTimed(_ executable: String, _ arguments: [String], timeout: TimeInterval, input: Data? = nil) throws -> CommandResult {
+        // Injected runners may implement their own time budget.
+        try run(executable, arguments, interactive: false, input: input)
+    }
     func run(_ executable: String, _ arguments: [String] = [], interactive: Bool = false, input: Data? = nil) throws -> CommandResult {
         try run(executable, arguments, interactive: interactive, input: input)
     }
@@ -34,6 +39,9 @@ public extension CommandRunning {
 public struct ProcessRunner: CommandRunning {
     private let timeout: TimeInterval
     public init(timeout: TimeInterval = 20) { self.timeout = timeout }
+    public func runTimed(_ executable: String, _ arguments: [String], timeout: TimeInterval, input: Data?) throws -> CommandResult {
+        try ProcessRunner(timeout: timeout).run(executable, arguments, interactive: false, input: input)
+    }
     public func run(_ executable: String, _ arguments: [String], interactive: Bool, input: Data?) throws -> CommandResult {
         let process = Process()
         var interactiveStatusFile: URL?
