@@ -1,6 +1,6 @@
 # Mac Setup
 
-Mac Setup is a native macOS app and CLI for setting up and maintaining a portable desktop configuration. Our app includes task selection, shared keyboard shortcuts, editable workspaces, preview of the SketchyBar layout, guided permissions, copyable logs, and recovery records.
+Mac Setup is a native macOS customization dashboard and CLI. It can reproduce a portable desktop configuration through guided setup, but everyday changes can be made independently through searchable controls for the Dock, Finder, macOS clock, appearance, workspaces, shortcuts, and application features. Configuration changes have local recovery records.
 
 The portable configurations come from [dot-files](https://github.com/Roobahist/dot-files), with offline snapshots bundled into builds.
 
@@ -19,7 +19,28 @@ open "$HOME/Applications/Mac Setup.app"
 
 The installer creates `~/Applications/Mac Setup.app` as a link to the managed bundle in `~/.local/lib/mac-setup/current`. Reopen it from Finder to make later adjustments. To rebuild after a source update, run `git pull && bash install.sh`.
 
-## How setup works
+## Everyday customization
+
+Launching Mac Setup normally opens the **Overview** dashboard rather than the installer. Select a section in the sidebar or search across controls and features:
+
+- **Dock**: hide/show behavior, reveal delay and animation, icon size, and recent apps.
+- **Finder**: filename extensions, hidden files, path bar, and status bar.
+- **Menu Bar & Clock**: 24-hour time, seconds, and weekday for the native macOS clock. SketchyBar's separately scripted clock is not yet editable through these native clock controls.
+- **Appearance**: native accent color, SketchyBar wallpaper watcher on/off, and manual SketchyBar highlight color when the watcher is off.
+- **Workspaces and Keyboard Shortcuts**: open existing editors directly within the app and apply only their relevant provider profiles.
+- **Apps & Features**: inspect installed or configured tasks and review the dependency-aware operation for any individual feature.
+- **Updates**: check GitHub's latest tagged release, download the package for this Mac, verify its published SHA-256 checksum, and install to the versioned managed directory. Restart the app to load new controls.
+- **Guided Setup**: preserve the original step-by-step onboarding workflow.
+
+Each native preference is read from macOS, applied individually, and recorded through the recovery journal. An **Undo** action is available after applying a preference. Settings without a stored value display the assumed system default until customized. A system update may change these defaults or stop honoring undocumented preference keys; the app reports verification errors rather than silently claiming success.
+
+Installing a task does not imply that an app can be uninstalled safely. Mac Setup does not silently remove Homebrew packages, dependent applications, or arbitrary user configurations. The wallpaper watcher is explicitly switchable; other features can be restored from supported backup records.
+
+## Guided setup
+
+Choose **Guided Setup** in the sidebar if you want the complete sequential workflow:
+
+
 
 1. **Choose features.** Select a preset or individual tasks. Existing apps are kept; Obsidian and Tomito are optional installers.
 2. **Keyboard shortcuts.** Browse the AeroSpace, Karabiner, and Raycast shortcut sections. Add, edit, disable, or remove supported action bindings, and choose consistent modifiers for workspace switching and moving windows. Raycast has one editable launcher hotkey. Changes are written into the actual provider profiles and preferences; no redundant confirmation checkbox is required.
@@ -31,14 +52,14 @@ Workspace cards use consistent-sized controls and a clearly labeled drag handle.
 
 ### Make changes later without repeating installation
 
-Use **Edit workspaces only** or **Edit shortcuts only** from the app's first screen. Or open either editor directly:
+Choose **Workspaces** or **Keyboard Shortcuts** in the sidebar. Or open either editor directly from the CLI:
 
 ```sh
 mac-setup workspaces
 mac-setup shortcuts
 ```
 
-These paths apply only the relevant provider profiles, rather than restarting the entire installer. The full setup is available with `mac-setup`. The older terminal editor remains available through `mac-setup terminal`.
+These paths apply only the relevant provider profiles, rather than restarting the entire installer. The full sequential setup is available through **Guided Setup** or `mac-setup setup`. `mac-setup` now opens the control center. The older terminal editor remains available through `mac-setup terminal`.
 
 ### Workspace cards and shortcut readability
 
@@ -142,3 +163,13 @@ bash scripts/package.sh
 The [Releases](https://github.com/Roobahist/mac-setup/releases) page provides packaged builds when available. Builds are ad-hoc signed, not notarized; macOS may require a one-time approval in System Settings > Privacy & Security. We do not disable Gatekeeper.
 
 Our portable snapshots exclude private sessions and account data. Local recovery files may include sensitive previous settings and must not be committed publicly.
+
+## Adding customization controls
+
+The preference catalog lives in `Sources/MacSetupCore/TweakRegistry.swift`. Add a `TweakDescriptor` with a stable ID, category, clear title and description, macOS preference domain/key, fallback, a supported control type, and any restart or compatibility warning. The dashboard and search index pick up new descriptors without further navigation changes.
+
+The `TweakService` reads current values using the existing `Journal` and applies changes as isolated, recoverable transactions. New operations that are not simple macOS preferences should have a dedicated injected service, like `DesktopAccentService`, rather than embedding shell commands in SwiftUI views. Keep read/apply/undo separate, and avoid editing system preferences when the backing key is unverified.
+
+For updates, push code changes to `main`, then publish a version tag that runs the release workflow. An update is offered only when a newer packaged release is published. This intentionally avoids executing unreviewed source or pulling arbitrary changes directly from the UI. The packaged app gets its version from the release tag.
+
+The dashboard source is `Sources/MacSetup/ControlCenter.swift`. The original native setup engine and editor remain in `NativeSetup.swift` for the guided route and embedded workspace or keyboard shortcut panels. The CLI remains available for scripting.
