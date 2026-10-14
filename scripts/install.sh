@@ -36,7 +36,6 @@ ln -s "$INSTALL_DIR" "$INSTALL_ROOT/current.new-$$"
 mv -fh "$INSTALL_ROOT/current.new-$$" "$INSTALL_ROOT/current"
 ln -sfn "$INSTALL_ROOT/current/mac-setup" "$BIN_ROOT/mac-setup"
 echo "Installed. Previous versions remain under $INSTALL_ROOT/versions."
-echo "Run: $BIN_ROOT/mac-setup"
 # Make the installed command available in new zsh sessions.
 SHELL_RC="${ZDOTDIR:-$HOME}/.zshrc"
 if [[ -L "$SHELL_RC" ]]; then
@@ -49,7 +48,6 @@ else
     if [[ -e "$SHELL_RC" ]]; then cp -p "$SHELL_RC" "$SHELL_RC.mac-setup-backup-$(date +%Y%m%d-%H%M%S)-$$"; fi
     printf '\n# mac-setup command\n%s\n' "$PATH_LINE" >> "$SHELL_RC"
   fi
-  echo "Open a new terminal and run: mac-setup"
 fi
 
 if [[ -d "$INSTALL_DIR/Mac Setup.app" ]]; then
@@ -58,8 +56,13 @@ if [[ -d "$INSTALL_DIR/Mac Setup.app" ]]; then
   if [[ ! -e "$APP_LINK" && ! -L "$APP_LINK" ]] || [[ -L "$APP_LINK" && "$(readlink "$APP_LINK")" == "$APP_TARGET" ]]; then
     mkdir -p "$HOME/Applications"
     ln -sfn "$APP_TARGET" "$APP_LINK"
-    echo "Open Mac Setup from your Applications folder."
+    echo "Setup app installed: $APP_LINK"
+    echo "In Finder, choose Go > Home > Applications, then double-click Mac Setup."
+    printf 'Or launch the app now: open %q\n' "$APP_LINK"
   else
-    echo "Existing Mac Setup.app preserved; open $INSTALL_DIR/Mac Setup.app."
+    echo "Existing Mac Setup.app preserved. New setup app: $INSTALL_DIR/Mac Setup.app"
+    printf 'Launch the new app: open %q\n' "$INSTALL_DIR/Mac Setup.app"
   fi
+else
+  echo "This package contains command-line tools only. Run: $BIN_ROOT/mac-setup"
 fi

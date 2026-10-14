@@ -8,36 +8,64 @@ them in one Swift window. The public configurations
 come from [dot-files](https://github.com/Roobahist/dot-files); offline snapshots are
 bundled with every release. No GitHub account is required to run downloaded builds.
 
-## Install and run
+## Start here: install and open the app
 
-Requires macOS 13+ and Swift 5.9+ (Xcode or compatible Command Line Tools).
+Requires macOS 13+. Building from source also requires Swift 5.9+
+(Xcode or compatible Command Line Tools).
 Some installed apps have higher requirements; Vorssaint requires Apple silicon
-and macOS 14+. The CLI never runs as root.
+and macOS 14+. Run the installer as your normal user, without `sudo`.
+
+**Cloning this repo gives you source code. Run the one-time installer below to
+build and install Mac Setup.app, then open its window.**
+
+In Terminal, run:
 
 ```sh
 git clone https://github.com/Roobahist/mac-setup.git
 cd mac-setup
-./install.sh
-# Open a new terminal after installation:
-mac-setup
-mac-setup profiles
-mac-setup plan --preset complete
+bash install.sh
+open "$HOME/Applications/Mac Setup.app"
 ```
 
-The one-time installer builds the Swift app and CLI, installs the CLI with its resource
-bundle into `~/.local`, and adds Mac Setup to your user Applications folder. It backs up `.zshrc` before adding the command directory to
-PATH; linked shell configuration files are left for you to update manually. Daily
-launches use the installed executable and do not invoke Swift or rebuild anything.
-You can also run `./mac-setup` directly from this checkout; it builds once if needed.
-After changing source code, run `./install.sh` again to rebuild and update.
+The last command opens the **graphical Mac Setup app**. Keep **Repair** selected,
+click **Continue**, check the workspace preview, then **Review changes → Start setup**.
+The remaining setup, installer prompts and permission checks appear in that window.
+
+**Next time, use Finder:** choose **Go → Home**, open **Applications**, then
+double-click **Mac Setup**. This is the Applications folder inside your home folder.
+You do not need Terminal for later launches.
+
+Where the app is stored compared with the cloned repo:
+
+| Location | What it contains |
+| --- | --- |
+| The cloned `mac-setup` folder | Source code and build scripts. A fresh clone has no prebuilt `.app`. |
+| `~/Applications/Mac Setup.app` | The installed app you open in Finder; a link to the managed app bundle. |
+| `~/.local/lib/mac-setup/current/Mac Setup.app` | The managed app bundle used by that link. |
+
+If you previously installed an older CLI, update it from inside your existing clone:
+
+```sh
+git pull
+bash install.sh
+open "$HOME/Applications/Mac Setup.app"
+```
+
+If the installer reports an existing unrelated Mac Setup app, it preserves it and
+prints the exact path and launch command for the newly installed app instead.
+
+The installer also provides optional command-line tools in `~/.local/bin` and backs
+up `.zshrc` before adding that directory to PATH. Linked shell configuration files
+are left for you to update manually. After changing source code, run `bash install.sh`
+again to rebuild and update. Normal app launches do not rebuild anything.
 
 The build helper uses SwiftPM's native engine for compatibility with Command Line
 Tools. This avoids the missing Xcode framework search-path warnings from Swift
 6.4's default build engine. Those warnings did not indicate a failed setup.
 
-## Swift setup app
+## Using the app
 
-Open **Mac Setup.app**, or run `mac-setup`. The native Swift window has four steps:
+After opening **Mac Setup.app**, its window has four steps:
 
 1. **Choose features.** Repair is selected by default and targets the reported Dock,
    menu-bar, workspace, launcher and keyboard problems. Expand a section to change
@@ -112,37 +140,33 @@ are refreshed from Karabiner and saved locally in
 resumed. The driver and privacy approvals require the user’s action in System Settings.
 The physical shortcut test is never inferred from service registration.
 
-## Open the app without using Terminal
+## Download the app instead of building from source
 
-Download and extract the archive for your Mac. Double-click **Mac Setup.app**.
-Keep **Repair** selected, click **Continue**, review the workspace preview, then
-**Review changes → Start setup**. Every remaining guide and installer prompt appears
-in that window. Installed apps are retained. If a step needs attention, use **Check again**,
-**Retry this task**, or **Leave pending & continue**.
+When a published build is available in [Releases](https://github.com/Roobahist/mac-setup/releases),
+download the archive for your processor: `arm64` for Apple silicon or `x86_64` for Intel.
+Extract the `.tar.gz` archive and double-click **Mac Setup.app** inside the extracted
+folder. You can move it to your home **Applications** folder for later launches.
+Downloaded apps do not require Swift or Xcode.
 
-After a source or archive installation using `install.sh`, the app is also available
-at `~/Applications/Mac Setup.app`. The `mac-setup` command opens the same native UI;
-`mac-setup terminal` explicitly opens the legacy terminal picker. An older installed
-CLI must be updated first to gain the Swift app. The release app has its own monitor
-and checkmark icon.
+If Releases is empty, use the source installation above. Apple silicon preview builds
+are also available from successful [Build and test runs](https://github.com/Roobahist/mac-setup/actions/workflows/ci.yml):
+open a run, download its **mac-setup-preview-arm64** artifact (requires a GitHub login),
+extract the downloaded ZIP, then extract the `.tar.gz` inside it and open **Mac Setup.app**.
 
-## Download a build
-
-Download the archive for your processor from [Releases](https://github.com/Roobahist/mac-setup/releases):
-`arm64` for Apple silicon or `x86_64` for Intel. Extract it and open **Mac Setup.app**. For CLI use, keep `mac-setup`
-beside `MacSetup_MacSetupCore.bundle`. Run the executable directly or run
-`bash install.sh` from the extracted directory to install into `~/.local`.
-Users do not need Xcode to run a downloaded build.
-
-Before the first tagged release, preview archives are available in successful
-[GitHub Actions runs](https://github.com/Roobahist/mac-setup/actions).
+If you build a package yourself with `bash scripts/package.sh`, the app is inside
+the generated package folder under the clone's `dist` directory. Packaging alone
+does not install it in your home Applications folder.
 
 These builds use local ad-hoc signatures, not Apple Developer ID signing or
 notarization. macOS may require an app-specific approval in System Settings >
 Privacy & Security after a first launch attempt. Managed Macs may restrict it.
 The installer does not disable Gatekeeper or remove quarantine attributes.
 
-## Commands
+## Optional command-line tools
+
+The app is the main setup interface. The installed `mac-setup` command with no
+arguments opens the same app window; `mac-setup terminal` explicitly opens the
+legacy terminal picker. These commands are available for scripting and diagnostics:
 
 ```sh
 mac-setup profiles
