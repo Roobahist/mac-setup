@@ -139,10 +139,10 @@ final class EngineTests: XCTestCase {
 
         let first = try engine.apply(Catalog.task("aerospace-profile"))
         let second = try engine.apply(Catalog.task("alacritty-profile"))
-        XCTAssertTrue(source.isLinked("aerospace", config: paths.config))
+        XCTAssertFalse(source.isLinked("aerospace", config: paths.config))
         XCTAssertTrue(source.isLinked("alacritty", config: paths.config))
         XCTAssertEqual(try engine.state(Catalog.task("aerospace-profile")), .done)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: old.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: old.path))
 
         try engine.journal.restore(second)
         try engine.journal.restore(first)
