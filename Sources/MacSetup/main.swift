@@ -242,15 +242,20 @@ do {
         print(enabled ? "Enabled. Change wallpapers and inspect watcher-status to test." : "Disabled across logins. Run watcher-enable to resume, or restore the installation backup to uninstall.")
     case "list": showList()
     case "workspaces":
-        guard let terminal = RawTerminal() else {
-            throw SetupError("Workspace editing requires an interactive terminal.")
-        }
-        var editor = WorkspacePickerUI(
-            layout: try WorkspaceConfiguration.load(from: engine.paths),
-            installed: ApplicationDiscovery.scan(home: engine.paths.home))
-        if let updated = editor.run(in: terminal) {
+        // Leave the alternate screen before printing a message to the shell.
+        let saved: Bool = try {
+            guard let terminal = RawTerminal() else {
+                throw SetupError("Workspace editing requires an interactive terminal.")
+            }
+            var editor = WorkspacePickerUI(
+                layout: try WorkspaceConfiguration.load(from: engine.paths),
+                installed: ApplicationDiscovery.scan(home: engine.paths.home))
+            guard let updated = editor.run(in: terminal) else { return false }
             try updated.save(to: engine.paths)
-            terminal.write("\u{001B}[H\u{001B}[2J  Workspace configuration saved.\r\n")
+            return true
+        }()
+        if saved {
+            print("Workspace configuration saved.")
             print("Run mac-setup setup aerospace-profile sketchybar-profile to apply the changes.")
         }
     case "profiles":
