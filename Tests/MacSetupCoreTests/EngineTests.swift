@@ -531,13 +531,16 @@ final class EngineTests: XCTestCase {
         XCTAssertTrue(runner.jobs.contains(WallpaperWatcher.replacementLabel))
     }
 
-    func testMissingAppAndCompetingWatcherAreRejected() throws {
-        // Use a dedicated home app in tests; /Applications has no watcher on this Mac.
+    func testMissingHelperFailsAndAnActiveWatcherIsNeverReplaced() throws {
+        // A corrupt or incomplete Mac Setup installation should still fail
+        // with an actionable message rather than a false success.
         XCTAssertThrowsError(try engine.apply(Catalog.task("wallpaper-watcher")))
         _ = try existingWatcher()
         runner.jobs.insert(WallpaperWatcher.replacementLabel)
-        XCTAssertThrowsError(try engine.apply(Catalog.task("wallpaper-watcher")))
+        let record = try engine.apply(Catalog.task("wallpaper-watcher"))
         XCTAssertTrue(runner.jobs.contains(WallpaperWatcher.replacementLabel))
+        XCTAssertFalse(runner.jobs.contains(WallpaperWatcher.label))
+        XCTAssertTrue(engine.journal.transactions.first { $0.id == record }!.changes.isEmpty)
     }
 
     func testWallpaperWatcherCanBeDisabledAndEnabled() throws {
