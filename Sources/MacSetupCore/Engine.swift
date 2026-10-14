@@ -617,7 +617,7 @@ public final class Engine {
         }
     }
 
-    private func applyAccent(transaction: String, image: URL?) throws {
+    private func wallpaperAccentData(image: URL?) throws -> (URL, Data) {
         guard let python = executable("python3"), executable("magick") != nil else { throw SetupError("Install wallpaper-tools first.") }
         let wallpaper: URL
         if let image { wallpaper = image }
@@ -647,7 +647,10 @@ public final class Engine {
             ?? paths.home.appendingPathComponent(".cache")
         let target = cacheRoot.appendingPathComponent("sketchybar/highlight-color")
         let value = "0xff" + String(color.dropFirst()) + "\n"
-        try journal.write(target, data: Data(value.utf8), transaction: transaction)
+        return (target, Data(value.utf8))
+    }
+
+    private func notifyWallpaperAccentChange() throws {
         if let sketchybar = executable("sketchybar"), let aerospace = executable("aerospace") {
             let focused = try runner.run(aerospace, ["list-workspaces", "--focused"])
             if focused.status == 0 && !focused.text.isEmpty {
@@ -655,6 +658,23 @@ public final class Engine {
             }
         }
     }
+    private func applyAccent(transaction: String, image: URL?) throws {
+        let (target, data) = try wallpaperAccentData(image: image)
+        try journal.write(target, data: data, transaction: transaction)
+        try notifyWallpaperAccentChange()
+    }
+
+    /// Runtime updates are derived cache files, not setup preferences. Avoid
+    /// creating a backup transaction for every wallpaper transition.
+    public func refreshWallpaperAccent(image: URL?) throws {
+        let (target, data) = try wallpaperAccentData(image: image)
+        if (try? Data(contentsOf: target)) == data { return }
+        try FileManager.default.createDirectory(at: target.deletingLastPathComponent(),
+                                                withIntermediateDirectories: true)
+        try data.write(to: target, options: .atomic)
+        try notifyWallpaperAccentChange()
+    }
+
     private func installWallpaperWatcher(transaction: String, image: URL?) throws {
         // A running watcher wins. Never install a second service alongside it,
         // even if the other runtime becomes available after initial setup.
