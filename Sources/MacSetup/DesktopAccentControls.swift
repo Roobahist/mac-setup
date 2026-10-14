@@ -31,6 +31,7 @@ struct DesktopAccentControls: View {
             if !status.isEmpty { Text(status).font(.caption).foregroundStyle(.secondary) }
         }
         .padding(17)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 13))
         .onAppear(perform: reload)
     }
