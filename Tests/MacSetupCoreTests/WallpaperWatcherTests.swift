@@ -99,7 +99,7 @@ final class WallpaperWatcherTests: XCTestCase {
                     throw NSError(domain: "test", code: 12)
                 }
             },
-            wait: { seconds += $0; if seconds == 8 { seconds += 65 } },
+            wait: { seconds += $0; if seconds == 10 { seconds += 65 } },
             now: { Date(timeIntervalSince1970: seconds) },
             report: { reports.append($0) }
         )
