@@ -27,7 +27,9 @@ public extension Engine {
             let template = try String(contentsOf: paths.profile.appendingPathComponent("aerospace/aerospace.toml"), encoding: .utf8)
             let settings = try ShortcutSettings.load(from: paths, aerospaceTemplate: template)
             let actual = try journal.preference("com.raycast.macos", "raycastGlobalHotkey") as? String
-            let spotlightConflict = settings.usesSpotlightKey && (try spotlightSearchEnabled())
+            let spotlightConflict: Bool
+            if settings.usesSpotlightKey { spotlightConflict = try spotlightSearchEnabled() }
+            else { spotlightConflict = false }
             let configured = actual == settings.raycastHotkey && !spotlightConflict
             let combination = settings.entries.first(where: { $0.provider == .raycast })?.shortcut.display ?? "configured hotkey"
             return GuideCheck(configured, "Expected: \(combination) opens Raycast. Enable Launch at login and test the configured shortcut in Raycast Settings.")
