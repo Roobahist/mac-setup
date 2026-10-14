@@ -426,12 +426,16 @@ public final class Engine {
         if file.lastPathComponent == "aerospace.toml",
            file.deletingLastPathComponent().lastPathComponent == "aerospace" {
             return Data(try WorkspaceConfiguration.load(from: paths)
-                .forSelectedTasks(selectedWorkspaceTaskIDs).aerospaceTOML(from: original).utf8)
+                .forSelectedTasks(selectedWorkspaceTaskIDs,
+                                  installedBundleIDs: Set(ApplicationDiscovery.scan(home: paths.home).map(\.bundleID)))
+                .aerospaceTOML(from: original).utf8)
         }
         if file.lastPathComponent == "sketchybarrc",
            file.deletingLastPathComponent().lastPathComponent == "sketchybar" {
             return Data(try WorkspaceConfiguration.load(from: paths)
-                .forSelectedTasks(selectedWorkspaceTaskIDs).sketchybarShell(from: original).utf8)
+                .forSelectedTasks(selectedWorkspaceTaskIDs,
+                                  installedBundleIDs: Set(ApplicationDiscovery.scan(home: paths.home).map(\.bundleID)))
+                .sketchybarShell(from: original).utf8)
         }
         if file.lastPathComponent == "geometry.sh" {
             let quoted = "'" + paths.config.appendingPathComponent("aerospace/aerospace.toml").path.replacingOccurrences(of: "'", with: "'\"'\"'") + "'"

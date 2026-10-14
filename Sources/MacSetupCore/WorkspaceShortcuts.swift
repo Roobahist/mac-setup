@@ -78,3 +78,26 @@ public struct WorkspaceShortcuts: Codable, Equatable {
         return .init(switchTo: .init(key: key), moveWindow: .init(key: key, modifiers: ["alt", "shift"]))
     }
 }
+
+
+// The modifiers are shared across every workspace. Individual workspace
+// definitions choose only the destination key.
+public struct WorkspaceKeymap: Codable, Equatable {
+    public var switchModifiers: [String]
+    public var moveModifiers: [String]
+
+    public init(switchModifiers: [String] = ["alt"],
+                moveModifiers: [String] = ["alt", "shift"]) {
+        self.switchModifiers = switchModifiers
+        self.moveModifiers = moveModifiers
+    }
+
+    public func validate() throws {
+        for modifiers in [switchModifiers, moveModifiers] {
+            try WorkspaceShortcut(key: "1", modifiers: modifiers).validate()
+        }
+        guard Set(switchModifiers) != Set(moveModifiers) else {
+            throw SetupError("Switch and move-window shortcuts must use different modifiers.")
+        }
+    }
+}

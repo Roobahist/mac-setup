@@ -77,22 +77,27 @@ final class FontGlyphTests: XCTestCase {
         XCTAssertThrowsError(try FontGlyphSelection(font: bad, symbol: "A").validate())
     }
 
-    func testDragOrderPreservesHiddenWorkspacesIconsAndCustomShortcuts() throws {
+    func testInsertionPreservesCardsIconsAndUnifiedKeys() throws {
         var config = WorkspaceConfiguration.defaultLayout
         let research = WorkspaceDefinition(id: "research", name: "Research", glyph: "book",
-            shortcuts: .init(switchTo: .init(key: "r", modifiers: ["ctrl", "alt"])), icon: .init(font: font, symbol: "R"))
+            shortcuts: .init(switchTo: .init(key: "r", modifiers: ["ctrl", "alt"])),
+            icon: .init(font: font, symbol: "R"))
         config.workspaces.append(research)
         config.moveWorkspace("research", to: "chatgpt", selectedTasks: ["aerospace-profile"])
         XCTAssertEqual(config.workspaces.first, research)
-        XCTAssertEqual(config.workspaces[12].id, "timer", "Hidden optional workspaces keep their saved position")
-        XCTAssertEqual(config.forSelectedTasks(["aerospace-profile"]).workspaces.last?.id, "notes")
-        XCTAssertEqual(config.shortcuts(at: 0).switchTo?.binding, "ctrl-alt-r")
+        XCTAssertEqual(config.workspaces.last?.id, "timer")
+        XCTAssertEqual(config.forSelectedTasks(["aerospace-profile"]).workspaces.last?.id, "timer")
+        XCTAssertEqual(config.shortcuts(at: 0).switchTo?.binding, "alt-r")
+        XCTAssertEqual(config.shortcuts(at: 0).moveWindow?.binding, "alt-shift-r")
         try config.validate()
-        let before = config
         config.moveWorkspace("research", to: "timer", selectedTasks: ["aerospace-profile"])
+        let beforeInvalidMove = config
         config.moveWorkspace("not-present", to: "research")
-        XCTAssertEqual(config, before)
+        XCTAssertEqual(config, beforeInvalidMove)
+        XCTAssertEqual(config.workspaces[config.workspaces.count - 2], research)
         config.moveWorkspace("research", to: "notes", selectedTasks: ["aerospace-profile"])
-        XCTAssertEqual(config.forSelectedTasks(["aerospace-profile"]).workspaces.last, research)
+        let notes = try XCTUnwrap(config.workspaces.firstIndex(where: { $0.id == "notes" }))
+        XCTAssertEqual(config.workspaces[notes - 1], research)
     }
+
 }
