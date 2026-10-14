@@ -153,6 +153,19 @@ public struct WorkspaceBarStyle: Codable, Equatable {
         self.emptyColor = emptyColor
     }
 
+    /// Render only the three palette values exposed by the workspace editor.
+    /// Keep wallpaper-driven HIGHLIGHT_COLOR and other user script settings.
+    public func colorsShell(from template: String) throws -> String {
+        try validate()
+        return template
+            .replacingOccurrences(of: "export BAR_COLOR=0x35000000",
+                                  with: "export BAR_COLOR=\(backgroundColor)")
+            .replacingOccurrences(of: "export BASE_WHITE=0xffffffff",
+                                  with: "export BASE_WHITE=\(occupiedColor)")
+            .replacingOccurrences(of: "export BASE_GRAY=0x30000000",
+                                  with: "export BASE_GRAY=\(emptyColor)")
+    }
+
     public func validate() throws {
         guard (16...52).contains(itemWidth), (0...100).contains(blurRadius) else {
             throw SetupError("Workspace spacing must be 16–52 and bar blur must be 0–100.")
