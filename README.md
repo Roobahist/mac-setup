@@ -48,13 +48,29 @@ The shortcut editor checks for duplicate combinations across all three providers
 
 
 
-The default number-row workspace shortcuts are **Option + key** for switching and **Option + Shift + key** for moving windows. Change these global modifier sets in the shortcut step. Each workspace card only controls the key itself. If no key is assigned, that workspace still appears in SketchyBar. Conflicting keys and reserved AeroSpace bindings are rejected.
+The default number-row workspace shortcuts are **Option + key** for switching and **Option + Shift + key** for moving windows. Raycast opens with **Option + R** by default. **Option + Return** launches macOS Terminal unless you select another installed terminal in the Karabiner shortcuts editor. Change these global modifier sets in the shortcut step. Each workspace card only controls the key itself. If no key is assigned, that workspace still appears in SketchyBar. Conflicting keys and reserved AeroSpace bindings are rejected.
 
 Earlier saved layouts are decoded and retain their chosen destination key; existing per-workspace modifier choices are normalized to the global modifier sets. Workspace configuration is saved in `~/Library/Application Support/mac-setup/workspaces.json`.
 
 ### Vorssaint defaults
 
 The bundled Vorssaint 3.4.1 native settings export is applied automatically during **Vorssaint preferences** setup, including the feature configuration and launch-at-login preference. The public snapshot includes over 700 portable settings. Personal text snippet contents are excluded so they cannot be published accidentally. macOS system permissions and login item approval still require explicit user authorization, but settings do not need to be recreated manually.
+
+### Terminal selection and interrupted setup
+
+Terminal installation is optional. A complete setup does not automatically install Alacritty because the Homebrew cask may be disabled. Install Ghostty, WezTerm, Kitty or another terminal if you prefer, or use the Terminal app already included with macOS. In the shortcuts editor, set the terminal launch binding to **Open application by bundle ID** to route it to your preferred emulator.
+
+If an installation fails, choose **Change selection** to return to the feature list, uncheck the unavailable app and any related profile, and press **Resume setup**. Completed steps stay completed, and the app continues without rescanning them. A failure can also be retried or left pending. Keep the app open while editing an interrupted run; cross-relaunch session recovery is not yet supported.
+
+The Raycast default is Option + R. Legacy configurations using the former Command + Space default are migrated once; customized launcher shortcuts remain unchanged.
+
+### Finder folder views
+
+macOS Finder uses global preferences for newly opened folders, but existing directories may keep their own `.DS_Store` view overrides. The optional **Reset saved folder view overrides** task backs up and removes these files under Desktop, Documents, Downloads, Movies, Music and Pictures. It intentionally excludes Library, hidden directories, application packages and symlinks. Clearing `.DS_Store` also resets per-folder icon positions and window layout, so this task requires explicit selection. Prior files can be restored using Mac Setup's recovery journal.
+
+### SketchyBar, AeroSpace and Dock
+
+Workspace inactive coloring follows our public dotfiles palette; the previously divergent gray value was corrected. SketchyBar geometry recalculation now responds to display change and wake events without a 15-second polling timer, avoiding redundant bar repaints. System Settings and Continuity auxiliary windows are kept floating instead of entering AeroSpace's tile tree. The Dock auto-hide delay is set to zero, though macOS can still apply its own animation and edge-trigger timing.
 
 ### Optional applications and routing
 
