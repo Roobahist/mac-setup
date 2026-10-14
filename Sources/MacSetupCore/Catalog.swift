@@ -66,8 +66,11 @@ public enum Catalog {
         SetupTask("sketchybar-profile", "Window management", "SketchyBar configuration", "Apply the workspace bar, clock, fonts and colors. Replaces the SketchyBar config folder after backup.", dependencies: ["sketchybar", "aerospace-profile", "fonts"], action: .profile(["sketchybar"])),
         SetupTask("sketchybar-start", "Window management", "Start SketchyBar at login", "Start the user-level Homebrew service, or restart it after applying the profile.", dependencies: ["sketchybar-profile", "aerospace-access"], action: .service),
         SetupTask("tomito", "Apps", "Tomito Pomodoro timer",
-                  "Optional Mac App Store Pomodoro timer. Add its timer workspace only when this task is selected.",
+                  "Optional Mac App Store timer. Its workspace remains even when Tomito is not installed.",
                   action: .appStore(app: "Tomito", url: "macappstore://itunes.apple.com/app/id1526042938")),
+        SetupTask("obsidian", "Apps", "Obsidian",
+                  "Install Obsidian for local notes. The Notes workspace stays available if this task is unchecked.",
+                  dependencies: ["homebrew"], action: .install(packages: ["obsidian"], cask: true, app: "Obsidian")),
         SetupTask("vorssaint", "Apps", "Vorssaint", "Install the modular macOS utility (Apple silicon, macOS 14+).", dependencies: ["homebrew"], action: .install(packages: ["vorssaint"], cask: true, app: "Vorssaint")),
         SetupTask("vorssaint-profile", "Apps", "Vorssaint preferences", "Apply the portable preference snapshot, including quit-on-last-window. Quit Vorssaint first. Private snippets, shelf contents and machine state are excluded.", dependencies: ["vorssaint"], action: .vorssaint),
         SetupTask("vorssaint-access", "Apps", "Vorssaint access and remaining settings", "Finish permissions and settings that cannot be transferred as public preferences.", dependencies: ["vorssaint-profile"], action: .guide(url: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility", app: "Vorssaint", instructions: [

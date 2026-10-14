@@ -107,17 +107,20 @@ public struct WorkspaceDefinition: Codable, Equatable {
     public var glyph: String
     public var apps: [String]
     public var requiresTask: String?
-    public var shortcuts: WorkspaceShortcuts?
+    public var shortcuts: WorkspaceShortcuts? // Decodes shortcuts saved by older app versions.
+    public var shortcutKey: String?
     public var icon: FontGlyphSelection?
 
     public init(id: String, name: String, glyph: String, apps: [String] = [], requiresTask: String? = nil,
-                shortcuts: WorkspaceShortcuts? = nil, icon: FontGlyphSelection? = nil) {
+                shortcuts: WorkspaceShortcuts? = nil, icon: FontGlyphSelection? = nil,
+                shortcutKey: String? = nil) {
         self.id = id
         self.name = name
         self.glyph = glyph
         self.apps = apps
         self.requiresTask = requiresTask
         self.shortcuts = shortcuts
+        self.shortcutKey = shortcutKey
         self.icon = icon
     }
 
@@ -132,8 +135,26 @@ public struct WorkspaceDefinition: Codable, Equatable {
 
 public struct WorkspaceConfiguration: Codable, Equatable {
     public var workspaces: [WorkspaceDefinition]
+    public var keymap: WorkspaceKeymap
 
-    public init(workspaces: [WorkspaceDefinition]) { self.workspaces = workspaces }
+    public init(workspaces: [WorkspaceDefinition], keymap: WorkspaceKeymap = .init()) {
+        self.workspaces = workspaces
+        self.keymap = keymap
+    }
+
+    private enum CodingKeys: String, CodingKey { case workspaces, keymap }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        workspaces = try values.decode([WorkspaceDefinition].self, forKey: .workspaces)
+        keymap = try values.decodeIfPresent(WorkspaceKeymap.self, forKey: .keymap) ?? .init()
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(workspaces, forKey: .workspaces)
+        try values.encode(keymap, forKey: .keymap)
+    }
 
     // Default shortcuts follow the number row. Additional workspaces can use custom shortcuts.
     public static let keys = ["backtick", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "minus", "equal"]
@@ -168,13 +189,29 @@ public struct WorkspaceConfiguration: Codable, Equatable {
         ])
     }
 
-    /// Hide only optional default workspaces whose application task was unchecked.
-    /// This does not delete unrelated workspaces, and does not mutate saved settings.
-    public func forSelectedTasks(_ taskIDs: Set<String>?) -> WorkspaceConfiguration {
-        guard let taskIDs else { return self }
-        return WorkspaceConfiguration(workspaces: workspaces.filter {
-            $0.requiresTask.map(taskIDs.contains) ?? true
-        })
+    /// Optional app choices change routing, not the existence of a workspace.
+    /// Installed apps are retained even when their installer task is unchecked.
+    public func forSelectedTasks(_ taskIDs: Set<String>?,
+                                 installedBundleIDs: Set<String>? = nil) -> WorkspaceConfiguration {
+        guard taskIDs != nil || installedBundleIDs != nil else { return self }
+        var copy = self
+        for index in copy.workspaces.indices {
+            copy.workspaces[index].apps.removeAll { bundle in
+                switch bundle {
+                case "com.tomito.tomito":
+                    return taskIDs.map { !$0.contains("tomito") } == true
+                        && !(installedBundleIDs?.contains(bundle) ?? false)
+                case "md.obsidian":
+                    return taskIDs.map { !$0.contains("obsidian") } == true
+                        && !(installedBundleIDs?.contains(bundle) ?? false)
+                case "com.spotify.client":
+                    return installedBundleIDs.map { !$0.contains(bundle) } ?? false
+                default:
+                    return false
+                }
+            }
+        }
+        return copy
     }
 
     /// Save visible edits without silently deleting workspaces hidden by an
@@ -186,7 +223,7 @@ public struct WorkspaceConfiguration: Codable, Equatable {
             guard let task = item.requiresTask, !selectedTasks.contains(task) else { continue }
             workspaces.insert(item, at: min(index, workspaces.count))
         }
-        let merged = WorkspaceConfiguration(workspaces: workspaces)
+        let merged = WorkspaceConfiguration(workspaces: workspaces, keymap: visible.keymap)
         try merged.validate()
         return merged
     }
@@ -211,7 +248,26 @@ public struct WorkspaceConfiguration: Codable, Equatable {
     }
 
     public func shortcuts(at index: Int) -> WorkspaceShortcuts {
-        workspaces[index].shortcuts ?? .defaultRow(at: index)
+        let item = workspaces[index]
+        let legacyKey: String? = item.shortcuts?.switchTo?.key ?? item.shortcuts?.moveWindow?.key
+        let key = item.shortcutKey ?? (item.shortcuts == nil
+            ? (Self.keys.indices.contains(index) ? Self.keys[index] : "")
+            : (legacyKey ?? ""))
+        guard !key.isEmpty else { return .init() }
+        return .init(
+            switchTo: .init(key: key, modifiers: keymap.switchModifiers),
+            moveWindow: .init(key: key, modifiers: keymap.moveModifiers)
+        )
+    }
+
+    /// Inserts the complete card at a boundary in the current order.
+    /// The destination is measured before removing the source item.
+    public mutating func insertWorkspace(_ sourceID: String, at destination: Int) {
+        guard let source = workspaces.firstIndex(where: { $0.id == sourceID }),
+              (0...workspaces.count).contains(destination) else { return }
+        let item = workspaces.remove(at: source)
+        let index = min(workspaces.count, destination > source ? destination - 1 : destination)
+        workspaces.insert(item, at: index)
     }
 
     /// Move within the displayed order while preserving hidden optional workspaces.
@@ -232,6 +288,7 @@ public struct WorkspaceConfiguration: Codable, Equatable {
         guard !workspaces.isEmpty else {
             throw SetupError("Keep at least one workspace.")
         }
+        try keymap.validate()
         var names = Set<String>()
         var applications = Set<String>()
         let allowedID = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-")
@@ -319,13 +376,13 @@ public struct WorkspaceConfiguration: Codable, Equatable {
         }.joined(separator: "\n")
         let bindings = """
         # Workspaces
-        # Default: Option + number-row key. Custom shortcuts are configured in Mac Setup.
+        # Switch and move modifiers are shared; workspace keys are configured in Mac Setup.
         # ------------------------------------------------------------
 
         \(shortcuts)
 
         # Move window to workspace
-        # Default: Option + Shift + number-row key. Each move shortcut can also be customized.
+        # The same key is used for switch and move, with separate global modifiers.
 
         \(moves)
 
