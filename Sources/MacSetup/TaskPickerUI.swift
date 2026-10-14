@@ -327,7 +327,7 @@ struct TaskPickerUI {
         let height = size.height
         let profile = state.preset?.title ?? "Custom"
         let step: SetupChrome.Step = reviewMode ? .review : .features
-        var lines = SetupChrome.header(
+        let header = SetupChrome.header(
             step: step,
             summary: reviewMode ? "REVIEW SELECTION   |   \(state.selectedCount) selected tasks"
                                 : "FEATURE SELECTION   |   \(state.selectedCount)/\(state.tasks.count) selected",
@@ -335,84 +335,51 @@ struct TaskPickerUI {
             width: width
         )
 
-        let footer: [String]
-        if reviewMode {
-            footer = [
-                SetupChrome.rule(width: width),
-                tint("  Enter Start setup   Esc / B Back to features   Q Cancel", "1;38;5;81"),
-                tint("  You can still change task selections before installation.", "38;5;245")
-            ]
-        } else if helpVisible {
-            footer = [
-                SetupChrome.rule(width: width),
-                tint("  Press any key to return to feature selection", "1;38;5;81"),
-                ""
-            ]
-        } else {
-            footer = [
-                SetupChrome.rule(width: width),
-                tint("  ↑↓ Move   Space Toggle   W Workspaces   Tab Category   / Search   Enter Continue", "1;38;5;81"),
-                tint("  1-4 Presets   A Visible tasks   U Update   ? Help   Q Quit", "38;5;245")
-            ]
-        }
+        var body: [String] = []
+        var detailTitle = ""
+        var detailDescription = ""
+        var detailStatus = ""
+        var primary = ""
+        var secondary = ""
 
         if reviewMode {
-            lines.append(tint("  REVIEW SELECTION", "1;38;5;81"))
-            lines.append("  \(state.selectedCount) tasks selected in the following categories:")
-            lines.append("")
+            body.append(tint("  REVIEW SELECTION", "1;38;5;81"))
+            body.append("  \(state.selectedCount) tasks selected in the following categories:")
+            body.append("")
             for category in state.categories.dropFirst() {
                 let count = state.tasks.filter { $0.category == category && state.selected.contains($0.id) }.count
-                if count > 0 { lines.append("    [x] \(category): \(count)") }
+                if count > 0 { body.append("    [x] \(category): \(count)") }
             }
-            lines += [
-                "",
-                "  Only checked tasks will run; installed unchecked parents satisfy dependencies.",
-                "  \(state.updates.count) installed task(s) marked for update.",
-                "  Every change still asks for confirmation, with recovery records where supported."
-            ]
+            detailTitle = "READY TO INSTALL"
+            detailDescription = "Checked tasks will run with previews, confirmation and recovery where supported."
+            detailStatus = "\(state.updates.count) installed task(s) marked for update."
+            primary = "Enter Start setup   Esc / B Back to features   Q Cancel"
+            secondary = "Review your choices before applying changes."
         } else if helpVisible {
-            lines.append(tint("  KEYBOARD HELP", "1;38;5;81"))
+            body.append(tint("  KEYBOARD HELP", "1;38;5;81"))
             for line in [
                 "  Dependencies form an indented tree. Shared prerequisites stay visible.",
                 "  Installed parents can remain unchecked while their children are selected.",
-                "  Unchecking a missing parent also unchecks dependents that require it.",
+                "  Unchecking a missing parent also unchecks dependent tasks.",
                 "  1-4 choose a preset. Space toggles the focused task.",
                 "  Tab and Shift+Tab switch categories. / starts a text filter.",
                 "  W opens workspace configuration; it also appears automatically before review.",
                 "  A toggles visible tasks. Esc clears the current search.",
                 "  Enter continues through workspace setup (if selected) and review.",
                 "  Q and Ctrl+C cancel."
-            ] { lines.append(clip(line, to: width - 1)) }
+            ] { body.append(clip(line, to: width - 1)) }
+            detailTitle = "KEYBOARD HELP"
+            detailDescription = "Navigate the setup with your keyboard; no changes are applied here."
+            detailStatus = "Press any key to return."
+            primary = "Any key Back to features"
+            secondary = "Nothing is installed until the review is confirmed."
         } else {
-            lines.append(tint("  INSTALLATION TASKS", "1;38;5;81"))
-            lines.append(tint("  1 Minimal   2 Productivity   3 Developer   4 Complete", "38;5;81"))
+            body.append(tint("  INSTALLATION TASKS", "1;38;5;81"))
+            body.append(tint("  1 Minimal   2 Productivity   3 Developer   4 Complete", "38;5;81"))
             if searchMode || !state.query.isEmpty {
-                lines.append(tint("  Search: \(state.query)" + (searchMode ? "▌" : ""), "1;38;5;81"))
+                body.append(tint("  Search: \(state.query)" + (searchMode ? "▌" : ""), "1;38;5;81"))
             } else {
-                lines.append(tint("  Select features to install. Changes still require confirmation.", "38;5;245"))
-            }
-
-            var details: [String] = [SetupChrome.rule(width: width)]
-            if let task = state.focusedTask {
-                details.append(tint("  \(task.title)", "1;38;5;81") +
-                               tint("   [\(taskStatus(task))]", "38;5;245"))
-                details.append("  " + clip(task.summary, to: width - 4))
-                for (index, parent) in task.dependencies.enumerated() {
-                    let label = state.tasks.first { $0.id == parent }?.title ?? parent
-                    let readiness = state.available.contains(parent) ? "installed/ready" :
-                        (state.unknown.contains(parent) ? "status unknown" : "not ready")
-                    details.append(tint((index == 0 ? "  Parents: " : "           ") +
-                                        label + " [" + parent + "] : " + readiness, "38;5;245"))
-                }
-            } else {
-                details.append(tint("  Choose a task or switch categories.", "38;5;245"))
-            }
-            let inspected = statusLookup.snapshot.count
-            details.append(tint(inspected < state.tasks.count
-                ? "  Checking installed tasks (\(inspected)/\(state.tasks.count)); selection changes unlock when finished."
-                : "  Inventory checked. Installed tasks are kept; U marks a package for update.", "38;5;245"))
-            if let workspaceMessage {
-                details.append(tint("  " + workspaceMessage, "38;5;114"))
+                body.append(tint("  Select features to install. Changes still require confirmation.", "38;5;245"))
             }
 
             let visible = state.visibleTasks
@@ -424,16 +391,15 @@ struct TaskPickerUI {
                     rows.append((nil, spacer))
                 }
             }
-
-            let available = max(2, height - lines.count - details.count - footer.count - 1)
+            let available = max(0, SetupChrome.bodyCapacity(height: height) - body.count)
             let focusedRow = rows.firstIndex { $0.index == state.cursorIndex } ?? 0
             let start = max(0, min(max(0, rows.count - available), focusedRow - available / 2))
             if visible.isEmpty {
-                lines.append(tint("  No matching tasks. Press Esc to clear the filter.", "38;5;221"))
+                body.append(tint("  No matching tasks. Press Esc to clear the filter.", "38;5;221"))
             }
             for row in rows[start..<min(rows.count, start + available)] {
                 guard let index = row.index else {
-                    lines.append(tint("       " + row.guide, "38;5;81"))
+                    body.append(tint("       " + row.guide, "38;5;81"))
                     continue
                 }
                 let task = visible[index]
@@ -443,51 +409,44 @@ struct TaskPickerUI {
                 let prefix = focused ? " ❯ " : "   "
                 let marker = checked ? "[x]" : "[ ]"
                 let tree = state.hierarchyPrefix(for: task)
-                let body = clip(prefix + marker + " " + tree + task.title, to: width - type.count - 5)
-                let padding = String(repeating: " ", count: max(2, width - 3 - body.count - type.count))
+                let bodyText = clip(prefix + marker + " " + tree + task.title, to: width - type.count - 5)
+                let padding = String(repeating: " ", count: max(2, width - 3 - bodyText.count - type.count))
                 if focused {
-                    lines.append(tint(body + padding + type, "1;38;5;231;48;5;24"))
+                    body.append(tint(bodyText + padding + type, "1;38;5;231;48;5;24"))
                 } else {
                     let checkbox = tint(prefix + marker + " ", checked ? "38;5;252" : "38;5;245")
                     let guide = tint(tree, "38;5;81")
-                    let label = String(body.dropFirst((prefix + marker + " " + tree).count))
+                    let label = String(bodyText.dropFirst((prefix + marker + " " + tree).count))
                     let style = !checked ? "38;5;245" : (tree.isEmpty ? "1;38;5;252" : "38;5;252")
-                    lines.append(checkbox + guide + tint(label, style) + padding +
-                                 tint(type, state.updates.contains(task.id) ? "38;5;221" : "38;5;245"))
+                    body.append(checkbox + guide + tint(label, style) + padding +
+                                tint(type, state.updates.contains(task.id) ? "38;5;221" : "38;5;245"))
                 }
             }
 
-            while lines.count < height - footer.count - details.count { lines.append("") }
-            lines += details
+            if let task = state.focusedTask {
+                detailTitle = "\(task.title)  [\(taskStatus(task))]"
+                detailDescription = task.summary
+            } else {
+                detailTitle = "INSTALLATION TASKS"
+                detailDescription = "Choose a task or switch categories."
+            }
+            let inspected = statusLookup.snapshot.count
+            detailStatus = workspaceMessage ?? (inspected < state.tasks.count
+                ? "Checking installed tasks (\(inspected)/\(state.tasks.count)); selection changes unlock when finished."
+                : "Inventory checked. Installed tasks are kept; U marks a package for update.")
+            primary = "↑↓ Move   Space Toggle   W Workspaces   Tab Category   / Search   Enter Continue"
+            secondary = "1-4 Presets   A Visible tasks   U Update   ? Help   Q Quit"
         }
 
-        while lines.count < height - footer.count { lines.append("") }
-        lines += footer
-        if lines.count > height { lines = Array(lines.prefix(height)) }
-        let output = lines.map { clipANSIText($0, width: width) }.joined(separator: "\r\n")
-        return "\u{001B}[H\u{001B}[2J" + output + "\r\n"
-    }
-
-    /// Truncate visible text without cutting ANSI color sequences in half.
-    private func clipANSIText(_ value: String, width: Int) -> String {
-        var rendered = ""
-        var visible = 0
-        var escape = false
-        for scalar in value.unicodeScalars {
-            if scalar == "\u{001B}" {
-                escape = true
-                rendered.append(String(scalar))
-                continue
-            }
-            if escape {
-                rendered.append(String(scalar))
-                if scalar == "m" { escape = false }
-                continue
-            }
-            if visible >= max(1, width - 1) { break }
-            rendered.append(String(scalar))
-            visible += 1
-        }
-        return rendered + "\u{001B}[0m"
+        let footer = SetupChrome.footer(
+            title: detailTitle,
+            description: detailDescription,
+            status: detailStatus,
+            primary: primary,
+            secondary: secondary,
+            width: width
+        )
+        return SetupChrome.render(header: header, body: body, footer: footer,
+                                  width: width, height: height)
     }
 }

@@ -45,10 +45,22 @@ def read_until(predicate, timeout=8.0):
             if not chunk:
                 break
             captured.extend(chunk)
-    raise AssertionError("Interactive picker did not reach the expected screen in time")
+    raise AssertionError("Interactive picker did not reach the expected screen in time. Screen start: " + repr(active_screen(bytes(captured))[:3000]) + " Screen end: " + repr(active_screen(bytes(captured))[-1300:]))
 
 def active_screen(data: bytes) -> bytes:
     return data.rsplit(b"\x1b[H\x1b[2J", 1)[-1]
+
+
+def assert_consistent_chrome(data: bytes, expected_stage: bytes) -> None:
+    rows = active_screen(data).split(b"\r\n")
+    assert len(rows) == 35, f"Expected 35 occupied rows in a 36-row terminal, got {len(rows)}"
+    assert b"MAC SETUP" in rows[0], "Navigation header must remain on the first row"
+    assert expected_stage in rows[0], "The current step is missing from the navigation"
+    assert b"selected" in rows[1].lower() or b"editable slots" in rows[1], "Missing step summary"
+    assert b"Profile:" in rows[2] or b"UNSAVED CHANGES" in rows[2], "Missing step context"
+    assert "\u2500".encode() in rows[3], "Missing top divider"
+    assert "\u2500".encode() in rows[-7] and "\u2500".encode() in rows[-3], "Footer dividers moved"
+    assert rows[-2].strip() and rows[-1].strip(), "Footer controls must be pinned to the bottom"
 
 
 def rendered_terminal_rows(data: bytes, private_use_width: int) -> list[str]:
@@ -148,6 +160,7 @@ try:
     initial = re.search(rb"(\d+)/(\d+) selected", active_screen(bytes(captured)))
     assert initial, "Initial selection count is missing"
     selected, total = map(int, initial.groups())
+    assert_consistent_chrome(bytes(captured), b"1 Features")
     os.write(master, b"u")
     read_until(lambda b: bool(re.search(rb"Homebrew[^\r\n]*UPDATE", active_screen(b))))
     assert f"{selected}/{total} selected".encode() in active_screen(bytes(captured))
@@ -188,6 +201,7 @@ try:
                and b"APP RULES" in active_screen(b)
                and b"G Glyph" in active_screen(b), timeout=15.0)
     workspace_screen = active_screen(bytes(captured))
+    assert_consistent_chrome(bytes(captured), b"2 Workspaces")
     assert b"MAC SETUP" in workspace_screen and b"2 Workspaces" in workspace_screen
     assert b"WORKSPACE ORDER" in workspace_screen
     assert b"SELECTED WORKSPACE" in workspace_screen, "Wide view should show inspector"
@@ -233,7 +247,9 @@ try:
                and b"2 Workspaces" in active_screen(b))
     os.write(master, b"k")
     read_until(lambda b: b"REVIEW SELECTION" in active_screen(b)
-               and b"3 Review" in active_screen(b))
+               and b"3 Review" in active_screen(b)
+               and b"Review your choices before applying changes." in active_screen(b))
+    assert_consistent_chrome(bytes(captured), b"3 Review")
     os.write(master, b"\x1b")  # Escape returns to selection, not setup
     read_until(lambda b: b"REVIEW SELECTION" not in active_screen(b)
                and b"Select features" in active_screen(b))

@@ -215,7 +215,7 @@ struct WorkspacePickerView {
         let leftWidth = wide ? max(62, (availableWidth * 63) / 100) : availableWidth
         let rightWidth = wide ? availableWidth - leftWidth - 3 : 0
         let includeID = leftWidth >= 66
-        let listHeight = max(1, height - (wide ? 12 : 15))
+        let listHeight = max(1, SetupChrome.bodyCapacity(height: height) - (wide ? 4 : 7))
         let range = selectionRange(total: layout.workspaces.count, limit: listHeight, cursor: selected)
         var left: [Line] = [
             Line("WORKSPACE ORDER", .accent),
@@ -255,7 +255,7 @@ struct WorkspacePickerView {
             Line(),
             Line("   ICON  GLYPH NAME            KEYWORDS / DESCRIPTION", .accent)
         ]
-        let pageRows = max(3, height - 15)
+        let pageRows = max(1, SetupChrome.bodyCapacity(height: height) - 10)
         for index in selectionRange(total: matches.count, limit: pageRows, cursor: resultCursor) {
             let glyph = matches[index]
             let label = fit(glyph.name, to: 20, padded: true)
@@ -305,7 +305,7 @@ struct WorkspacePickerView {
                  + fit("BUNDLE ID", to: bundleWidth, padded: true) + "  "
                  + "ASSIGNED TO", .accent)
         ]
-        let pageRows = max(3, height - 13)
+        let pageRows = max(1, SetupChrome.bodyCapacity(height: height) - 9)
         for index in selectionRange(total: matches.count, limit: pageRows, cursor: resultCursor) {
             let app = matches[index]
             let owner = layout.workspaces.firstIndex { $0.apps.contains(app.bundleID) }
@@ -386,7 +386,7 @@ struct WorkspacePickerView {
 
     func render() -> String {
         let saveState = modified ? "UNSAVED CHANGES" : "NO UNSAVED CHANGES"
-        var output = SetupChrome.header(
+        let header = SetupChrome.header(
             step: .workspaces,
             summary: "WORKSPACE EDITOR   |   \(layout.workspaces.count) of \(maximumWorkspaces) editable slots",
             context: "\(saveState)   |   \(guidedSetup ? "Keep existing layout or customize before review" : "Standalone configuration")",
@@ -401,15 +401,39 @@ struct WorkspacePickerView {
         case .editID, .editName, .manualApp: body = promptRows().map { styled($0, width: availableWidth) }
         case .confirmDelete, .confirmCancel: body = warningRows().map { styled($0, width: availableWidth) }
         }
-        let footers = shortcuts().map { styled($0, width: availableWidth) }
-        let status = message.isEmpty ? "" : styled(Line(message, .caution), width: availableWidth)
-        let bodySpace = max(0, height - output.count - footers.count - 3)
-        output += Array(body.prefix(bodySpace))
-        while output.count < height - footers.count - 3 { output.append("") }
-        output += [SetupChrome.rule(width: width), status] + footers
-        if output.count > height { output = Array(output.prefix(height)) }
-        // Prefix lines are limited in terminal cells before styling, so ANSI
-        // sequences can never be sliced or leave the next redraw colored.
-        return "\u{001B}[H\u{001B}[2J" + output.map { "  " + $0 }.joined(separator: "\r\n") + "\r\n"
+
+        let controls = shortcuts()
+        let status = !message.isEmpty ? message
+            : modified ? "Unsaved edits are not applied until you save them."
+            : "Workspace configuration is unchanged."
+        let title: String
+        let description: String
+        switch page {
+        case .workspaces:
+            title = "\(workspace.name)  [\(workspace.id)]   |   \(workspace.apps.count) app rules"
+            description = "Edit the selected workspace's shortcut order, label, glyph or application assignments."
+        case .glyphs:
+            title = "GLYPH LIBRARY   |   \(workspace.name)"
+            description = "Type to filter glyph names; select one with Enter."
+        case .apps:
+            title = "APP ROUTING   |   \(workspace.name)"
+            description = "Filter installed apps by name or bundle ID and toggle their workspace assignments."
+        case .editID, .editName, .manualApp:
+            title = "EDIT WORKSPACE   |   \(workspace.name)"
+            description = "Enter a new value, then confirm or cancel."
+        case .confirmDelete, .confirmCancel:
+            title = "CONFIRM ACTION"
+            description = "Review the change before confirming."
+        }
+        let footer = SetupChrome.footer(
+            title: title,
+            description: description,
+            status: status,
+            primary: controls.first?.text ?? "Esc Back",
+            secondary: controls.dropFirst().first?.text ?? "Use the keys above to confirm or cancel.",
+            width: width
+        )
+        return SetupChrome.render(header: header, body: body, footer: footer,
+                                  width: width, height: height, indentBody: true)
     }
 }
