@@ -16,6 +16,15 @@ final class TaskPickerStateTests: XCTestCase {
         XCTAssertTrue(edited.selected.contains("aerospace-profile"))
     }
 
+    func testRepairIncludesEssentialStartupAndNativeMenuBar() {
+        let repair = TaskPickerState(preset: .repair)
+        let complete = TaskPickerState(preset: .complete)
+        for id in ["startup-login", "menu-bar-background"] {
+            XCTAssertTrue(repair.selected.contains(id))
+            XCTAssertTrue(complete.selected.contains(id))
+        }
+    }
+
     func testTerminalInstallersAndFolderResetNeedOptIn() {
         let state = TaskPickerState(preset: .complete)
         for id in ["alacritty", "alacritty-profile", "ghostty", "wezterm", "kitty", "finder-reset-views"] {

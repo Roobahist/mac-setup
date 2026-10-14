@@ -11,6 +11,7 @@ final class FakeRunner: CommandRunning {
     var managedPackages = Set<String>()
     var homebrewInstalled = false
     var simulatedInstalledApps = Set<String>()
+    var loginItemPaths = Set<String>()
 
     func run(_ executable: String, _ args: [String], interactive: Bool, input: Data?) throws -> CommandResult {
         calls.append([executable] + args)
@@ -47,6 +48,21 @@ final class FakeRunner: CommandRunning {
             default: XCTFail("Unexpected launchctl command")
             }
             return CommandResult(status: 0)
+        }
+        if executable == "/usr/bin/osascript" {
+            guard args.count == 4, args[0] == "-e" else { return CommandResult(status: 1) }
+            let operation = args[2], path = args[3]
+            let exists = loginItemPaths.contains(path)
+            switch operation {
+            case "check": return CommandResult(status: 0, output: Data((exists ? "present" : "missing").utf8))
+            case "add":
+                loginItemPaths.insert(path)
+                return CommandResult(status: 0, output: Data((exists ? "present" : "added").utf8))
+            case "remove":
+                loginItemPaths.remove(path)
+                return CommandResult(status: 0, output: Data((exists ? "removed" : "missing").utf8))
+            default: return CommandResult(status: 1)
+            }
         }
         if executable == "/usr/bin/defaults" {
             let operation = args[0], domain = args[1]
@@ -116,6 +132,44 @@ final class EngineTests: XCTestCase {
         return url
     }
 
+
+    func testEssentialLoginItemsAreAdditiveAndReversible() throws {
+        for name in StartupLoginItems.appNames {
+            _ = try write("Applications/\(name).app/Contents/Info.plist", "placeholder")
+        }
+        let additional = "/Applications/Existing Utility.app"
+        runner.loginItemPaths.insert(additional)
+        let aero = home.appendingPathComponent("Applications/AeroSpace.app").path
+        runner.loginItemPaths.insert(aero)
+        let task = try Catalog.task("startup-login")
+
+        XCTAssertEqual(try engine.state(task), .ready)
+        let transaction = try engine.apply(task)
+        let expected = Set(StartupLoginItems.appNames.map {
+            home.appendingPathComponent("Applications/\($0).app").path
+        })
+        XCTAssertTrue(expected.isSubset(of: runner.loginItemPaths))
+        XCTAssertTrue(runner.loginItemPaths.contains(additional))
+        XCTAssertEqual(try engine.state(task), .done)
+
+        // Existing entries must not be removed when restoring the transaction.
+        try engine.journal.restore(transaction)
+        XCTAssertEqual(runner.loginItemPaths, [aero, additional])
+    }
+
+    func testStartupScriptCompilesOnMacOS() throws {
+        let output = home.appendingPathComponent("startup-login.scpt")
+        let result = try ProcessRunner().run("/usr/bin/osacompile",
+            ["-e", StartupLoginItems.script, "-o", output.path])
+        XCTAssertEqual(result.status, 0, result.text)
+    }
+
+    func testNoStartupAppCreatesSpuriousLoginItem() throws {
+        let task = try Catalog.task("startup-login")
+        let transaction = try engine.apply(task)
+        XCTAssertTrue(runner.loginItemPaths.isEmpty)
+        XCTAssertEqual(try engine.journal.transactions.first(where: { $0.id == transaction })?.changes.count, 0)
+    }
 
     func testInterruptedCaskIsReinstalledAndRerunIsIdempotent() throws {
         let task = try Catalog.task("karabiner")

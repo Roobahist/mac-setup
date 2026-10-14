@@ -22,6 +22,7 @@ public enum TaskAction {
     case service
     case accent
     case wallpaperWatcher
+    case loginItems(names: [String])
     case guide(url: String?, app: String?, instructions: [String])
 }
 
@@ -146,6 +147,11 @@ public enum Catalog {
             Preference("NSGlobalDomain", "AppleMenuBarVisibleInFullscreen", false),
             Preference("NSGlobalDomain", "AppleMenuBarVisibleInDesktop", false)
         ], restart: "SystemUIServer")),
+        SetupTask("menu-bar-background", "Appearance", "Native menu bar background",
+                  "On macOS 26 and newer, make the system menu bar visually distinct from SketchyBar when revealed.",
+                  dependencies: ["menu-bar"],
+                  action: menuBarBackgroundAction(macOSMajorVersion:
+                      ProcessInfo.processInfo.operatingSystemVersion.majorVersion)),
         SetupTask("trackpad", "Appearance", "Two-finger secondary click", "Enable two-finger right-click and disable corner secondary clicks for built-in and Bluetooth trackpads. Tap-to-click is preserved; a logout may be needed.", action: .preferences([
             Preference("com.apple.AppleMultitouchTrackpad", "TrackpadRightClick", true),
             Preference("com.apple.AppleMultitouchTrackpad", "TrackpadCornerSecondaryClick", 0),
@@ -165,8 +171,27 @@ public enum Catalog {
             "Approve the macOS authentication prompt yourself; permission given to Mac Setup does not authorize WallpaperAccentWatcher.",
             "Quit and reopen WallpaperAccentWatcher after approving access. Change the wallpaper again and mark this task complete only after you see the accent update.",
             "Do not run another wallpaper watcher alongside WallpaperAccentWatcher. Permissions are never granted automatically."
-        ]))
+        ])),
+        SetupTask("startup-login", "Apps", "Start essential apps at login",
+                  "Register installed AeroSpace, Karabiner-Elements and Raycast in Open at Login without removing existing items. SketchyBar and the wallpaper accent watcher keep their own background services.",
+                  action: .loginItems(names: StartupLoginItems.appNames))
     ]
+
+    /// Apple exposes this switch through System Settings rather than a documented
+    /// stable defaults key. Avoid writing speculative preferences system-wide.
+    public static func menuBarBackgroundAction(macOSMajorVersion: Int) -> TaskAction {
+        guard macOSMajorVersion >= 26 else {
+            return .guide(url: nil, app: nil, instructions: [
+                "This macOS version already provides a native menu bar background. No extra setting is required."
+            ])
+        }
+        return .guide(url: "x-apple.systempreferences:",
+                      app: nil, instructions: [
+            "Open System Settings > Menu Bar.",
+            "Enable Show menu bar background. This adds a native blurred layer when the auto-hidden menu bar is revealed over SketchyBar.",
+            "Move the pointer to the top edge to confirm that macOS menu titles are legible. This keeps Liquid Glass and SketchyBar's own design unchanged."
+        ])
+    }
 
     public static func appearanceInstructions(macOSMajorVersion: Int) -> [String] {
         var instructions = [

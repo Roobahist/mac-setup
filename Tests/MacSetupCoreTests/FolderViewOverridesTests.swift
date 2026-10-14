@@ -56,6 +56,6 @@ final class FolderViewOverridesTests: XCTestCase {
         XCTAssertFalse(bar.contains("update_freq=15"))
         let aerospace = try String(contentsOf: Paths().profile.appendingPathComponent("aerospace/aerospace.toml"),
                                    encoding: .utf8)
-        XCTAssertTrue(aerospace.contains("com.apple.systempreferences'\nrun = 'layout floating'"))
+        XCTAssertTrue(aerospace.contains("com.apple.systempreferences'\nrun = 'layout tiling'"))
     }
 }

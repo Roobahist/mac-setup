@@ -98,6 +98,17 @@ public final class Engine {
         case .wallpaperWatcher:
             guard WallpaperWatcher.executable(paths: paths) != nil else { return .blocked }
             return try journal.launchAgentLoaded(WallpaperWatcher.label) ? .done : .ready
+        case let .loginItems(names):
+            // Inspect only our own journal during initial inventory, never
+            // prompt System Events just to draw the feature-selection screen.
+            let apps = StartupLoginItems.installedPaths(names: names, home: paths.home)
+            guard !apps.isEmpty else { return .ready }
+            return journal.transactions.contains { record in
+                record.task == task.id && record.complete &&
+                apps.allSatisfy { app in
+                    record.changes.contains { $0.kind == .loginItem && $0.target == app && !$0.restored }
+                }
+            } ? .done : .ready
         case .accent: return .ready // A new wallpaper needs a new extraction.
         case .guide:
             if ["aerospace-access", "karabiner-access", "raycast-access"].contains(task.id),
@@ -152,6 +163,11 @@ public final class Engine {
         case .service: lines.append("Start or restart the SketchyBar user service. Never run Homebrew as root.")
         case .accent:
             lines.append("Read the current wallpaper locally and write a validated accent into the local cache, without editing tracked dotfiles. No background watcher is installed.")
+        case let .loginItems(names):
+            let installed = StartupLoginItems.installedPaths(names: names, home: paths.home)
+            lines.append("Register installed apps in System Settings > General > Login Items & Extensions > Open at Login, preserving other items.")
+            lines += installed.map { "Add at login if missing: \($0)" }
+            lines.append("System Events may request macOS Automation approval. SketchyBar starts through Homebrew and WallpaperAccentWatcher through its LaunchAgent; no duplicate entries are created for those background jobs.")
         case .wallpaperWatcher:
             lines.append("Use the existing WallpaperAccentWatcher.app in ~/Applications or /Applications. Preserve its two-second checks and debounce behavior; no replacement runtime is installed.")
             lines.append("An already registered app and its launch configuration are left unchanged. Otherwise, register it at login after backing up its existing plist.")
@@ -254,6 +270,10 @@ public final class Engine {
             case .service: try journal.startService(transaction: id)
             case .accent: try applyAccent(transaction: id, image: image)
             case .wallpaperWatcher: try installWallpaperWatcher(transaction: id, image: image)
+            case let .loginItems(names):
+                for path in StartupLoginItems.installedPaths(names: names, home: paths.home) {
+                    try journal.registerLoginItem(path, transaction: id)
+                }
             case .guide: break
             }
             try journal.finish(id)

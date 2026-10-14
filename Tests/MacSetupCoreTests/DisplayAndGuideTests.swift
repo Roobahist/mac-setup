@@ -11,6 +11,19 @@ final class DisplayAndGuideTests: XCTestCase {
         XCTAssertTrue(equalPreference("resolution", "resolution"))
     }
 
+    func testNativeMenuBarBackgroundStepOnlyRequiresTahoe() {
+        let older = Catalog.menuBarBackgroundAction(macOSMajorVersion: 15)
+        let tahoe = Catalog.menuBarBackgroundAction(macOSMajorVersion: 26)
+        guard case let .guide(oldURL, _, oldInstructions) = older,
+              case let .guide(newURL, _, newInstructions) = tahoe else {
+            return XCTFail("Expected guided native menu bar instructions")
+        }
+        XCTAssertNil(oldURL)
+        XCTAssertEqual(newURL, "x-apple.systempreferences:")
+        XCTAssertTrue(oldInstructions.joined().contains("No extra setting"))
+        XCTAssertTrue(newInstructions.joined().contains("Show menu bar background"))
+    }
+
     func testAppearanceInstructionsRespectOSAvailability() {
         let earlier = Catalog.appearanceInstructions(macOSMajorVersion: 15)
         let newer = Catalog.appearanceInstructions(macOSMajorVersion: 26)
