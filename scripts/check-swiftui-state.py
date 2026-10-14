@@ -15,7 +15,7 @@ if alias not in compat.read_text(encoding="utf-8"):
 offenders = []
 for path in sorted(sources.glob("*.swift")):
     for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-        if re.match(r"\\s*@State\\b", line):
+        if re.match(r"\s*@State\b", line):
             offenders.append(f"{path.relative_to(root)}:{line_number}")
 
 if offenders:
