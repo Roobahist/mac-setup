@@ -19,6 +19,7 @@ struct WorkspacePickerView {
     let message: String
     let modified: Bool
     let guidedSetup: Bool
+    let maximumWorkspaces: Int
     let width: Int
     let height: Int
 
@@ -387,7 +388,7 @@ struct WorkspacePickerView {
         let saveState = modified ? "UNSAVED CHANGES" : "NO UNSAVED CHANGES"
         var output = SetupChrome.header(
             step: .workspaces,
-            summary: "WORKSPACE EDITOR   |   \(layout.workspaces.count) of \(WorkspaceConfiguration.keys.count) slots",
+            summary: "WORKSPACE EDITOR   |   \(layout.workspaces.count) of \(maximumWorkspaces) editable slots",
             context: "\(saveState)   |   \(guidedSetup ? "Keep existing layout or customize before review" : "Standalone configuration")",
             width: width
         )
