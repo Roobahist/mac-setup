@@ -12,6 +12,7 @@ if [[ ! -d "$PROFILE_DIR" ]]; then PROFILE_DIR="$BIN_DIR/MacSetup_MacSetupCore.b
 cp -RX "$PROFILE_DIR" "$APP_DIR/Contents/Resources/"
 cp -X "$(dirname "$PROFILE_DIR")/MacSetup.icns" "$APP_DIR/Contents/Resources/MacSetup.icns"
 cp -X "$BIN_DIR/mac-setup-display" "$APP_DIR/Contents/Helpers/mac-setup-display"
+cp -X "$BIN_DIR/mac-setup-wallpaper-watcher" "$APP_DIR/Contents/Helpers/mac-setup-wallpaper-watcher"
 cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -29,6 +30,7 @@ cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
 </dict></plist>
 PLIST
 codesign --force --sign - "$APP_DIR/Contents/Helpers/mac-setup-display"
+codesign --force --sign - "$APP_DIR/Contents/Helpers/mac-setup-wallpaper-watcher"
 codesign --force --sign - "$APP_DIR/Contents/MacOS/mac-setup"
 codesign --force --sign - "$APP_DIR"
 

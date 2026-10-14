@@ -243,7 +243,8 @@ do {
     case "watch":
         try WallpaperWatcher.run(engine: engine, image: options.image, once: options.once)
     case "watcher-status":
-        print(try engine.journal.launchAgentLoaded(WallpaperWatcher.label) ? "Startup watcher: registered" : "Startup watcher: not registered")
+        let active = try WallpaperWatcher.runningLabel(journal: engine.journal)
+        print(active.map { "Startup watcher: registered (\($0))" } ?? "Startup watcher: not registered")
         print("Registration does not verify wallpaper access. Change wallpapers to test the visible result.")
         for name in ["wallpaper-accent-watcher.log", "wallpaper-accent-watcher.stdout.log", "wallpaper-accent-watcher.stderr.log"] {
             let file = URL(fileURLWithPath: "/tmp").appendingPathComponent(name)
@@ -257,7 +258,9 @@ do {
         guard options.yes || (isatty(STDIN_FILENO) != 0 && ask("Stop the startup wallpaper watcher?")) else { print("Cancelled."); break }
         let lock = try SetupLock(paths: engine.paths)
         defer { withExtendedLifetime(lock) {} }
-        try engine.journal.stopLaunchAgent(WallpaperWatcher.label)
+        if let active = try WallpaperWatcher.runningLabel(journal: engine.journal) {
+            try engine.journal.stopLaunchAgent(active)
+        }
         print("Stopped. The startup plist remains; setup wallpaper-watcher can register it again. Restore its backup to remove this installation.")
     case "watcher-disable", "watcher-enable":
         let enabled = options.command == "watcher-enable"
