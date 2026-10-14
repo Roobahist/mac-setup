@@ -13,7 +13,9 @@ final class SetupModel: ObservableObject {
     @Published var shortcuts = ShortcutSettings(entries: [])
     @Published private(set) var appliedLayout = WorkspaceConfiguration.defaultLayout
     @Published private(set) var appliedShortcuts = ShortcutSettings(entries: [])
-    var workspaceHasDraftChanges: Bool { layout.workspaces != appliedLayout.workspaces }
+    var workspaceHasDraftChanges: Bool {
+        layout.workspaces != appliedLayout.workspaces || layout.barStyle != appliedLayout.barStyle
+    }
     var shortcutsHaveDraftChanges: Bool { shortcuts != appliedShortcuts || layout.keymap != appliedLayout.keymap }
     @Published var pausedSetup = false
     let aerospaceTemplate: String

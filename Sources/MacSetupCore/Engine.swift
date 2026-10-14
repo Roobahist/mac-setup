@@ -242,8 +242,13 @@ public final class Engine {
                     }
                 }
                 guard try state(task) == .done else { throw SetupError("Profile verification failed.") }
-                if directories.contains("sketchybar"), (try? journal.serviceStarted()) == true {
-                    try journal.startService(transaction: id)
+                if directories.contains("sketchybar") {
+                    // A running graphical SketchyBar must actually reload the
+                    // generated files. Do not silently accept a stale menu.
+                    if let sketchybar = executable("sketchybar"),
+                       (try? journal.serviceStarted()) == true {
+                        try runner.checked(sketchybar, ["--reload"])
+                    }
                 }
                 if directories.contains("aerospace"), let tool = executable("aerospace") {
                     let running = try runner.run(tool, ["list-workspaces", "--all"])
@@ -481,6 +486,19 @@ public final class Engine {
         if file.lastPathComponent == "karabiner.json",
            file.deletingLastPathComponent().lastPathComponent == "karabiner" {
             return try shortcutSettings().karabinerData(from: Data(original.utf8))
+        }
+        if file.lastPathComponent == "colors.sh",
+           file.deletingLastPathComponent().lastPathComponent == "plugins",
+           file.deletingLastPathComponent().deletingLastPathComponent().lastPathComponent == "sketchybar" {
+            let style = try WorkspaceConfiguration.load(from: paths).barStyle
+            let colors = original
+                .replacingOccurrences(of: "export BAR_COLOR=0x35000000",
+                                      with: "export BAR_COLOR=\(style.backgroundColor)")
+                .replacingOccurrences(of: "export BASE_WHITE=0xffffffff",
+                                      with: "export BASE_WHITE=\(style.occupiedColor)")
+                .replacingOccurrences(of: "export BASE_GRAY=0x30000000",
+                                      with: "export BASE_GRAY=\(style.emptyColor)")
+            return Data(colors.utf8)
         }
         // Render user-specific workspace settings without writing into public dotfiles.
         if file.lastPathComponent == "aerospace.toml",
