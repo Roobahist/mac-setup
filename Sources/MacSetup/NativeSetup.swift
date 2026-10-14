@@ -204,6 +204,19 @@ private final class SetupModel: ObservableObject {
 private struct SetupView: View {
     @ObservedObject var model: SetupModel
 
+    private var visibleWorkspaceIndices: [Int] {
+        model.layout.workspaces.indices.filter { i in
+            model.layout.workspaces[i].requiresTask.map(model.picker.selected.contains) ?? true
+        }
+    }
+
+    private func moveWorkspace(_ i: Int, by direction: Int) {
+        guard let position = visibleWorkspaceIndices.firstIndex(of: i) else { return }
+        let destination = position + direction
+        guard visibleWorkspaceIndices.indices.contains(destination) else { return }
+        model.layout.workspaces.swapAt(i, visibleWorkspaceIndices[destination])
+    }
+
     private var step: Int {
         switch model.page {
         case .features: return 1
@@ -298,17 +311,17 @@ private struct SetupView: View {
                 }
                 Spacer(); Text(Date(), style: .time).font(.system(size: 17, weight: .bold, design: .monospaced))
             }.padding(16).background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
-            ForEach(model.layout.workspaces.indices, id: \.self) { i in
+            ForEach(visibleWorkspaceIndices, id: \.self) { i in
                 HStack {
-                    Text("⌥ \(keyName(WorkspaceConfiguration.keys[i]))").font(.system(.body, design: .monospaced)).frame(width: 60, alignment: .leading)
+                    Text("⌥ \(keyName(WorkspaceConfiguration.keys[visibleWorkspaceIndices.firstIndex(of: i)!]))").font(.system(.body, design: .monospaced)).frame(width: 60, alignment: .leading)
                     TextField("Name", text: $model.layout.workspaces[i].name).frame(width: 130)
                     Picker("Icon", selection: $model.layout.workspaces[i].glyph) {
                         ForEach(WorkspaceGlyph.all, id: \.name) { glyph in Text(glyph.name.capitalized).tag(glyph.name) }
                     }.frame(width: 150)
                     Button("Apps (\(model.layout.workspaces[i].apps.count))") { model.selectedWorkspace = i; model.appSheet = true }
                     Spacer()
-                    Button { model.layout.workspaces.swapAt(i, i - 1) } label: { Image(systemName: "arrow.up") }.disabled(i == 0).help("Move workspace earlier")
-                    Button { model.layout.workspaces.swapAt(i, i + 1) } label: { Image(systemName: "arrow.down") }.disabled(i == model.layout.workspaces.count - 1).help("Move workspace later")
+                    Button { moveWorkspace(i, by: -1) } label: { Image(systemName: "arrow.up") }.disabled(i == visibleWorkspaceIndices.first).help("Move workspace earlier")
+                    Button { moveWorkspace(i, by: 1) } label: { Image(systemName: "arrow.down") }.disabled(i == visibleWorkspaceIndices.last).help("Move workspace later")
                     Button { model.layout.workspaces.remove(at: i) } label: { Image(systemName: "minus.circle") }.disabled(model.layout.workspaces.count == 1).help("Remove workspace")
                 }
             }
@@ -446,10 +459,11 @@ private struct SetupView: View {
 }
 
 enum NativeSetup {
-    static func run(ids: [String]? = nil, preset: SetupPreset? = nil) throws {
+    static func run(ids: [String]? = nil, preset: SetupPreset? = nil, workspaceEditor: Bool = false) throws {
         let app = NSApplication.shared
         app.setActivationPolicy(.regular)
         let model = try SetupModel(ids: ids, preset: preset)
+        if workspaceEditor { model.page = .workspaces }
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 930, height: 760), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         window.title = "Mac Setup"
         window.contentView = NSHostingView(rootView: SetupView(model: model))
@@ -467,7 +481,7 @@ private final class SetupWindowDelegate: NSObject, NSWindowDelegate {
     let model: SetupModel
     init(model: SetupModel) { self.model = model }
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        if model.busy {
+        if model.busy && model.page != .features {
             let alert = NSAlert()
             alert.messageText = "An installer is still running"
             alert.informativeText = "Keep setup open until this task finishes."

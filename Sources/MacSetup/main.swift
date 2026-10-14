@@ -230,6 +230,10 @@ do {
         try NativeSetup.run(ids: ids, preset: options.preset)
         exit(0)
     }
+    if options.command == "workspaces" {
+        try NativeSetup.run(ids: ["aerospace-profile", "sketchybar-profile", "aerospace-access", "sketchybar-start"], workspaceEditor: true)
+        exit(0)
+    }
     switch options.command {
     case "watch":
         try WallpaperWatcher.run(engine: engine, image: options.image, once: options.once)
