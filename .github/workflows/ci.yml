@@ -40,3 +40,17 @@ jobs:
             dist/*.tar.gz
             dist/*.sha256
           retention-days: 7
+
+  # Xcode 27 changes SwiftUI @State into a macro. Check against its real
+  # compiler and SDK rather than relying solely on the macOS 15 runner.
+  xcode-27-compat:
+    runs-on: xcode-27
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify SwiftUI macro toolchain and compile targets
+        run: |
+          xcode-select -p
+          swift --version
+          swift test --build-system native
+      - name: Build native app bundle
+        run: bash scripts/package.sh arm64 preview
