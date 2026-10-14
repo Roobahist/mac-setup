@@ -29,6 +29,15 @@ cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
 <key>NSHighResolutionCapable</key><true/>
 </dict></plist>
 PLIST
+APP_VERSION="${MAC_SETUP_RELEASE_VERSION:-0.5.0}"
+if [[ "$APP_VERSION" =~ ^v?[0-9]+[.][0-9]+[.][0-9]+$ ]]; then
+  /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${APP_VERSION#v}" "$APP_DIR/Contents/Info.plist"
+elif [[ "$APP_VERSION" == "preview" ]]; then
+  : # Development preview keeps the default numeric app bundle version.
+else
+  echo "Invalid app version: $APP_VERSION" >&2
+  exit 1
+fi
 codesign --force --sign - "$APP_DIR/Contents/Helpers/mac-setup-display"
 codesign --force --sign - "$APP_DIR/Contents/Helpers/mac-setup-wallpaper-watcher"
 codesign --force --sign - "$APP_DIR/Contents/MacOS/mac-setup"

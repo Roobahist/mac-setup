@@ -3,14 +3,14 @@ import Darwin
 import MacSetupCore
 
 let help = """
-mac-setup 0.5.0 | interactive setup for your Mac
+mac-setup \(MacSetupVersion.installed) | customize and configure your Mac
 
 Usage:
-  mac-setup                     Open the native Swift setup app
+  mac-setup                     Open the native customization control center
   mac-setup list                List task IDs
   mac-setup status              Inspect the current setup (read-only)
   mac-setup plan [task IDs]      Preview tasks and prerequisites (read-only)
-  mac-setup setup [task IDs]     Review and apply selected tasks in the Swift app
+  mac-setup setup [task IDs]     Open the guided setup for selected tasks
   mac-setup setup --all          Walk through all tasks (including unfinished)
   mac-setup setup --preset minimal    Run a curated selection
   mac-setup profiles             Show available selection presets
@@ -223,12 +223,13 @@ func setup(_ ids: [String], engine: Engine, options: Options) throws {
 do {
     var options = try Options(Array(CommandLine.arguments.dropFirst()))
     if options.command == "help" { print(help); exit(0) }
-    if options.command == "version" { print("0.5.0"); exit(0) }
+    if options.command == "version" { print(MacSetupVersion.installed); exit(0) }
     guard getuid() != 0 else { throw SetupError("Run mac-setup as your normal user, not with sudo. Individual installers request privileges themselves.") }
     let engine = try Engine()
     if options.command == "menu" || options.command == "gui" || (options.command == "setup" && !options.yes && !options.dryRun) {
         let ids = options.all ? Catalog.tasks.map(\.id) : (options.ids.isEmpty ? nil : options.ids)
-        try NativeSetup.run(ids: ids, preset: options.preset)
+        try NativeSetup.run(ids: ids, preset: options.preset,
+                            guided: options.command == "setup" || options.preset != nil || options.all)
         exit(0)
     }
     if options.command == "workspaces" {
