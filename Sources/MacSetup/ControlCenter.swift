@@ -254,12 +254,7 @@ struct ControlCenterView: View {
 
             if !compactSidebar {
                 HStack(spacing: 8) {
-                    if compactSidebar {
-                        Image(systemName: "info.circle")
-                            .help("Version \(MacSetupVersion.installed)")
-                    } else {
-                        Text("Version \(MacSetupVersion.installed)")
-                    }
+                    Text("Version \(MacSetupVersion.installed)")
                     Spacer(minLength: 0)
                     Circle().fill(model.busy ? Color.orange : Color.green)
                         .frame(width: 7, height: 7)
@@ -273,19 +268,11 @@ struct ControlCenterView: View {
         }
     }
 
-    /// Preserve the original Label in expanded mode. The collapsed mode uses
-    /// that same native List row with only its title hidden, never a new button.
-    @ViewBuilder private func sidebarLabel(_ item: ControlDestination) -> some View {
-        if compactSidebar {
-            Label(item.title, systemImage: item.symbol)
-                .labelStyle(.iconOnly)
-                .help(item.title)
-                .accessibilityLabel(item.title)
-        } else {
-            Label(item.title, systemImage: item.symbol)
-        }
+    // This is used only by the expanded native List. Compact mode never
+    // attempts to squeeze a text-bearing List row into the icon rail.
+    private func sidebarLabel(_ item: ControlDestination) -> some View {
+        Label(item.title, systemImage: item.symbol)
     }
-
 
     private func compactRow(_ item: ControlDestination) -> some View {
         Button { selectDestination(item) } label: {
