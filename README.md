@@ -22,12 +22,12 @@ The installer creates `~/Applications/Mac Setup.app` as a link to the managed bu
 ## How setup works
 
 1. **Choose features.** Select a preset or individual tasks. Existing apps are kept; Obsidian and Tomito are optional installers.
-2. **Keyboard shortcuts.** Confirm the shortcuts owned by AeroSpace, Karabiner, and Raycast. The global workspace switch and move-window modifiers are adjustable here, with one consistent base for all workspaces. AeroSpace manages focus, moving and resizing windows; Karabiner handles app launch mappings; Raycast uses Command+Space.
+2. **Keyboard shortcuts.** Browse the AeroSpace, Karabiner, and Raycast shortcut sections. Add, edit, disable, or remove supported action bindings, and choose consistent modifiers for workspace switching and moving windows. Raycast has one editable launcher hotkey. Changes are written into the actual provider profiles and preferences; no redundant confirmation checkbox is required.
 3. **Workspaces.** Drag whole cards to insert them at a new position. Edit workspace names, pick symbols from installed fonts, select assigned apps, and choose a letter or number for each workspace. Both workspace actions share that key and use the global modifiers from the previous step.
 4. **Review.** See the exact tasks that will run.
 5. **Set up & test.** Apply the tasks and check permissions and physical shortcuts. Copy the timestamped apply log if anything needs troubleshooting.
 
-Our workspace cards and full-width preview use the macOS system material, which adapts to appearance settings and translucent surfaces.
+Workspace cards use consistent-sized controls and a clearly labeled drag handle. The menu-bar preview is visually separated from the editor with a dark bar treatment, while the cards use translucent macOS materials. Entire category headers on the feature-selection page are clickable.
 
 ### Make changes later without repeating installation
 
@@ -38,13 +38,23 @@ mac-setup workspaces
 mac-setup shortcuts
 ```
 
-These paths apply only the relevant workspace profiles, rather than restarting the entire installer. The full setup is available with `mac-setup`. The older terminal editor remains available through `mac-setup terminal`.
+These paths apply only the relevant provider profiles, rather than restarting the entire installer. The full setup is available with `mac-setup`. The older terminal editor remains available through `mac-setup terminal`.
 
 ### Shortcut behavior
+
+All supported AeroSpace bindings in the bundled main-mode configuration are editable. Additional shortcuts may reuse available actions. Karabiner application shortcuts can use built-in app-opening scripts or a validated application bundle ID. Advanced stateful Karabiner rules, such as the Chrome chord remapping, remain preserved in the Portable profile but are not interchangeable with ordinary one-chord hotkeys. The Raycast launcher combination is editable and synchronized with its macOS preference.
+
+The shortcut editor checks for duplicate combinations across all three providers and workspace destinations, and rejects collisions with the generated AeroSpace settings. Supported shortcut choices are stored in `~/Library/Application Support/mac-setup/shortcuts.json` before profiles are applied. To change only shortcuts, run `mac-setup shortcuts`.
+
+
 
 The default number-row workspace shortcuts are **Option + key** for switching and **Option + Shift + key** for moving windows. Change these global modifier sets in the shortcut step. Each workspace card only controls the key itself. If no key is assigned, that workspace still appears in SketchyBar. Conflicting keys and reserved AeroSpace bindings are rejected.
 
 Earlier saved layouts are decoded and retain their chosen destination key; existing per-workspace modifier choices are normalized to the global modifier sets. Workspace configuration is saved in `~/Library/Application Support/mac-setup/workspaces.json`.
+
+### Vorssaint defaults
+
+The bundled Vorssaint 3.4.1 native settings export is applied automatically during **Vorssaint preferences** setup, including the feature configuration and launch-at-login preference. The public snapshot includes over 700 portable settings. Personal text snippet contents are excluded so they cannot be published accidentally. macOS system permissions and login item approval still require explicit user authorization, but settings do not need to be recreated manually.
 
 ### Optional applications and routing
 
@@ -56,7 +66,7 @@ Select **Copy log** during a run or on a failure/completion screen to copy the c
 
 We create backups before replacing configuration files and changed preferences. They live in `~/Library/Application Support/mac-setup`. Installation and permission changes are not silently reversed: examine recovery entries before restoring.
 
-AeroSpace needs Accessibility access; Karabiner requires its own services, driver extension, Accessibility and Input Monitoring, virtual keyboard and Portable profile. Raycast uses Command+Space, and setup backs up and disables the conflicting Spotlight shortcut. Apple privacy permissions always require user approval.
+AeroSpace needs Accessibility access; Karabiner requires its own services, driver extension, Accessibility and Input Monitoring, virtual keyboard and Portable profile. Raycast uses the chosen launcher combination (Command+Space by default); setup backs up and disables Spotlight's conflicting shortcut only when that default combination is selected. Apple privacy permissions always require user approval.
 
 ```sh
 mac-setup list
