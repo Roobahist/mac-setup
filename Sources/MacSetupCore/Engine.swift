@@ -50,7 +50,7 @@ public final class Engine {
             if directories.contains("aerospace"), Journal.exists(paths.home.appendingPathComponent(".aerospace.toml")) { return .blocked }
             for name in directories {
                 let target = paths.config.appendingPathComponent(name)
-                let generated = name == "aerospace" || name == "sketchybar"
+                let generated = ["aerospace", "sketchybar", "karabiner"].contains(name)
                 if dotfiles.isSymlink(target) {
                     if dotfiles.source.isLinked(name, config: paths.config),
                        Journal.exists(dotfiles.source.checkout.appendingPathComponent(name)) {
@@ -65,7 +65,12 @@ public final class Engine {
             }
             return .done
         case let .preferences(preferences, _):
-            if task.id == "raycast-profile", try spotlightSearchEnabled() { return .ready }
+            if task.id == "raycast-profile" {
+                let shortcuts = try shortcutSettings()
+                if shortcuts.usesSpotlightKey && (try spotlightSearchEnabled()) { return .ready }
+                return equalPlist(try journal.preference("com.raycast.macos", "raycastGlobalHotkey"),
+                                  shortcuts.raycastHotkey) ? .done : .ready
+            }
             return try preferences.allSatisfy { equalPlist(try journal.preference($0.domain, $0.key), $0.value) } ? .done : .ready
         case .vorssaint:
             return try vorssaintPreferences().allSatisfy { equalPlist(try journal.preference($0.domain, $0.key), $0.value) } ? .done : .ready
@@ -194,7 +199,7 @@ public final class Engine {
                     throw SetupError("~/.aerospace.toml exists. AeroSpace refuses ambiguous config locations. Move that file aside yourself, then retry.")
                 }
                 for name in directories {
-                    if dotfiles.status() == .done && name != "aerospace" && name != "sketchybar" {
+                    if dotfiles.status() == .done && !["aerospace", "sketchybar", "karabiner"].contains(name) {
                         try dotfiles.link(name, transaction: id)
                     } else {
                         try installProfile(name, transaction: id)
@@ -210,10 +215,16 @@ public final class Engine {
                 }
             case let .preferences(preferences, restart):
                 if task.id == "raycast-profile" {
+                    let shortcuts = try shortcutSettings()
                     try quitForPreferences("com.raycast.macos")
-                    try releaseSpotlightShortcut(transaction: id)
+                    if shortcuts.usesSpotlightKey { try releaseSpotlightShortcut(transaction: id) }
+                    try journal.setPreference("com.raycast.macos", "raycastGlobalHotkey",
+                                              shortcuts.raycastHotkey, transaction: id)
+                } else {
+                    for preference in preferences {
+                        try journal.setPreference(preference.domain, preference.key, preference.value, transaction: id)
+                    }
                 }
-                for preference in preferences { try journal.setPreference(preference.domain, preference.key, preference.value, transaction: id) }
                 if let restart { try self.restart(restart) }
             case .vorssaint:
                 try quitForPreferences("com.vorssaint.utils")
@@ -420,15 +431,24 @@ public final class Engine {
         }
     }
 
+    private func shortcutSettings() throws -> ShortcutSettings {
+        let template = try String(contentsOf: paths.profile.appendingPathComponent("aerospace/aerospace.toml"), encoding: .utf8)
+        return try ShortcutSettings.load(from: paths, aerospaceTemplate: template)
+    }
+
     private func materialized(_ file: URL) throws -> Data {
         let original = try String(contentsOf: file, encoding: .utf8)
+        if file.lastPathComponent == "karabiner.json",
+           file.deletingLastPathComponent().lastPathComponent == "karabiner" {
+            return try shortcutSettings().karabinerData(from: Data(original.utf8))
+        }
         // Render user-specific workspace settings without writing into public dotfiles.
         if file.lastPathComponent == "aerospace.toml",
            file.deletingLastPathComponent().lastPathComponent == "aerospace" {
             return Data(try WorkspaceConfiguration.load(from: paths)
                 .forSelectedTasks(selectedWorkspaceTaskIDs,
                                   installedBundleIDs: Set(ApplicationDiscovery.scan(home: paths.home).map(\.bundleID)))
-                .aerospaceTOML(from: original).utf8)
+                .aerospaceTOML(from: try shortcutSettings().aerospaceTemplateApplying(to: original)).utf8)
         }
         if file.lastPathComponent == "sketchybarrc",
            file.deletingLastPathComponent().lastPathComponent == "sketchybar" {

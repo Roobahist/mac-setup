@@ -134,7 +134,7 @@ public struct ShortcutSettings: Codable, Equatable {
     }
 
     public func validate(workspaces: WorkspaceConfiguration, aerospaceTemplate: String) throws {
-        let availableActions = Set(Self.bundledAeroSpaceBindings(aerospaceTemplate).map(\.1))
+        let availableActions = Set(Self.bundledAeroSpaceBindings(aerospaceTemplate).map { $0.1 })
         let uniqueIDs = Set(entries.map(\.id))
         guard uniqueIDs.count == entries.count else { throw SetupError("Shortcut row IDs must be unique.") }
         guard entries.filter({ $0.provider == .raycast }).count == 1,
@@ -222,7 +222,7 @@ public struct ShortcutSettings: Codable, Equatable {
             throw SetupError("Could not locate Karabiner's Portable profile.")
         }
 
-        let scriptNames = Set(Self.scripts.map(\.name))
+        let scriptNames = Set(Self.scripts.map { $0.name })
         rules.removeAll { scriptNames.contains($0["description"] as? String ?? "") ||
             ($0["description"] as? String) == "Mac Setup: Custom shortcuts" }
         let manipulators: [[String: Any]] = try entries.filter {
