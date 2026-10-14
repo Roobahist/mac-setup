@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 BIN_DIR="$1"
-APP_DIR="$2"
+DEST_APP="$2"
+BUILD_PARENT="$(mktemp -d "${TMPDIR:-/tmp}/mac-setup-app.XXXXXX")"
+trap 'rm -rf "$BUILD_PARENT"' EXIT
+APP_DIR="$BUILD_PARENT/Mac Setup.app"
 mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 cp -X "$BIN_DIR/mac-setup" "$APP_DIR/Contents/MacOS/mac-setup"
 PROFILE_DIR="$BIN_DIR/MacSetup_MacSetupCore.bundle/Contents/Resources/Profile"
@@ -24,3 +27,14 @@ cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
 PLIST
 codesign --force --sign - "$APP_DIR/Contents/MacOS/mac-setup"
 codesign --force --sign - "$APP_DIR"
+
+if [[ -e "$DEST_APP" ]]; then
+  EXISTING_ID="$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$DEST_APP/Contents/Info.plist" 2>/dev/null || true)"
+  if [[ "$EXISTING_ID" != "com.roobahist.mac-setup" || -L "$DEST_APP" ]]; then
+    echo "Refusing to replace an unrelated app or symlink: $DEST_APP" >&2
+    exit 1
+  fi
+  rm -rf "$DEST_APP"
+fi
+mkdir -p "$(dirname "$DEST_APP")"
+mv "$APP_DIR" "$DEST_APP"
