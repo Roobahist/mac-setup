@@ -123,7 +123,7 @@ public struct ShortcutSettings: Codable, Equatable {
         }
         let karabiner: [ManagedShortcut] = [
             .init(id: "karabiner:alacritty", provider: .karabiner,
-                  action: "Alacritty", shortcut: .init(key: "enter", modifiers: ["alt"])),
+                  action: "open:com.apple.Terminal", shortcut: .init(key: "enter", modifiers: ["alt"])),
             .init(id: "karabiner:vscode", provider: .karabiner,
                   action: "Visual Studio Code", shortcut: .init(key: "v", modifiers: ["alt"])),
             .init(id: "karabiner:finder", provider: .karabiner,
@@ -131,7 +131,7 @@ public struct ShortcutSettings: Codable, Equatable {
         ]
         return .init(entries: aerospace + karabiner + [
             .init(id: "raycast:launcher", provider: .raycast, action: "launcher",
-                  shortcut: .init(key: "space", modifiers: ["cmd"]))
+                  shortcut: .init(key: "r", modifiers: ["alt"]))
         ])
     }
 

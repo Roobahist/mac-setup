@@ -23,9 +23,11 @@ public enum SetupPreset: String, CaseIterable {
             ids = ["fonts", "tomito", "obsidian", "aerospace-profile", "mission-control", "aerospace-access",
                    "sketchybar-profile", "sketchybar-start", "vorssaint-profile", "vorssaint-access",
                    "raycast-profile", "raycast-access", "karabiner-profile", "karabiner-access",
-                   "alacritty-profile", "dock-hide", "menu-bar"]
+                   "dock-hide", "menu-bar"]
         case .complete:
-            ids = Set(tasks.map(\.id))
+            // Terminal choice is explicit: disabled casks must not break a full setup.
+            let optionalTerminals: Set<String> = ["alacritty", "alacritty-profile", "ghostty", "wezterm", "kitty"]
+            ids = Set(tasks.map(\.id)).subtracting(optionalTerminals)
         case .minimal:
             ids = ["homebrew", "fonts", "dark-mode", "git-ignore"]
         case .productivity:
@@ -33,7 +35,7 @@ public enum SetupPreset: String, CaseIterable {
                 ["Window management", "Apps", "Appearance", "Finder"].contains($0.category)
             }.map(\.id)).union(["dotfiles-linked"])
         case .developer:
-            ids = ["homebrew", "fonts", "dotfiles-linked", "alacritty", "alacritty-profile",
+            ids = ["homebrew", "fonts", "dotfiles-linked",
                    "atuin", "atuin-profile", "atuin-shell", "git-ignore"]
         }
         return ids.intersection(Set(tasks.map(\.id)))
