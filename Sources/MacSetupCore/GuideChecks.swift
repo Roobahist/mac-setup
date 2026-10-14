@@ -43,7 +43,7 @@ public extension Engine {
             return GuideCheck(false, "Karabiner did not return its setup status. Open Karabiner and finish its assistant, then check again.")
         }
         var checks: [GuideRequirement] = [
-            .init("services", "Background services", context["services_running"] as? Bool == true),
+            .init("services", "Background services", context["services_running"] as? Bool == true && context["services_enabled"] as? Bool == true),
             .init("driver", "Driver Extension", core["driver_activated"] as? Bool == true && core["driver_connected"] as? Bool == true && core["driver_version_mismatched"] as? Bool != true),
             .init("accessibility", "Accessibility", permissions["accessibility_process_trusted"] as? Bool == true),
             .init("input", "Input Monitoring", permissions["iohid_listen_event_allowed"] as? Bool == true),

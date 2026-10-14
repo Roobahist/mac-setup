@@ -234,6 +234,11 @@ private final class SetupModel: ObservableObject {
         advance()
     }
 
+    func openPermissionPane(_ pane: String) {
+        do { try engine.runner.checked("/usr/bin/open", [pane]) }
+        catch { message = String(describing: error) }
+    }
+
     func openSettings() {
         guard let task = current else { return }
         do { try engine.openGuideSettings(task) } catch { message = String(describing: error) }
@@ -442,11 +447,21 @@ private struct SetupView: View {
                 }.toggleStyle(.checkbox).padding(14).background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
             }
             Label(model.message, systemImage: model.checkReady ? "checkmark.circle" : "exclamationmark.circle").foregroundStyle(model.checkReady ? Color.primary : Color.orange)
-            HStack {
-                Button("Open app again") { if let task = model.current { do { try model.engine.openGuide(task) } catch { model.message = String(describing: error) } } }
-                if let task = model.current, case let .guide(url, _, _) = task.action, url != nil { Button("Open permission settings") { model.openSettings() } }
-                Button("Check again") { model.checkAgain() }.disabled(model.busy)
-                if model.busy { ProgressView().controlSize(.small) }
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Button("Open app again") { if let task = model.current { do { try model.engine.openGuide(task) } catch { model.message = String(describing: error) } } }
+                    Button("Check again") { model.checkAgain() }.disabled(model.busy)
+                    if model.busy { ProgressView().controlSize(.small) }
+                }
+                HStack {
+                    if model.current?.id == "karabiner-access" {
+                        Button("Services & Driver Extensions") { model.openSettings() }
+                        Button("Accessibility") { model.openPermissionPane("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") }
+                        Button("Input Monitoring") { model.openPermissionPane("x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent") }
+                    } else if let task = model.current, case let .guide(url, _, _) = task.action, url != nil {
+                        Button(task.id == "raycast-access" ? "Keyboard Settings" : "Open permission settings") { model.openSettings() }
+                    }
+                }
             }
         }
     }

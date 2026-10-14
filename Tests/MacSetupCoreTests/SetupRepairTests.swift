@@ -50,7 +50,7 @@ final class SetupRepairTests: XCTestCase {
         ]
         func result() throws -> CommandResult {
             CommandResult(status: 0, output: try JSONSerialization.data(withJSONObject: [
-                "core_service_daemon_state": core, "guidance_context": ["services_running": true]
+                "core_service_daemon_state": core, "guidance_context": ["services_running": true, "services_enabled": true]
             ]))
         }
         XCTAssertTrue(Engine.karabinerCheck(try result(), profile: "Portable").ready)

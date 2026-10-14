@@ -91,6 +91,17 @@ final class DisplayAndGuideTests: XCTestCase {
         XCTAssertEqual(runner.preferences["com.raycast.macos"]?["raycastGlobalHotkey"] as? String, "Option-15")
     }
 
+    func testPermissionButtonsOpenSystemSettingsInsteadOfDocumentation() throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let runner = FakeRunner()
+        let engine = try Engine(paths: Paths(home: home), runner: runner)
+        try engine.openGuideSettings(Catalog.task("karabiner-access"))
+        try engine.openGuideSettings(Catalog.task("raycast-access"))
+        XCTAssertTrue(runner.calls.contains(["/usr/bin/open", "x-apple.systempreferences:com.apple.LoginItems-Settings.extension"]))
+        XCTAssertTrue(runner.calls.contains(["/usr/bin/open", "x-apple.systempreferences:com.apple.Keyboard-Settings.extension"]))
+        XCTAssertFalse(runner.calls.contains { $0.contains(where: { $0.hasPrefix("https:") }) })
+    }
+
     func testGuidedChecklistPersistsPartialStepsAndObservedPermissions() throws {
         let home = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: home) }

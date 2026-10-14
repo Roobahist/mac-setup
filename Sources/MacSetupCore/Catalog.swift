@@ -80,14 +80,14 @@ public enum Catalog {
         SetupTask("raycast-profile", "Apps", "Raycast launcher shortcut", "Use Command+Space for Raycast and release the same shortcut from Spotlight. Existing Spotlight settings are backed up.", dependencies: ["raycast"], action: .preferences([
             Preference("com.raycast.macos", "raycastGlobalHotkey", "Command-49")
         ], restart: nil)),
-        SetupTask("raycast-access", "Apps", "Raycast setup", "Set the launcher shortcut and authorize the extensions you use.", dependencies: ["raycast-profile"], action: .guide(url: nil, app: "Raycast", instructions: [
+        SetupTask("raycast-access", "Apps", "Raycast setup", "Set the launcher shortcut and authorize the extensions you use.", dependencies: ["raycast-profile"], action: .guide(url: "x-apple.systempreferences:com.apple.Keyboard-Settings.extension", app: "Raycast", instructions: [
             "If Raycast shows Welcome, continue with local setup. Skip account sign-in, AI, and extension suggestions if offered. Those are optional.",
             "Open Raycast Settings > General. Raycast Hotkey should be Command+Space; if onboarding changed it, click that field and press Command+Space. Setup disables Spotlight’s conflicting Show Spotlight search shortcut automatically.",
             "In Raycast Settings > General, enable Launch Raycast at login. Close Settings and press Command+Space: Raycast must appear instead of Spotlight before you mark this step complete."
         ])),
         SetupTask("karabiner", "Apps", "Karabiner-Elements", "Install the keyboard remapping tool.", dependencies: ["homebrew"], action: .install(packages: ["karabiner-elements"], cask: true, app: "Karabiner-Elements")),
         SetupTask("karabiner-profile", "Apps", "Karabiner configuration", "Apply portable application shortcuts. Replaces the Karabiner config folder after backup; one optional generic key-sequence example is disabled.", dependencies: ["karabiner"], action: .profile(["karabiner"])),
-        SetupTask("karabiner-access", "Apps", "Karabiner permissions", "Use Karabiner's own setup assistant for its helper permissions and driver approval.", dependencies: ["karabiner-profile"], action: .guide(url: "https://karabiner-elements.pqrs.org/docs/getting-started/installation/", app: "Karabiner-Elements", instructions: [
+        SetupTask("karabiner-access", "Apps", "Karabiner permissions", "Use Karabiner's own setup assistant for its helper permissions and driver approval.", dependencies: ["karabiner-profile"], action: .guide(url: "x-apple.systempreferences:com.apple.LoginItems-Settings.extension", app: "Karabiner-Elements", instructions: [
             "Background services: in System Settings > General > Login Items & Extensions, allow the Karabiner background services shown by its assistant. Keep the privileged core service and the user agent enabled.",
             "Driver Extension: in General > Login Items & Extensions > Driver Extensions, allow org.pqrs.Karabiner-DriverKit-VirtualHIDDevice. This is required even after installing Karabiner; without it the remappings do not work.",
             "Accessibility: in Privacy & Security > Accessibility, enable the Karabiner core service requested by its assistant. Approval for Mac Setup does not approve Karabiner.",
