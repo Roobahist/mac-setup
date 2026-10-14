@@ -54,6 +54,12 @@ public enum WallpaperWatcher {
     public static func installedLabel(paths: Paths) -> String {
         let original = paths.home.appendingPathComponent("Library/LaunchAgents/\(label).plist")
         let fallback = paths.home.appendingPathComponent("Library/LaunchAgents/\(replacementLabel).plist")
+        // A stale plist may remain after the original app is removed. Prefer
+        // the available executable's intended service rather than its plist.
+        if let preferred = try? source(paths: paths) {
+            let matching = preferred.label == label ? original : fallback
+            if Journal.exists(matching) { return preferred.label }
+        }
         if Journal.exists(original) { return label }
         if Journal.exists(fallback) { return replacementLabel }
         return executable(paths: paths) != nil ? label : replacementLabel
@@ -96,7 +102,7 @@ public enum WallpaperWatcher {
                         guard try WallpaperStamp.read(wallpaper) == stamp else { continue }
                     }
                     do {
-                        _ = try engine.apply(Catalog.task("wallpaper-colors"), image: wallpaper)
+                        try engine.refreshWallpaperAccent(image: wallpaper)
                         print("Wallpaper accent updated: \(wallpaper.lastPathComponent)")
                         fflush(stdout)
                         lastApplied = stamp
