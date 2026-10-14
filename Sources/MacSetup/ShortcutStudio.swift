@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import MacSetupCore
 
 /// A single editor for the shortcuts that Mac Setup writes to the three
@@ -137,11 +138,11 @@ struct ShortcutStudio: View {
                 HStack(spacing: 12) {
                     Text(item.name).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
                     Text(pair.switchTo?.display ?? "No key")
-                        .frame(width: 94, alignment: .trailing)
+                        .frame(width: 122, alignment: .trailing)
                     Text(pair.moveWindow?.display ?? "No key")
-                        .frame(width: 108, alignment: .trailing)
+                        .frame(width: 138, alignment: .trailing)
                 }
-                .font(.system(size: 13, design: .monospaced))
+                .font(.system(size: 14, weight: .medium, design: .monospaced))
                 .foregroundStyle(.secondary)
                 .accessibilityElement(children: .combine)
             }
@@ -194,16 +195,49 @@ struct ShortcutStudio: View {
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
     }
 
+    private func appForShortcut(_ entry: ManagedShortcut) -> InstalledApplication? {
+        let bundleID: String?
+        switch entry.provider {
+        case .aerospace: bundleID = "bobko.aerospace"
+        case .raycast: bundleID = "com.raycast.macos"
+        case .karabiner:
+            bundleID = entry.action.hasPrefix("open:") ? String(entry.action.dropFirst(5)) : nil
+        }
+        return apps.first { candidate in
+            candidate.bundleID == bundleID ||
+                (entry.provider == .karabiner && candidate.name == entry.action)
+        }
+    }
+
+    @ViewBuilder private func shortcutIcon(_ entry: ManagedShortcut) -> some View {
+        if let app = appForShortcut(entry) {
+            Image(nsImage: NSWorkspace.shared.icon(forFile: app.path))
+                .resizable()
+                .interpolation(.high)
+                .frame(width: 23, height: 23)
+        } else {
+            Image(systemName: entry.provider == .aerospace ? "rectangle.3.group" :
+                    entry.provider == .raycast ? "magnifyingglass" : "app")
+                .font(.system(size: 18))
+                .foregroundStyle(.secondary)
+                .frame(width: 23, height: 23)
+        }
+    }
+
     private func shortcutRow(_ entry: ManagedShortcut) -> some View {
         HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(ShortcutSettings.actionTitle(entry.action, provider: entry.provider))
-                    .fontWeight(.medium).lineLimit(1)
-                Text(entry.provider.rawValue).font(.caption2).foregroundStyle(.tertiary)
-            }.frame(maxWidth: .infinity, alignment: .leading)
+            shortcutIcon(entry)
+            Text(ShortcutSettings.actionTitle(entry.action, provider: entry.provider))
+                .font(.system(size: 14, weight: .medium))
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
             Text(entry.shortcut.display)
-                .font(.system(size: 13, weight: .medium, design: .monospaced))
-                .frame(width: 116, alignment: .trailing)
+                .font(.system(size: 15, weight: .semibold, design: .monospaced))
+                .lineLimit(1)
+                .frame(minWidth: 115, alignment: .center)
+                .padding(.horizontal, 10).padding(.vertical, 6)
+                .background(Color(nsColor: .quaternaryLabelColor).opacity(0.16),
+                            in: RoundedRectangle(cornerRadius: 8))
                 .foregroundStyle(entry.enabled ? .primary : .secondary)
             Toggle("Enabled", isOn: Binding(
                 get: { settings.entries.first(where: { $0.id == entry.id })?.enabled ?? false },

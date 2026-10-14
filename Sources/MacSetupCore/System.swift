@@ -158,6 +158,19 @@ public func plistValue(_ data: Data) throws -> Any {
     return value
 }
 
+/// Defaults may round floating-point preferences to Float32 when using -float.
+public func equalPreference(_ lhs: Any?, _ rhs: Any?) -> Bool {
+    if equalPlist(lhs, rhs) { return true }
+    guard let expected = rhs as? NSNumber, let actual = lhs as? NSNumber,
+          CFGetTypeID(expected) != CFBooleanGetTypeID(),
+          CFGetTypeID(actual) != CFBooleanGetTypeID() else { return false }
+    let kind = String(cString: expected.objCType)
+    guard ["f", "d"].contains(kind) else { return false }
+    let tolerance = 1e-6 * max(1.0, abs(expected.doubleValue))
+    return actual.doubleValue.isFinite &&
+        abs(actual.doubleValue - expected.doubleValue) <= tolerance
+}
+
 public func equalPlist(_ lhs: Any?, _ rhs: Any?) -> Bool {
     guard let lhs, let rhs else { return lhs == nil && rhs == nil }
     return NSDictionary(dictionary: ["value": lhs]).isEqual(to: ["value": rhs])

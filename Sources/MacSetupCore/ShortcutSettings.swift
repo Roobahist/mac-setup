@@ -268,9 +268,13 @@ public struct ShortcutSettings: Codable, Equatable {
             else if inMain && trimmed.hasPrefix("[") { inMain = false }
             if inMain && trimmed == "# Workspaces" { inWorkspaces = true }
             if inMain && trimmed == "# Resize" { inWorkspaces = false }
-            if inMain && !inWorkspaces, let split = trimmed.firstIndex(of: "="),
-               known.contains(String(trimmed[..<split]).trimmingCharacters(in: .whitespaces)) {
-                continue
+            if inMain && !inWorkspaces, let split = trimmed.firstIndex(of: "=") {
+                let rawKey = String(trimmed[..<split]).trimmingCharacters(in: .whitespaces)
+                // AeroSpace treats alt-ctrl and ctrl-alt as equivalent.
+                if let binding = WorkspaceShortcut.parse(rawKey)?.binding,
+                   known.contains(binding) {
+                    continue
+                }
             }
             output.append(line)
             if trimmed == "[mode.main.binding]" {
