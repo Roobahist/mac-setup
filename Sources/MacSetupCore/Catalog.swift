@@ -152,11 +152,9 @@ public enum Catalog {
             Preference("com.apple.driver.AppleBluetoothMultitouch.trackpad", "TrackpadRightClick", true),
             Preference("com.apple.driver.AppleBluetoothMultitouch.trackpad", "TrackpadCornerSecondaryClick", 0)
         ], restart: nil)),
-        SetupTask("appearance-details", "Appearance", "Default icon colors and Liquid Glass", "Use the default icon appearance and the most transparent available glass style.", action: .guide(url: "x-apple.systempreferences:com.apple.Appearance-Settings.extension", app: nil, instructions: [
-            "Keep dark system appearance but choose the default icon style rather than tinted or clear icons, where macOS exposes that choice.",
-            "Match the transparent Control Center reference: choose Clear Liquid Glass (or the most transparent available setting) and keep Reduce Transparency off in Accessibility > Display. The material depends on macOS and the wallpaper; network names and slider values from the reference are not copied.",
-            "Older macOS releases may not offer these controls. Record this task as skipped on unsupported systems."
-        ])),
+        SetupTask("appearance-details", "Appearance", "Default icon colors and Liquid Glass", "Use the default icon appearance and the most transparent available glass style.", action: .guide(url: "x-apple.systempreferences:com.apple.Appearance-Settings.extension", app: nil,
+                         instructions: appearanceInstructions(macOSMajorVersion:
+                             ProcessInfo.processInfo.operatingSystemVersion.majorVersion))),
         SetupTask("desktop-widgets", "Appearance", "Hide desktop widgets", "Disable desktop widgets while preserving Stage Manager widget settings. Log out if widgets have not refreshed.", action: desktopWidgetAction(macOSMajorVersion: ProcessInfo.processInfo.operatingSystemVersion.majorVersion)),
         SetupTask("wallpaper-tools", "Appearance", "Wallpaper color dependencies", "Install Python and ImageMagick for local accent extraction.", dependencies: ["homebrew"], action: .install(packages: ["python", "imagemagick"], cask: false, app: nil)),
         SetupTask("wallpaper-colors", "Appearance", "Match SketchyBar accent to wallpaper", "Extract an accent locally from the current wallpaper and update SketchyBar. Run again after a wallpaper change.", dependencies: ["wallpaper-tools", "sketchybar-profile"], action: .accent),
@@ -169,6 +167,18 @@ public enum Catalog {
             "Do not run another wallpaper watcher alongside WallpaperAccentWatcher. Permissions are never granted automatically."
         ]))
     ]
+
+    public static func appearanceInstructions(macOSMajorVersion: Int) -> [String] {
+        var instructions = [
+            "Keep dark appearance and use the default icon appearance if that option exists on this Mac."
+        ]
+        if macOSMajorVersion >= 26 {
+            instructions.append("Select Clear Liquid Glass, if available, and keep Reduce Transparency off under Accessibility > Display. Wallpaper and macOS affect the result.")
+        } else {
+            instructions.append("Liquid Glass is only available on macOS 26 or newer. Do not search for that setting on this Mac; simply verify the available dark appearance options.")
+        }
+        return instructions
+    }
 
     public static func desktopWidgetAction(macOSMajorVersion: Int) -> TaskAction {
         if macOSMajorVersion >= 14 {
