@@ -429,8 +429,8 @@ struct WorkspacePickerView {
             title: title,
             description: description,
             status: status,
-            primary: controls[0].text,
-            secondary: controls[1].text,
+            primary: controls.first?.text ?? "Esc Back",
+            secondary: controls.dropFirst().first?.text ?? "Use the keys above to confirm or cancel.",
             width: width
         )
         return SetupChrome.render(header: header, body: body, footer: footer,
