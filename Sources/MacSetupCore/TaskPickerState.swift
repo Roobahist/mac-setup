@@ -23,7 +23,7 @@ public enum SetupPreset: String, CaseIterable {
             ids = ["fonts", "tomito", "obsidian", "aerospace-profile", "mission-control", "aerospace-access",
                    "sketchybar-profile", "sketchybar-start", "vorssaint-profile", "vorssaint-access",
                    "raycast-profile", "raycast-access", "karabiner-profile", "karabiner-access",
-                   "dock-hide", "menu-bar", "menu-bar-background"]
+                   "dock-hide", "menu-bar", "menu-bar-background", "startup-login"]
         case .complete:
             // Terminal choice is explicit: disabled casks must not break a full setup.
             let optIn: Set<String> = ["alacritty", "alacritty-profile", "ghostty", "wezterm", "kitty", "finder-reset-views"]

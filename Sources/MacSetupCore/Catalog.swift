@@ -22,6 +22,7 @@ public enum TaskAction {
     case service
     case accent
     case wallpaperWatcher
+    case loginItems(names: [String])
     case guide(url: String?, app: String?, instructions: [String])
 }
 
@@ -170,7 +171,10 @@ public enum Catalog {
             "Approve the macOS authentication prompt yourself; permission given to Mac Setup does not authorize WallpaperAccentWatcher.",
             "Quit and reopen WallpaperAccentWatcher after approving access. Change the wallpaper again and mark this task complete only after you see the accent update.",
             "Do not run another wallpaper watcher alongside WallpaperAccentWatcher. Permissions are never granted automatically."
-        ]))
+        ])),
+        SetupTask("startup-login", "Apps", "Start essential apps at login",
+                  "Register installed AeroSpace, Karabiner-Elements and Raycast in Open at Login without removing existing items. SketchyBar and the wallpaper accent watcher keep their own background services.",
+                  action: .loginItems(names: StartupLoginItems.appNames))
     ]
 
     /// Apple exposes this switch through System Settings rather than a documented

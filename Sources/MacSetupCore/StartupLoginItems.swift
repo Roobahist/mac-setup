@@ -8,8 +8,9 @@ public enum StartupLoginItems {
     /// Keep application startup distinct from background daemons. SketchyBar
     /// runs through its Homebrew service; the wallpaper accent watcher has a
     /// dedicated LaunchAgent; Karabiner helpers manage their own background jobs.
-    public static func installedPaths(home: URL, resolve: (String, URL) -> String? = appPath) -> [String] {
-        appNames.compactMap { resolve($0, home) }
+    public static func installedPaths(names: [String] = appNames, home: URL,
+                                      resolve: (String, URL) -> String? = appPath) -> [String] {
+        names.compactMap { resolve($0, home) }
     }
 
     public static let script = """
