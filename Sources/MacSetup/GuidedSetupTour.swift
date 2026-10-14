@@ -1,0 +1,97 @@
+import SwiftUI
+
+/// Contextual instructions for the real settings pages. Guided setup does not
+/// duplicate editors, maintain a separate installer flow, or apply anything.
+struct GuidedTourStep: Identifiable {
+    let destination: ControlDestination
+    let title: String
+    let explanation: String
+    let nextAction: String
+
+    var id: ControlDestination { destination }
+
+    static let steps: [Self] = [
+        .init(destination: .apps, title: "Choose your features",
+              explanation: "Review what is already installed and what each component adds. Configure only the components you want. Some features require dependencies and will show a review before applying.",
+              nextAction: "Use Configure on a component to review it. You can leave everything unchanged and continue."),
+        .init(destination: .shortcuts, title: "Make your keyboard your own",
+              explanation: "Inspect AeroSpace, Karabiner, and Raycast shortcuts in the existing shortcut editor. Change hotkeys, enabled actions, and the workspace modifier keys.",
+              nextAction: "Choose Apply shortcuts at the bottom to save changes. Next never applies settings automatically."),
+        .init(destination: .workspaces, title: "Arrange workspaces",
+              explanation: "Name workspaces, choose glyphs, assign apps, reorder the cards, and set the keys that switch between them.",
+              nextAction: "Choose Apply workspaces at the bottom only if you want to save the layout."),
+        .init(destination: .appearance, title: "Customize appearance",
+              explanation: "Choose the native macOS accent color. Optionally let SketchyBar follow your wallpaper, or select a manual highlight color instead.",
+              nextAction: "The wallpaper watcher is optional and remains off until you enable it explicitly."),
+        .init(destination: .dock, title: "Tune the Dock",
+              explanation: "Control automatic hiding, reveal delay, animation speed, icon size, and recently used applications.",
+              nextAction: "Each preference is applied individually. System default and Undo are available."),
+        .init(destination: .menuBar, title: "Adjust the menu bar clock",
+              explanation: "Choose the built-in macOS clock display: 24-hour format, seconds, and the weekday. These do not affect SketchyBar's separate clock.",
+              nextAction: "Apply only the clock preferences you want."),
+        .init(destination: .finder, title: "Set up Finder",
+              explanation: "Show filename extensions, hidden files, the path bar, and status information. These settings affect Finder, not your project files.",
+              nextAction: "Adjust individual controls and keep your existing Finder preferences when you are happy."),
+        .init(destination: .updates, title: "Keep Mac Setup up to date",
+              explanation: "New customization options arrive through versioned GitHub releases. You can review available updates and install them from this section.",
+              nextAction: "You are finished. Future customization is available directly from the sidebar.")
+    ]
+}
+
+struct GuidedTourBanner: View {
+    let step: GuidedTourStep
+    let index: Int
+    let total: Int
+    let canGoBack: Bool
+    let canAdvance: Bool
+    let onBack: () -> Void
+    let onSkip: () -> Void
+    let onNext: () -> Void
+    let onExit: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center) {
+                Label("Guided setup", systemImage: "sparkles")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.accentColor)
+                Spacer()
+                Text("Step \(index + 1) of \(total)")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+            ProgressView(value: Double(index + 1), total: Double(total))
+                .tint(.accentColor)
+                .accessibilityLabel("Guided setup progress")
+            Text(step.title)
+                .font(.title3.weight(.semibold))
+            Text(step.explanation)
+                .font(.callout)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(step.nextAction)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 12) {
+                Button("End guide", action: onExit).buttonStyle(.borderless)
+                Spacer()
+                if canGoBack {
+                    Button("Back", action: onBack).disabled(!canAdvance)
+                }
+                if index < total - 1 {
+                    Button("Skip step", action: onSkip)
+                        .buttonStyle(.borderless)
+                        .disabled(!canAdvance)
+                }
+                Button(index == total - 1 ? "Finish" : "Next", action: onNext)
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!canAdvance)
+            }
+        }
+        .padding(18)
+        .frame(maxWidth: 920, alignment: .leading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14)
+            .stroke(Color(nsColor: .separatorColor).opacity(0.4), lineWidth: 1))
+    }
+}

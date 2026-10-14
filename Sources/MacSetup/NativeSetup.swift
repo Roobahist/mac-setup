@@ -1056,11 +1056,10 @@ enum NativeSetup {
         window.title = "Mac Setup"
         let initial: ControlDestination = workspaceEditor ? .workspaces
             : (shortcutEditor ? .shortcuts : .home)
-        if guided {
-            window.contentView = NSHostingView(rootView: SetupView(model: model))
-        } else {
-            window.contentView = NSHostingView(rootView: ControlCenterView(model: model, initialDestination: initial))
-        }
+        // Guided setup uses the same real sections and controls as the dashboard.
+        window.contentView = NSHostingView(
+            rootView: ControlCenterView(model: model, initialDestination: initial,
+                                        startGuided: guided))
         window.center()
         window.makeKeyAndOrderFront(nil)
         app.activate(ignoringOtherApps: true)

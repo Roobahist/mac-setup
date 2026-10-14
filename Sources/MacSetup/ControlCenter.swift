@@ -43,45 +43,49 @@ struct ControlCenterView: View {
     @LocalViewState private var query = ""
     @LocalViewState private var activeFeature: String?
     @LocalViewState private var compactSidebar = false
+    @LocalViewState private var guidedStep: Int?
 
-    init(model: SetupModel, initialDestination: ControlDestination = .home) {
+    init(model: SetupModel, initialDestination: ControlDestination = .home,
+         startGuided: Bool = false) {
         self.model = model
-        _destination = LocalViewState(initialValue: initialDestination)
-        _previousDestination = LocalViewState(initialValue: initialDestination)
+        let initial: ControlDestination = startGuided ? .apps : initialDestination
+        _destination = LocalViewState(initialValue: initial)
+        _previousDestination = LocalViewState(initialValue: initial)
+        _guidedStep = LocalViewState(initialValue: startGuided ? 0 : nil)
     }
 
     private let customization: [ControlDestination] = [
         .home, .appearance, .dock, .menuBar, .finder, .workspaces, .shortcuts, .apps
     ]
-    private let management: [ControlDestination] = [.guidedSetup, .updates]
 
     var body: some View {
         HStack(spacing: 0) {
             sidebar
                 .frame(width: compactSidebar ? 70 : 248)
-                .background(Color(nsColor: .controlBackgroundColor))
+                // Retain the original native, translucent sidebar styling.
+                .background(.regularMaterial)
             Divider()
-            Group {
-                if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    searchResults
-                } else {
-                    switch destination ?? .home {
-                    case .home: overview
-                    case .apps: appFeatures
-                    case .workspaces, .shortcuts:
-                        SetupView(model: model, embedded: true, onReturn: resetFeature)
-                    case .appearance:
-                        scrollSettings("Appearance", category: "Appearance", includeAccent: true)
-                    case .dock: scrollSettings("Dock", category: "Dock")
-                    case .menuBar: scrollSettings("Menu Bar & Clock", category: "Menu Bar")
-                    case .finder: scrollSettings("Finder", category: "Finder")
-                    case .updates: UpdateCenter()
-                    case .guidedSetup: SetupView(model: model)
-                    }
+            VStack(spacing: 0) {
+                if let index = guidedStep,
+                   GuidedTourStep.steps.indices.contains(index) {
+                    GuidedTourBanner(
+                        step: GuidedTourStep.steps[index],
+                        index: index,
+                        total: GuidedTourStep.steps.count,
+                        canGoBack: index > 0,
+                        canAdvance: model.page != .running && model.page != .guide,
+                        onBack: { showGuidedStep(index - 1) },
+                        onSkip: { showGuidedStep(index + 1) },
+                        onNext: { showGuidedStep(index + 1) },
+                        onExit: endGuided
+                    )
+                    .padding(.horizontal, 24)
+                    .padding(.top, 22)
+                    .padding(.bottom, 8)
                 }
+                detail
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            // Do not let content scroll under the opaque macOS title bar.
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color(nsColor: .windowBackgroundColor))
         }
         .frame(minWidth: 1040, minHeight: 740)
@@ -94,19 +98,42 @@ struct ControlCenterView: View {
             previousDestination = next ?? .home
             query = ""
             activeFeature = nil
+            if let index = guidedStep,
+               GuidedTourStep.steps.indices.contains(index),
+               next != GuidedTourStep.steps[index].destination {
+                // Clicking a normal sidebar item leaves the guided walkthrough.
+                guidedStep = nil
+            }
             switch next {
             case .workspaces: model.openEditor(.workspaces)
             case .shortcuts: model.openEditor(.shortcuts)
-            case .guidedSetup:
-                model.scope = .full
-                model.page = .features
             default: break
             }
         }
     }
 
+    @ViewBuilder private var detail: some View {
+        if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            searchResults
+        } else {
+            switch destination ?? .home {
+            case .home: overview
+            case .apps: appFeatures
+            case .workspaces, .shortcuts:
+                SetupView(model: model, embedded: true, onReturn: resetFeature)
+            case .appearance:
+                scrollSettings("Appearance", category: "Appearance", includeAccent: true)
+            case .dock: scrollSettings("Dock", category: "Dock")
+            case .menuBar: scrollSettings("Menu Bar & Clock", category: "Menu Bar")
+            case .finder: scrollSettings("Finder", category: "Finder")
+            case .updates: UpdateCenter()
+            case .guidedSetup: overview // This destination starts a tour, not another editor.
+            }
+        }
+    }
+
     private var sidebar: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 12) {
                 Button {
                     compactSidebar.toggle()
@@ -121,91 +148,164 @@ struct ControlCenterView: View {
                 .accessibilityLabel(compactSidebar ? "Expand sidebar" : "Collapse sidebar")
 
                 if !compactSidebar {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Mac Setup").font(.headline)
-                        Text("Customize your Mac").font(.caption).foregroundStyle(.secondary)
+                    HStack(spacing: 9) {
+                        Image(systemName: "slider.horizontal.3")
+                            .font(.system(size: 19, weight: .medium))
+                            .foregroundStyle(Color.accentColor)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Mac Setup").font(.headline)
+                            Text("Your Mac, your way")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
                     }
                 }
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 15)
+            .padding(.horizontal, 14)
+            .padding(.top, 19)
+            .padding(.bottom, 12)
 
             if compactSidebar {
-                Button { compactSidebar = false } label: {
-                    Image(systemName: "magnifyingglass").frame(width: 36, height: 32)
+                Button {
+                    compactSidebar = false
+                } label: {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 17))
+                        .frame(width: 38, height: 34)
                 }
                 .buttonStyle(.plain)
-                .help("Expand to search settings")
-                .padding(.horizontal, 16)
+                .help("Expand sidebar to search settings")
+                .padding(.horizontal, 15)
             } else {
                 TextField("Search settings", text: $query)
                     .textFieldStyle(.roundedBorder)
-                    .accessibilityLabel("Search settings and features")
                     .padding(.horizontal, 12)
+                    .accessibilityLabel("Search settings and features")
             }
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 5) {
-                    if !compactSidebar {
-                        Text("CUSTOMIZE")
-                            .font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
-                            .padding(.horizontal, 16).padding(.top, 4)
+            if compactSidebar {
+                ScrollView {
+                    VStack(spacing: 4) {
+                        ForEach(customization) { item in compactRow(item) }
+                        Divider().padding(.vertical, 8)
+                        Button(action: beginGuided) {
+                            Image(systemName: "checklist")
+                                .font(.system(size: 19))
+                                .frame(width: 44, height: 43)
+                                .background(guidedStep != nil ? Color.accentColor.opacity(0.14) : .clear,
+                                            in: RoundedRectangle(cornerRadius: 10))
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(guidedStep != nil ? Color.accentColor : Color.primary)
+                        .help("Guided Setup")
+                        .accessibilityLabel("Guided Setup")
+                        compactRow(.updates)
                     }
-                    ForEach(customization) { item in sidebarRow(item) }
-                    Divider().padding(.vertical, 7)
-                    if !compactSidebar {
-                        Text("MAC SETUP")
-                            .font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
-                            .padding(.horizontal, 16)
-                    }
-                    ForEach(management) { item in sidebarRow(item) }
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 10)
                 }
-                .padding(.horizontal, 9)
+            } else {
+                // Keep the original native sidebar lists and selection behavior.
+                List(selection: $destination) {
+                    Section("Customize") {
+                        ForEach(customization) { item in
+                            Label(item.title, systemImage: item.symbol).tag(item)
+                        }
+                    }
+                    Section("Mac Setup") {
+                        Button(action: beginGuided) {
+                            Label("Guided Setup", systemImage: "checklist")
+                                .foregroundStyle(guidedStep != nil ? Color.accentColor : Color.primary)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Walk through the existing customization sections")
+                        Label(ControlDestination.updates.title,
+                              systemImage: ControlDestination.updates.symbol)
+                            .tag(ControlDestination.updates)
+                    }
+                }
+                .listStyle(.sidebar)
+                .scrollContentBackground(.hidden)
             }
-            Spacer(minLength: 0)
-            HStack {
-                if !compactSidebar { Text("Version \(MacSetupVersion.installed)") }
-                else { Image(systemName: "info.circle").help("Version \(MacSetupVersion.installed)") }
-                Spacer(minLength: 2)
+
+            HStack(spacing: 8) {
+                if compactSidebar {
+                    Image(systemName: "info.circle")
+                        .help("Version \(MacSetupVersion.installed)")
+                } else {
+                    Text("Version \(MacSetupVersion.installed)")
+                }
+                Spacer(minLength: 0)
                 Circle().fill(model.busy ? Color.orange : Color.green)
                     .frame(width: 7, height: 7)
-                    .accessibilityLabel(model.busy ? "Checking settings" : "Ready")
+                    .accessibilityLabel(model.busy ? "Checking or applying settings" : "Ready")
             }
-            .font(.caption2).foregroundStyle(.secondary)
-            .padding(.horizontal, 16).padding(.bottom, 14)
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 12)
         }
     }
 
-    private func sidebarRow(_ item: ControlDestination) -> some View {
-        Button { jump(item) } label: {
-            HStack(spacing: 12) {
-                Image(systemName: item.symbol)
-                    .font(.system(size: 17, weight: .regular))
-                    .frame(width: 30, height: 30)
-                if !compactSidebar {
-                    Text(item.title)
-                        .font(.system(size: 13, weight: destination == item ? .semibold : .regular))
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, compactSidebar ? 9 : 12)
-            .frame(height: 39)
-            .foregroundStyle(destination == item ? Color.accentColor : Color.primary)
-            .background(
-                destination == item ? Color.accentColor.opacity(0.14) : Color.clear,
-                in: RoundedRectangle(cornerRadius: 9)
-            )
-            .contentShape(RoundedRectangle(cornerRadius: 9))
+    private func compactRow(_ item: ControlDestination) -> some View {
+        Button { selectDestination(item) } label: {
+            Image(systemName: item.symbol)
+                .font(.system(size: 19))
+                .frame(width: 44, height: 43)
+                .background(destination == item ? Color.accentColor.opacity(0.14) : .clear,
+                            in: RoundedRectangle(cornerRadius: 10))
+                .foregroundStyle(destination == item ? Color.accentColor : Color.primary)
         }
         .buttonStyle(.plain)
         .help(item.title)
         .accessibilityLabel(item.title)
     }
 
+    private func selectDestination(_ item: ControlDestination) {
+        if item == .guidedSetup {
+            beginGuided()
+        } else {
+            guidedStep = nil
+            destination = item
+        }
+    }
+
+    private func beginGuided() {
+        guard model.page != .running && model.page != .guide else { return }
+        query = ""
+        activeFeature = nil
+        guidedStep = 0
+        destination = GuidedTourStep.steps[0].destination
+        // If this section is already visible, onChange will not run.
+        model.scope = .full
+        model.page = .features
+        model.refreshInventory()
+    }
+
+    private func endGuided() {
+        guidedStep = nil
+    }
+
+    private func showGuidedStep(_ index: Int) {
+        guard model.page != .running && model.page != .guide else { return }
+        guard GuidedTourStep.steps.indices.contains(index) else {
+            endGuided()
+            return
+        }
+        let next = GuidedTourStep.steps[index].destination
+        guidedStep = index
+        query = ""
+        activeFeature = nil
+        // Trigger the existing editor when navigating to its current destination.
+        if destination == next {
+            if next == .shortcuts { model.openEditor(.shortcuts) }
+            else if next == .workspaces { model.openEditor(.workspaces) }
+        }
+        destination = next
+    }
+
     private func jump(_ item: ControlDestination) {
-        destination = item
+        selectDestination(item)
     }
 
     private var overview: some View {

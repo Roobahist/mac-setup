@@ -75,7 +75,7 @@ mac-setup workspaces
 mac-setup shortcuts
 ```
 
-These paths apply only the relevant provider profiles, rather than restarting the entire installer. The full sequential setup is available through **Guided Setup** or `mac-setup setup`. `mac-setup` now opens the control center. The older terminal editor remains available through `mac-setup terminal`.
+These paths apply only the relevant provider profiles, rather than restarting the entire installer. **Guided Setup** is now a contextual tour through the same Apps, Shortcuts, Workspaces, Appearance, Dock, Menu Bar, Finder, and Updates screens. It explains each section and lets you go back, skip, or finish, but never applies changes on its own. `mac-setup setup` opens that tour. `mac-setup` opens the dashboard. The older terminal editor remains available through `mac-setup terminal`.
 
 ### Workspace cards and shortcut readability
 
