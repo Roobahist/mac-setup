@@ -75,7 +75,10 @@ public final class Engine {
             }
             return try preferences.allSatisfy { equalPlist(try journal.preference($0.domain, $0.key), $0.value) } ? .done : .ready
         case .vorssaint:
-            return try vorssaintPreferences().allSatisfy { equalPlist(try journal.preference($0.domain, $0.key), $0.value) } ? .done : .ready
+            let stored = try journal.preferences("com.vorssaint.utils")
+            return try vorssaintPreferences().allSatisfy {
+                equalPlist(stored[$0.key], $0.value)
+            } ? .done : .ready
         case .gitIgnore:
             let values = try journal.gitValues("core.excludesfile")
             guard values.count == 1 else { return .ready }
