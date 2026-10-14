@@ -69,7 +69,7 @@ try:
     os.write(master, b"\x1b[B")  # CSI cursor down
     read_until(
         lambda b: bool(re.search(
-            rb"\x1b\[1;46;30m[^\r\n]*Interface and terminal fonts", active_screen(b)
+            rb"\x1b\[1;38;5;231;48;5;24m[^\r\n]*Interface and terminal fonts", active_screen(b)
         )), timeout=4.0
     )
     assert "[x] ├── Interface and terminal fonts".encode() in active_screen(bytes(captured))
@@ -85,7 +85,7 @@ try:
     os.write(master, b"\x1bOA")  # SS3 cursor up
     read_until(
         lambda b: bool(re.search(
-            rb"\x1b\[1;46;30m[^\r\n]*Homebrew", active_screen(b)
+            rb"\x1b\[1;38;5;231;48;5;24m[^\r\n]*Homebrew", active_screen(b)
         )), timeout=4.0
     )
 
@@ -98,6 +98,9 @@ try:
     assert b"WORKSPACE ORDER" in workspace_screen
     assert b"SELECTED WORKSPACE" in workspace_screen, "Wide view should show inspector"
     assert b"SHORTCUT" in workspace_screen and b"GLYPH" in workspace_screen
+    assert b"ICON" in workspace_screen, "Glyph preview column should always be present"
+    assert "󰚩".encode() in workspace_screen, "Expected actual Hack Nerd Font icon preview"
+    assert b"Pomodoro" in workspace_screen, "Tomito workspace must be in default layout"
     assert b"APP RULES" in workspace_screen
     assert b"robot" in workspace_screen, "Glyph name must be readable without Nerd Font"
     assert b"\x1b[1;38;5;231;48;5;24m" in workspace_screen, "Selection has no highlight"

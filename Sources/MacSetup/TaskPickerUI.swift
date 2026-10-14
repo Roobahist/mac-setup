@@ -256,7 +256,8 @@ struct TaskPickerUI {
                     if let task = state.focusedTask, inventory[task.id] == TaskState.done.rawValue { state.toggleUpdate(task.id) }
                 case "w":
                     var editor = WorkspacePickerUI(
-                        layout: try WorkspaceConfiguration.load(from: engine.paths),
+                        layout: try WorkspaceConfiguration.load(from: engine.paths)
+                            .forSelectedTasks(state.selected),
                         installed: ApplicationDiscovery.scan(home: engine.paths.home))
                     if let updated = editor.run(in: terminal) {
                         try updated.save(to: engine.paths)
@@ -292,15 +293,15 @@ struct TaskPickerUI {
         let category = state.category
         let profile = state.preset?.title ?? "Custom"
         var lines: [String] = []
-        lines.append(tint("  ◈  MAC SETUP", "1;36") + tint("   /   configure your Mac", "2"))
-        lines.append(tint("  \(state.selectedCount)/\(state.tasks.count) selected", "1") +
-                     tint("     Profile: \(profile)     Category: \(category)", "2"))
-        lines.append(tint("  1 Minimal  2 Productivity  3 Developer  4 Complete", "36"))
-        lines.append(tint("  ↑↓ Move  Space Toggle  W Workspaces  U Update  Tab Category  / Search  Enter Continue  Q Quit", "2"))
+        lines.append(tint("  ◈  MAC SETUP", "1;38;5;255") + tint("   /   configure your Mac", "38;5;245"))
+        lines.append(tint("  \(state.selectedCount)/\(state.tasks.count) selected", "1;38;5;81") +
+                     tint("     Profile: \(profile)     Category: \(category)", "38;5;245"))
+        lines.append(tint("  1 Minimal  2 Productivity  3 Developer  4 Complete", "38;5;81"))
+        lines.append(tint("  ↑↓ Move  Space Toggle  W Workspaces  U Update  Tab Category  / Search  Enter Continue  Q Quit", "38;5;245"))
         lines.append("  " + String(repeating: "─", count: max(5, min(85, width - 4))))
 
         if reviewMode {
-            lines.append(tint("  REVIEW SELECTION", "1;36"))
+            lines.append(tint("  REVIEW SELECTION", "1;38;5;81"))
             lines.append("  \(state.selectedCount) tasks selected in the following categories:")
             for category in state.categories.dropFirst() {
                 let count = state.tasks.filter { $0.category == category && state.selected.contains($0.id) }.count
@@ -363,7 +364,7 @@ struct TaskPickerUI {
                 let body = clip(prefix + marker + " " + tree + task.title, to: width - type.count - 5)
                 let padding = String(repeating: " ", count: max(2, width - 3 - body.count - type.count))
                 if focused {
-                    lines.append(tint(body + padding + type, "1;46;30"))
+                    lines.append(tint(body + padding + type, "1;38;5;231;48;5;24"))
                 } else {
                     let checkbox = tint(prefix + marker + " ", checked ? "0" : "2")
                     let guide = tint(tree, "2;36")
@@ -375,7 +376,7 @@ struct TaskPickerUI {
 
             lines.append("  " + String(repeating: "─", count: max(5, min(85, width - 4))))
             if let task = state.focusedTask {
-                lines.append(tint("  \(task.title)", "1;36") +
+                lines.append(tint("  \(task.title)", "1;38;5;81") +
                              tint("   [\(taskStatus(task))]", "2"))
                 lines.append("  " + clip(task.summary, to: width - 4))
                 if !task.dependencies.isEmpty {

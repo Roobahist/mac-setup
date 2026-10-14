@@ -106,12 +106,14 @@ public struct WorkspaceDefinition: Codable, Equatable {
     public var name: String
     public var glyph: String
     public var apps: [String]
+    public var requiresTask: String?
 
-    public init(id: String, name: String, glyph: String, apps: [String] = []) {
+    public init(id: String, name: String, glyph: String, apps: [String] = [], requiresTask: String? = nil) {
         self.id = id
         self.name = name
         self.glyph = glyph
         self.apps = apps
+        self.requiresTask = requiresTask
     }
 }
 
@@ -140,8 +142,19 @@ public struct WorkspaceConfiguration: Codable, Equatable {
             .init(id: "messages", name: "Messages", glyph: "chat", apps: [
                 "ru.keepcoder.Telegram", "net.whatsapp.WhatsApp", "com.apple.MobileSMS"
             ]),
-            .init(id: "notes", name: "Notes", glyph: "notes", apps: ["md.obsidian"])
+            .init(id: "notes", name: "Notes", glyph: "notes", apps: ["md.obsidian"]),
+            .init(id: "timer", name: "Pomodoro", glyph: "clock",
+                  apps: ["com.tomito.tomito"], requiresTask: "tomito")
         ])
+    }
+
+    /// Hide only optional default workspaces whose application task was unchecked.
+    /// This does not delete unrelated workspaces, and does not mutate saved settings.
+    public func forSelectedTasks(_ taskIDs: Set<String>?) -> WorkspaceConfiguration {
+        guard let taskIDs else { return self }
+        return WorkspaceConfiguration(workspaces: workspaces.filter {
+            $0.requiresTask.map(taskIDs.contains) ?? true
+        })
     }
 
     public static func path(in paths: Paths) -> URL {

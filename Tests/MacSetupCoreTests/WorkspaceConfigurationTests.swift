@@ -7,17 +7,27 @@ final class WorkspaceConfigurationTests: XCTestCase {
         return try String(contentsOf: url, encoding: .utf8)
     }
 
-    func testDefaultDoesNotRequireTomito() throws {
+    func testTomitoDefaultAndOptionalWorkspace() throws {
         let config = WorkspaceConfiguration.defaultLayout
         try config.validate()
-        XCTAssertFalse(config.workspaces.contains { $0.id == "timer" })
-        XCTAssertFalse(config.workspaces.flatMap(\.apps).contains("com.tomito.tomito"))
+        XCTAssertEqual(config.workspaces.count, 13)
+        XCTAssertEqual(config.workspaces.last?.id, "timer")
+        XCTAssertEqual(config.workspaces.last?.requiresTask, "tomito")
+        XCTAssertEqual(config.workspaces.last?.apps, ["com.tomito.tomito"])
         let toml = try config.aerospaceTOML(from: template("aerospace/aerospace.toml"))
-        XCTAssertFalse(toml.contains("com.tomito.tomito"))
-        XCTAssertFalse(toml.contains("workspace timer"))
-        XCTAssertTrue(toml.contains("persistent-workspaces = ["))
+        XCTAssertTrue(toml.contains("com.tomito.tomito"))
+        XCTAssertTrue(toml.contains("alt-equal = 'workspace timer'"))
         XCTAssertTrue(toml.contains("alt-9 = 'workspace music'"))
-        XCTAssertFalse(toml.contains("alt-equal = 'workspace timer'"))
+
+        let withoutTomito = config.forSelectedTasks(["aerospace-profile", "sketchybar-profile"])
+        XCTAssertEqual(withoutTomito.workspaces.count, 12)
+        XCTAssertFalse(withoutTomito.workspaces.contains { $0.id == "timer" })
+        let generated = try withoutTomito.aerospaceTOML(from: template("aerospace/aerospace.toml"))
+        XCTAssertFalse(generated.contains("com.tomito.tomito"))
+        XCTAssertFalse(generated.contains("workspace timer"))
+        XCTAssertEqual(config.workspaces.count, 13, "Filtering must not mutate the user's saved layout")
+        XCTAssertEqual(config.forSelectedTasks(nil), config)
+        XCTAssertEqual(config.forSelectedTasks(["tomito"]), config)
     }
 
     func testRearrangeRenameDeleteAndAssignApps() throws {
@@ -88,6 +98,33 @@ final class WorkspaceConfigurationTests: XCTestCase {
         try data.write(to: app.appendingPathComponent("Contents/Info.plist"))
         let apps = ApplicationDiscovery.scan(home: home)
         XCTAssertTrue(apps.contains { $0.bundleID == "com.example.testeditor" })
+    }
+
+    func testEngineRespectsInstallerSelectionWhenGeneratingAeroSpace() throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: home) }
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+        let paths = Paths(home: home)
+        let engine = try Engine(paths: paths, runner: FakeRunner(), tools: { _ in nil })
+
+        engine.selectedWorkspaceTaskIDs = ["aerospace-profile", "sketchybar-profile"]
+        let first = try engine.apply(Catalog.task("aerospace-profile"))
+        let file = paths.config.appendingPathComponent("aerospace/aerospace.toml")
+        let withoutTomito = try String(contentsOf: file, encoding: .utf8)
+        XCTAssertFalse(withoutTomito.contains("workspace timer"))
+        XCTAssertFalse(withoutTomito.contains("com.tomito.tomito"))
+        XCTAssertFalse(withoutTomito.contains("alt-equal = 'workspace timer'"))
+
+        engine.selectedWorkspaceTaskIDs = ["tomito", "aerospace-profile", "sketchybar-profile"]
+        XCTAssertEqual(try engine.state(Catalog.task("aerospace-profile")), .ready)
+        let second = try engine.apply(Catalog.task("aerospace-profile"))
+        let withTomito = try String(contentsOf: file, encoding: .utf8)
+        XCTAssertTrue(withTomito.contains("workspace timer"))
+        XCTAssertTrue(withTomito.contains("com.tomito.tomito"))
+
+        try engine.journal.restore(second)
+        XCTAssertEqual(try String(contentsOf: file, encoding: .utf8), withoutTomito)
+        try engine.journal.restore(first)
     }
 
     func testAppliedProfileCanBeReconfiguredAndRestored() throws {

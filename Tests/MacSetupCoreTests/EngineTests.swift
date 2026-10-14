@@ -107,6 +107,21 @@ final class EngineTests: XCTestCase {
         return url
     }
 
+    func testTomitoAppStoreTaskIsGuidedUntilInstalled() throws {
+        let task = try Catalog.task("tomito")
+        XCTAssertTrue(task.guided)
+        XCTAssertEqual(try engine.state(task), .guided)
+        let preview = try engine.preview(task).joined(separator: "\n")
+        XCTAssertTrue(preview.contains("Mac App Store"))
+        try engine.openGuide(task)
+        XCTAssertTrue(runner.calls.contains {
+            $0 == ["/usr/bin/open", "macappstore://itunes.apple.com/app/id1526042938"]
+        })
+        let url = try write("Applications/Tomito.app/Contents/Info.plist", "fake")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+        XCTAssertEqual(try engine.state(task), .done)
+    }
+
     func testProfilePreservesExistingSymlinkAndRefusesToOverwrite() throws {
         let original = try write("private/aerospace.toml", "personal original\n")
         let extra = try write("private/local-note.txt", "keep this\n")
