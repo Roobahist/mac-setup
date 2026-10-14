@@ -1,57 +1,188 @@
+import AppKit
 import Foundation
 import Darwin
 
-/// Integrate the existing app; mac-setup does not run a second wallpaper timer.
+/// Prefer the user's existing watcher. The bundled helper is only used when
+/// no existing watcher application is available.
 public enum WallpaperWatcher {
     public static let label = "com.roobahist.wallpaper-watcher"
     public static let replacementLabel = "io.github.roobahist.mac-setup.wallpaper"
 
+    public struct Source: Equatable {
+        public let label: String
+        public let executable: URL
+        public let bundled: Bool
+    }
+
     public static func executable(paths: Paths) -> URL? {
-        let candidates = [paths.home.appendingPathComponent("Applications/WallpaperAccentWatcher.app"), URL(fileURLWithPath: "/Applications/WallpaperAccentWatcher.app")]
+        let candidates = [
+            paths.home.appendingPathComponent("Applications/WallpaperAccentWatcher.app"),
+            URL(fileURLWithPath: "/Applications/WallpaperAccentWatcher.app")
+        ]
         return candidates.map { $0.appendingPathComponent("Contents/MacOS/WallpaperAccentWatcher") }
             .first { FileManager.default.isExecutableFile(atPath: $0.path) }
     }
 
-    public static func run(engine: Engine, image: URL? = nil, once: Bool = false) throws {
-        guard let executable = executable(paths: engine.paths) else {
-            throw SetupError("Install WallpaperAccentWatcher.app in ~/Applications or /Applications first.")
+    public static func bundledExecutable(paths: Paths) -> URL? {
+        let name = "mac-setup-wallpaper-watcher"
+        let candidates = [
+            paths.home.appendingPathComponent("Applications/Mac Setup.app/Contents/Helpers/\(name)"),
+            URL(fileURLWithPath: "/Applications/Mac Setup.app/Contents/Helpers/\(name)"),
+            paths.home.appendingPathComponent(".local/lib/mac-setup/current/\(name)"),
+            Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/\(name)"),
+            Bundle.main.executableURL?.deletingLastPathComponent().appendingPathComponent(name)
+        ].compactMap { $0 }
+        return candidates.first { FileManager.default.isExecutableFile(atPath: $0.path) }
+    }
+
+    public static func source(paths: Paths) throws -> Source {
+        if let installed = executable(paths: paths) {
+            return Source(label: label, executable: installed, bundled: false)
         }
-        guard !(try engine.journal.launchAgentLoaded(label)), !(try engine.journal.launchAgentLoaded(replacementLabel)) else {
+        if let bundled = bundledExecutable(paths: paths) {
+            return Source(label: replacementLabel, executable: bundled, bundled: true)
+        }
+        throw SetupError("The wallpaper watcher helper is missing from Mac Setup. Reinstall the current Mac Setup release, then retry Automatic wallpaper color updates.")
+    }
+
+    public static func runningLabel(journal: Journal) throws -> String? {
+        if try journal.launchAgentLoaded(label) { return label }
+        if try journal.launchAgentLoaded(replacementLabel) { return replacementLabel }
+        return nil
+    }
+
+    public static func installedLabel(paths: Paths) -> String {
+        let original = paths.home.appendingPathComponent("Library/LaunchAgents/\(label).plist")
+        let fallback = paths.home.appendingPathComponent("Library/LaunchAgents/\(replacementLabel).plist")
+        if Journal.exists(original) { return label }
+        if Journal.exists(fallback) { return replacementLabel }
+        return executable(paths: paths) != nil ? label : replacementLabel
+    }
+
+    public static func run(engine: Engine, image: URL? = nil, once: Bool = false) throws {
+        guard try runningLabel(journal: engine.journal) == nil else {
             throw SetupError("A startup watcher is already running. Stop it before starting a foreground watcher.")
         }
-        var arguments = ["WALLPAPER_ACCENT_EXTRACTOR=" + engine.paths.config.appendingPathComponent("unsplash/get_wallpaper_accent.py").path,
-                         "WALLPAPER_ACCENT_COLORS=" + engine.paths.config.appendingPathComponent("sketchybar/plugins/colors.sh").path]
-        if once { arguments.append("WALLPAPER_ACCENT_ONESHOT=1") }
-        if let image { arguments.append("WALLPAPER_ACCENT_IMAGE=" + image.path) }
-        arguments.append(executable.path)
-        try engine.runner.checked("/usr/bin/env", arguments, interactive: true)
+        if let original = executable(paths: engine.paths) {
+            var arguments = [
+                "WALLPAPER_ACCENT_EXTRACTOR=" + engine.paths.config.appendingPathComponent("unsplash/get_wallpaper_accent.py").path,
+                "WALLPAPER_ACCENT_COLORS=" + engine.paths.config.appendingPathComponent("sketchybar/plugins/colors.sh").path
+            ]
+            if once { arguments.append("WALLPAPER_ACCENT_ONESHOT=1") }
+            if let image { arguments.append("WALLPAPER_ACCENT_IMAGE=" + image.path) }
+            arguments.append(original.path)
+            try engine.runner.checked("/usr/bin/env", arguments, interactive: true)
+        } else {
+            guard bundledExecutable(paths: engine.paths) != nil else {
+                throw SetupError("The bundled watcher helper is missing. Reinstall Mac Setup and retry.")
+            }
+            try runBuiltIn(engine: engine, image: image, once: once)
+        }
+    }
+
+    /// Poll metadata every two seconds, and extract only after a stable change.
+    /// This matches the intent of the existing watcher without a second service.
+    public static func runBuiltIn(engine: Engine, image: URL? = nil, once: Bool = false) throws {
+        var lastApplied: WallpaperStamp?
+        var failedStamp: WallpaperStamp?
+        var nextRetry = Date.distantPast
+        while true {
+            do {
+                let wallpaper = try image ?? currentWallpaper()
+                let stamp = try WallpaperStamp.read(wallpaper)
+                if stamp != lastApplied && (stamp != failedStamp || Date() >= nextRetry) {
+                    if !once {
+                        Thread.sleep(forTimeInterval: 2)
+                        guard try WallpaperStamp.read(wallpaper) == stamp else { continue }
+                    }
+                    do {
+                        _ = try engine.apply(Catalog.task("wallpaper-colors"), image: wallpaper)
+                        print("Wallpaper accent updated: \(wallpaper.lastPathComponent)")
+                        fflush(stdout)
+                        lastApplied = stamp
+                        failedStamp = nil
+                    } catch {
+                        fputs("Wallpaper accent update failed: \(error)\n", stderr)
+                        failedStamp = stamp
+                        nextRetry = Date().addingTimeInterval(60)
+                    }
+                }
+            } catch {
+                fputs("Wallpaper watcher waiting for desktop image: \(error)\n", stderr)
+            }
+            if once { return }
+            Thread.sleep(forTimeInterval: 2)
+        }
+    }
+
+    private static func currentWallpaper() throws -> URL {
+        guard let screen = NSScreen.main,
+              let url = NSWorkspace.shared.desktopImageURL(for: screen) else {
+            throw SetupError("No accessible wallpaper image was returned for the current display.")
+        }
+        return url
+    }
+
+    public struct WallpaperStamp: Equatable {
+        let path: String
+        let size: Int64
+        let modified: Date
+
+        public static func read(_ url: URL) throws -> WallpaperStamp {
+            let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+            guard let size = attributes[.size] as? NSNumber,
+                  let modified = attributes[.modificationDate] as? Date else {
+                throw SetupError("Cannot inspect wallpaper file metadata at \(url.path).")
+            }
+            return WallpaperStamp(path: url.standardizedFileURL.path,
+                                  size: size.int64Value, modified: modified)
+        }
     }
 
     public static func setEnabled(_ enabled: Bool, engine: Engine) throws {
-        let plist = engine.paths.home.appendingPathComponent("Library/LaunchAgents/" + label + ".plist")
-        if enabled && !Journal.exists(plist) { throw SetupError("Run setup wallpaper-watcher before enabling it.") }
-        if enabled, try engine.journal.launchAgentLoaded(replacementLabel) {
-            throw SetupError("Stop the mac-setup replacement watcher before enabling WallpaperAccentWatcher.")
+        let active = try runningLabel(journal: engine.journal)
+        let selected = active ?? installedLabel(paths: engine.paths)
+        let plist = engine.paths.home.appendingPathComponent("Library/LaunchAgents/\(selected).plist")
+        if enabled && !Journal.exists(plist) {
+            throw SetupError("Run setup wallpaper-watcher before enabling it.")
         }
-        try engine.runner.checked("/bin/launchctl", [enabled ? "enable" : "disable", "gui/\(getuid())/\(label)"])
+        let other = selected == label ? replacementLabel : label
+        if enabled && (try engine.journal.launchAgentLoaded(other)) {
+            throw SetupError("A different wallpaper watcher is already running. Stop it before enabling another.")
+        }
+        try engine.runner.checked("/bin/launchctl", [
+            enabled ? "enable" : "disable", "gui/\(getuid())/\(selected)"
+        ])
         if enabled {
-            if !(try engine.journal.launchAgentLoaded(label)) { try engine.journal.loadLaunchAgent(plist) }
-        } else { try engine.journal.stopLaunchAgent(label) }
+            if !(try engine.journal.launchAgentLoaded(selected)) {
+                try engine.journal.loadLaunchAgent(plist)
+            }
+        } else {
+            try engine.journal.stopLaunchAgent(selected)
+        }
     }
 
     public static func launchPlist(paths: Paths, image: URL? = nil) throws -> Data {
-        guard let executable = executable(paths: paths) else {
-            throw SetupError("Install WallpaperAccentWatcher.app in ~/Applications or /Applications first.")
-        }
-        var environment = ["HOME": paths.home.path,
-                           "PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
-                           "WALLPAPER_ACCENT_EXTRACTOR": paths.config.appendingPathComponent("unsplash/get_wallpaper_accent.py").path,
-                           "WALLPAPER_ACCENT_COLORS": paths.config.appendingPathComponent("sketchybar/plugins/colors.sh").path]
+        let chosen = try source(paths: paths)
+        return try launchPlist(source: chosen, paths: paths, image: image)
+    }
+
+    public static func launchPlist(source: Source, paths: Paths, image: URL? = nil) throws -> Data {
+        var environment = [
+            "HOME": paths.home.path,
+            "PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+            "WALLPAPER_ACCENT_EXTRACTOR": paths.config.appendingPathComponent("unsplash/get_wallpaper_accent.py").path,
+            "WALLPAPER_ACCENT_COLORS": paths.config.appendingPathComponent("sketchybar/plugins/colors.sh").path
+        ]
         if let image { environment["WALLPAPER_ACCENT_IMAGE"] = image.path }
         let properties: [String: Any] = [
-            "Label": label, "ProgramArguments": [executable.path],
-            "RunAtLoad": true, "KeepAlive": true, "ThrottleInterval": 10,
-            "LimitLoadToSessionType": "Aqua", "ProcessType": "Interactive",
+            "Label": source.label,
+            "ProgramArguments": [source.executable.path],
+            "RunAtLoad": true,
+            "KeepAlive": true,
+            "ThrottleInterval": 10,
+            "LimitLoadToSessionType": "Aqua",
+            "ProcessType": "Interactive",
             "EnvironmentVariables": environment,
             "StandardOutPath": "/tmp/wallpaper-accent-watcher.stdout.log",
             "StandardErrorPath": "/tmp/wallpaper-accent-watcher.stderr.log"
