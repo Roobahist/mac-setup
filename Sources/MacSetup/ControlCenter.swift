@@ -317,7 +317,7 @@ struct ControlCenterView: View {
     private func openFeature(_ task: SetupTask) {
         do {
             model.tasks = try Catalog.ordered([task.id], includingDependencies: true)
-            model.scope = .full
+            model.scope = .feature
             model.page = .review
             activeFeature = task.id
         } catch {
