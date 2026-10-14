@@ -627,7 +627,12 @@ public final class Engine {
         let extractor = paths.profile.appendingPathComponent("unsplash/get_wallpaper_accent.py").path
         // Huge compressed wallpapers need a larger, but still bounded, budget.
         // Ordinary setup commands retain their existing timeout.
-        let result = try runner.runTimed(python, [extractor, "-"], timeout: 120, input: bytes)
+        let result: CommandResult
+        do {
+            result = try runner.runTimed(python, [extractor, "-"], timeout: 120, input: bytes)
+        } catch {
+            throw SetupError("Wallpaper accent extraction could not finish within its bounded processing window. \(error)")
+        }
         guard result.status == 0 else {
             throw SetupError("Wallpaper accent extraction failed (exit \(result.status)): \(result.text). Check ImageMagick and the wallpaper file, then retry.")
         }

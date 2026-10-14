@@ -15,6 +15,13 @@ final class DisplayAndGuideTests: XCTestCase {
         XCTAssertTrue(input?.url?.contains("Privacy_ListenEvent") == true)
         XCTAssertEqual(app?.app, "Karabiner-Elements")
         XCTAssertNil(GuideStepRouting.destination(task: task, index: 6))
+        let raycast = try Catalog.task("raycast-access")
+        XCTAssertEqual(GuideStepRouting.destination(task: raycast, index: 1)?.app, "Raycast")
+        let vorssaint = try Catalog.task("vorssaint-access")
+        XCTAssertTrue(GuideStepRouting.destination(task: vorssaint, index: 1)?.url?
+            .contains("Privacy_Accessibility") == true)
+        XCTAssertTrue(GuideStepRouting.destination(task: vorssaint, index: 2)?.url?
+            .contains("LoginItems") == true)
         XCTAssertNil(GuideStepRouting.destination(task: task, index: -1))
         let finder = try Catalog.task("finder-sidebar")
         XCTAssertEqual(GuideStepRouting.destination(task: finder, index: 0)?.app, "Finder")

@@ -643,7 +643,11 @@ def main() -> int:
     except subprocess.TimeoutExpired as error:
         print(f"accent extraction timed out in ImageMagick ({error.timeout}s); try a smaller wallpaper image", file=sys.stderr)
         return 1
-    except (OSError, ValueError, subprocess.CalledProcessError) as error:
+    except subprocess.CalledProcessError as error:
+        details = (error.stderr or b"").decode("utf-8", errors="replace").strip()
+        print(f"ImageMagick stage failed (exit {error.returncode}): {details[:800] or error.cmd}", file=sys.stderr)
+        return 1
+    except (OSError, ValueError) as error:
         print(f"accent extraction failed: {error}", file=sys.stderr)
         return 1
 
