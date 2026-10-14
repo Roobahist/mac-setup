@@ -23,12 +23,51 @@ public struct ManagedShortcut: Codable, Equatable, Identifiable {
     }
 }
 
+public struct AdvancedKarabinerRule: Codable, Equatable, Identifiable {
+    public var id: String
+    public var json: String
+    public var enabled: Bool
+
+    public init(id: String, json: String, enabled: Bool = true) {
+        self.id = id
+        self.json = json
+        self.enabled = enabled
+    }
+}
+
 /// The user-editable hotkeys that are managed by Mac Setup. Workspace destination
 /// keys remain in WorkspaceConfiguration; they inherit its two shared modifier sets.
 public struct ShortcutSettings: Codable, Equatable {
     public var entries: [ManagedShortcut]
+    /// Optional to support shortcuts.json files created before advanced rules were editable.
+    public var advancedKarabiner: [AdvancedKarabinerRule]?
 
-    public init(entries: [ManagedShortcut]) { self.entries = entries }
+    public init(entries: [ManagedShortcut], advancedKarabiner: [AdvancedKarabinerRule]? = nil) {
+        self.entries = entries
+        self.advancedKarabiner = advancedKarabiner
+    }
+
+    public mutating func updateAdvancedRule(_ rule: AdvancedKarabinerRule) {
+        var values = advancedKarabiner ?? []
+        values.removeAll { $0.id == rule.id }
+        values.append(rule)
+        advancedKarabiner = values
+    }
+
+    public static func bundledAdvancedKarabinerRules(from source: Data) -> [AdvancedKarabinerRule] {
+        guard let root = try? JSONSerialization.jsonObject(with: source) as? [String: Any],
+              let profiles = root["profiles"] as? [[String: Any]],
+              let profile = profiles.first(where: { ($0["name"] as? String) == "Portable" }),
+              let modifications = profile["complex_modifications"] as? [String: Any],
+              let rules = modifications["rules"] as? [[String: Any]] else { return [] }
+        let simple = Set(scripts.map { $0.name })
+        return rules.compactMap { rule in
+            guard let description = rule["description"] as? String,
+                  !simple.contains(description),
+                  let data = try? JSONSerialization.data(withJSONObject: rule, options: [.prettyPrinted, .sortedKeys]) else { return nil }
+            return .init(id: description, json: String(decoding: data, as: UTF8.self))
+        }
+    }
 
     public static let scripts: [(name: String, shell: String)] = [
         ("Alacritty", "\"$HOME/.config/karabiner/scripts/alacritty/open_new_window.sh\""),
