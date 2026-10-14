@@ -133,27 +133,78 @@ public struct WorkspaceDefinition: Codable, Equatable {
     }
 }
 
+/// Appearance values used by the installed SketchyBar profile. The defaults
+/// reproduce the bundled configuration, including its translucent dark bar.
+public struct WorkspaceBarStyle: Codable, Equatable {
+    public var itemWidth: Int
+    public var blurRadius: Int
+    public var backgroundColor: String
+    public var occupiedColor: String
+    public var emptyColor: String
+
+    public init(itemWidth: Int = 21, blurRadius: Int = 50,
+                backgroundColor: String = "0x35000000",
+                occupiedColor: String = "0xffffffff",
+                emptyColor: String = "0x30000000") {
+        self.itemWidth = itemWidth
+        self.blurRadius = blurRadius
+        self.backgroundColor = backgroundColor
+        self.occupiedColor = occupiedColor
+        self.emptyColor = emptyColor
+    }
+
+    /// Render only the three palette values exposed by the workspace editor.
+    /// Keep wallpaper-driven HIGHLIGHT_COLOR and other user script settings.
+    public func colorsShell(from template: String) throws -> String {
+        try validate()
+        return template
+            .replacingOccurrences(of: "export BAR_COLOR=0x35000000",
+                                  with: "export BAR_COLOR=\(backgroundColor)")
+            .replacingOccurrences(of: "export BASE_WHITE=0xffffffff",
+                                  with: "export BASE_WHITE=\(occupiedColor)")
+            .replacingOccurrences(of: "export BASE_GRAY=0x30000000",
+                                  with: "export BASE_GRAY=\(emptyColor)")
+    }
+
+    public func validate() throws {
+        guard (16...52).contains(itemWidth), (0...100).contains(blurRadius) else {
+            throw SetupError("Workspace spacing must be 16–52 and bar blur must be 0–100.")
+        }
+        for color in [backgroundColor, occupiedColor, emptyColor] {
+            guard color.range(of: "^0x[0-9a-fA-F]{8}$",
+                              options: .regularExpression) != nil else {
+                throw SetupError("SketchyBar colors must be ARGB values such as 0x35000000.")
+            }
+        }
+    }
+}
+
 public struct WorkspaceConfiguration: Codable, Equatable {
     public var workspaces: [WorkspaceDefinition]
     public var keymap: WorkspaceKeymap
+    public var barStyle: WorkspaceBarStyle
 
-    public init(workspaces: [WorkspaceDefinition], keymap: WorkspaceKeymap = .init()) {
+    public init(workspaces: [WorkspaceDefinition], keymap: WorkspaceKeymap = .init(),
+                barStyle: WorkspaceBarStyle = .init()) {
         self.workspaces = workspaces
         self.keymap = keymap
+        self.barStyle = barStyle
     }
 
-    private enum CodingKeys: String, CodingKey { case workspaces, keymap }
+    private enum CodingKeys: String, CodingKey { case workspaces, keymap, barStyle }
 
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         workspaces = try values.decode([WorkspaceDefinition].self, forKey: .workspaces)
         keymap = try values.decodeIfPresent(WorkspaceKeymap.self, forKey: .keymap) ?? .init()
+        barStyle = try values.decodeIfPresent(WorkspaceBarStyle.self, forKey: .barStyle) ?? .init()
     }
 
     public func encode(to encoder: Encoder) throws {
         var values = encoder.container(keyedBy: CodingKeys.self)
         try values.encode(workspaces, forKey: .workspaces)
         try values.encode(keymap, forKey: .keymap)
+        try values.encode(barStyle, forKey: .barStyle)
     }
 
     // Default shortcuts follow the number row. Additional workspaces can use custom shortcuts.
@@ -277,6 +328,7 @@ public struct WorkspaceConfiguration: Codable, Equatable {
     }
 
     public func validate(aerospaceTemplate: String? = nil, checkingShortcutsFor workspaceID: String? = nil) throws {
+        try barStyle.validate()
         guard !workspaces.isEmpty else {
             throw SetupError("Keep at least one workspace.")
         }
@@ -457,9 +509,21 @@ public struct WorkspaceConfiguration: Codable, Equatable {
         }
 
         """
-        let rendered = try Self.replace(template, from: "##### Workspace Icons #####\n",
+        var rendered = try Self.replace(template, from: "##### Workspace Icons #####\n",
                                 to: "# Read workspace names and order directly from AeroSpace\n",
                                 with: section + "##### AeroSpace Workspaces #####\n\nsketchybar --add event aerospace_workspace_change\n\n# ------------------------------------------------------------\n")
+        // Workspaces are created in the user's saved order. Relying on a live
+        // AeroSpace socket here previously left the bar in an old order while
+        // the tiling manager restarted or pointed at a different config.
+        let orderedIDs = workspaces.map { Self.shellQuote($0.id) }.joined(separator: " ")
+        rendered = try Self.replace(rendered,
+                                    from: "# Read workspace names and order directly from AeroSpace\n",
+                                    to: "# Create workspace items\n",
+                                    with: "# Workspace order follows workspaces.json\nworkspace_ids=(\(orderedIDs))\n\n")
+        rendered = rendered.replacingOccurrences(of: "label.width=21",
+                with: "label.width=\(barStyle.itemWidth)")
+        rendered = rendered.replacingOccurrences(of: "blur_radius=50",
+                with: "blur_radius=\(barStyle.blurRadius)")
         return DisplayGeometry.barShell(rendered)
     }
 

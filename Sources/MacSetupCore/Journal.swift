@@ -278,7 +278,9 @@ public final class Journal {
         if !old {
             try add(SavedChange(kind: .service, target: "sketchybar", key: nil, backup: nil, before: try plistData(old), after: try plistData(true), restored: false), to: transaction)
         }
-        try runner.checked(brew, ["services", old ? "restart" : "start", "sketchybar"], interactive: true)
+        // Brew services requires no terminal input or sudo here. A GUI caller
+        // must not be rejected by ProcessRunner's interactive-only TTY guard.
+        try runner.checked(brew, ["services", old ? "restart" : "start", "sketchybar"])
         guard try serviceStarted() else { throw SetupError("SketchyBar did not remain running. Run sketchybar in Terminal to inspect its config errors.") }
     }
 

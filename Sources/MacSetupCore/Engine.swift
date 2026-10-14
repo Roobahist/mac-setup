@@ -242,8 +242,18 @@ public final class Engine {
                     }
                 }
                 guard try state(task) == .done else { throw SetupError("Profile verification failed.") }
-                if directories.contains("sketchybar"), (try? journal.serviceStarted()) == true {
-                    try journal.startService(transaction: id)
+                if directories.contains("sketchybar") {
+                    // The running bar is the authority, not Homebrew's service
+                    // status. Users can run SketchyBar independently of brew
+                    // services. A successful file copy must refresh that bar.
+                    if let sketchybar = executable("sketchybar") {
+                        let running = try runner.run(sketchybar, ["--query", "bar"])
+                        if running.status == 0 {
+                            try runner.checked(sketchybar, ["--reload"])
+                        } else if (try? journal.serviceStarted()) == true {
+                            throw SetupError("SketchyBar service is registered but its bar is unavailable. Restart SketchyBar and retry.")
+                        }
+                    }
                 }
                 if directories.contains("aerospace"), let tool = executable("aerospace") {
                     let running = try runner.run(tool, ["list-workspaces", "--all"])
@@ -481,6 +491,12 @@ public final class Engine {
         if file.lastPathComponent == "karabiner.json",
            file.deletingLastPathComponent().lastPathComponent == "karabiner" {
             return try shortcutSettings().karabinerData(from: Data(original.utf8))
+        }
+        if file.lastPathComponent == "colors.sh",
+           file.deletingLastPathComponent().lastPathComponent == "plugins",
+           file.deletingLastPathComponent().deletingLastPathComponent().lastPathComponent == "sketchybar" {
+            let style = try WorkspaceConfiguration.load(from: paths).barStyle
+            return Data(try style.colorsShell(from: original).utf8)
         }
         // Render user-specific workspace settings without writing into public dotfiles.
         if file.lastPathComponent == "aerospace.toml",
