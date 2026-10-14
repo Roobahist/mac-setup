@@ -365,6 +365,8 @@ final class EngineTests: XCTestCase {
         let preferences = try engine.vorssaintPreferences()
         let keys = Set(preferences.map(\.key))
         XCTAssertTrue(keys.contains("autoQuitEnabled"))
+        XCTAssertTrue(keys.contains("launchAtLoginWanted"))
+        XCTAssertGreaterThan(keys.count, 700, "The full portable export should be imported.")
         XCTAssertTrue(equalPlist(preferences.first(where: { $0.key == "autoQuitEnabled" })?.value, true))
         for forbidden in ["shelfItems", "textSnippets", "commandBarUsage", "notchDownloadsFolderBookmark", "appVolumes", "NSOSPLastRootDirectory"] {
             XCTAssertFalse(keys.contains(forbidden))

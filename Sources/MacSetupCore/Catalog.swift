@@ -72,12 +72,15 @@ public enum Catalog {
                   "Install Obsidian for local notes. The Notes workspace stays available if this task is unchecked.",
                   dependencies: ["homebrew"], action: .install(packages: ["obsidian"], cask: true, app: "Obsidian")),
         SetupTask("vorssaint", "Apps", "Vorssaint", "Install the modular macOS utility (Apple silicon, macOS 14+).", dependencies: ["homebrew"], action: .install(packages: ["vorssaint"], cask: true, app: "Vorssaint")),
-        SetupTask("vorssaint-profile", "Apps", "Vorssaint preferences", "Apply the portable preference snapshot, including quit-on-last-window. Quit Vorssaint first. Private snippets, shelf contents and machine state are excluded.", dependencies: ["vorssaint"], action: .vorssaint),
-        SetupTask("vorssaint-access", "Apps", "Vorssaint access and remaining settings", "Finish permissions and settings that cannot be transferred as public preferences.", dependencies: ["vorssaint-profile"], action: .guide(url: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility", app: "Vorssaint", instructions: [
-            "If Welcome appears, choose individual features. Keep Quit on close enabled. Keep App Switcher disabled so native Command+Tab can follow AeroSpace workspaces. Leave optional recording, microphone and disk access features off.",
-            "Check Quit on close and select the apps it should affect. Test by closing an app's last window.",
-            "In Privacy & Security > Accessibility, enable Vorssaint for Quit on close. Return to Vorssaint and enable Launch at login.",
-            "Enable launch at login in Vorssaint itself. The captured profile merges portable stored settings; it does not overwrite another Mac's private content or register login items."
+        SetupTask("vorssaint-profile", "Apps", "Vorssaint preferences", "Automatically import the portable settings from the bundled Vorssaint 3.4.1 export. Personal text snippets are excluded. Existing preferences are backed up.", dependencies: ["vorssaint"], action: .vorssaint),
+        SetupTask("vorssaint-access", "Apps", "Vorssaint system permissions",
+                  "Check macOS permissions and login item registration. All exported preferences are applied automatically.",
+                  dependencies: ["vorssaint-profile"],
+                  action: .guide(url: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+                                 app: "Vorssaint", instructions: [
+            "The bundled Vorssaint preferences have already been imported. No manual settings recreation is required.",
+            "Approve macOS Accessibility and other permissions for any active features. Apple requires the user to approve these access requests.",
+            "If macOS has not registered Vorssaint as a login item, approve it in System Settings > General > Login Items & Extensions. The launch-at-login preference was imported automatically."
         ])),
         SetupTask("raycast", "Apps", "Raycast", "Install Raycast. Account setup and personal extensions stay local.", dependencies: ["homebrew"], action: .install(packages: ["raycast"], cask: true, app: "Raycast")),
         SetupTask("raycast-profile", "Apps", "Raycast launcher shortcut", "Use Command+Space for Raycast and release the same shortcut from Spotlight. Existing Spotlight settings are backed up.", dependencies: ["raycast"], action: .preferences([

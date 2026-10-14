@@ -515,7 +515,15 @@ public final class Engine {
 
     public func vorssaintPreferences() throws -> [Preference] {
         let data = try Data(contentsOf: paths.profile.appendingPathComponent("vorssaint/preferences.plist"))
-        guard let values = try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else { throw SetupError("Invalid Vorssaint profile.") }
+        guard let backup = try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else {
+            throw SetupError("Invalid Vorssaint profile.")
+        }
+        // Native exports store settings in a nested dictionary. Older flat
+        // snapshots remain supported for existing installations.
+        let values = backup["settings"] as? [String: Any] ?? backup
+        guard values["autoQuitEnabled"] != nil, values["launchAtLoginWanted"] != nil else {
+            throw SetupError("The bundled Vorssaint export is incomplete.")
+        }
         return values.keys.sorted().map { Preference("com.vorssaint.utils", $0, values[$0]!) }
     }
 
