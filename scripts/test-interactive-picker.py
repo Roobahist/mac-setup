@@ -161,8 +161,11 @@ try:
     assert initial, "Initial selection count is missing"
     selected, total = map(int, initial.groups())
     assert_consistent_chrome(bytes(captured), b"1 Features")
+    # The inventory can finish painting before the PTY input loop is ready.
+    # Wait briefly so the first key is not dropped on busy macOS CI runners.
+    time.sleep(0.35)
     os.write(master, b"u")
-    read_until(lambda b: bool(re.search(rb"Homebrew[^\r\n]*UPDATE", active_screen(b))))
+    read_until(lambda b: bool(re.search(rb"Homebrew[^\r\n]*UPDATE", active_screen(b))), timeout=15.0)
     assert f"{selected}/{total} selected".encode() in active_screen(bytes(captured))
     os.write(master, b"u")
     read_until(lambda b: not re.search(rb"Homebrew[^\r\n]*UPDATE", active_screen(b)))
