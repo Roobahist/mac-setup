@@ -2,109 +2,73 @@ import XCTest
 @testable import MacSetupCore
 
 final class WorkspaceShortcutTests: XCTestCase {
-    private func template(_ file: String = "aerospace/aerospace.toml") throws -> String {
-        try String(contentsOf: Paths().profile.appendingPathComponent(file), encoding: .utf8)
+    private func template() throws -> String {
+        try String(contentsOf: Paths().profile.appendingPathComponent("aerospace/aerospace.toml"), encoding: .utf8)
     }
 
-    func testAdditionalWorkspacesStayPersistentWithoutInventingShortcuts() throws {
-        var config = WorkspaceConfiguration.defaultLayout
-        for n in 14...30 {
-            config.workspaces.append(.init(id: "extra\(n)", name: "Extra \(n)", glyph: "star"))
-        }
-        let toml = try config.aerospaceTOML(from: template())
-        XCTAssertTrue(toml.contains("\"extra30\""))
-        XCTAssertFalse(toml.contains("= 'workspace extra30'"))
-        XCTAssertNil(config.shortcuts(at: 29).switchTo)
-        let bar = try config.sketchybarShell(from: template("sketchybar/sketchybarrc"))
-        XCTAssertTrue(bar.contains("extra30) printf"))
-    }
-
-    func testCustomLetterAndFunctionShortcutsRenderIndependentActions() throws {
-        var config = WorkspaceConfiguration.defaultLayout
-        config.workspaces.append(.init(id: "research", name: "Research", glyph: "book", shortcuts: .init(
-            switchTo: .init(key: "r", modifiers: ["ctrl", "alt"]),
-            moveWindow: .init(key: "f12", modifiers: ["cmd", "shift"]))))
-        let toml = try config.aerospaceTOML(from: template())
-        XCTAssertTrue(toml.contains("ctrl-alt-r = 'workspace research'"))
-        XCTAssertTrue(toml.contains("cmd-shift-f12 = ['move-node-to-workspace research'"))
-        XCTAssertTrue(toml.contains("alt-1 = 'workspace 1'"))
-        XCTAssertTrue(toml.contains("alt-shift-1 = ['move-node-to-workspace 1'"))
-        XCTAssertTrue(toml.contains("alt-f = 'fullscreen'"))
-    }
-
-    func testCustomShortcutStaysWithWorkspaceWhenReordered() throws {
-        var config = WorkspaceConfiguration.defaultLayout
-        config.workspaces[0].shortcuts = .init(switchTo: .init(key: "a", modifiers: ["ctrl", "alt"]))
-        config.workspaces.swapAt(0, 1)
-        let toml = try config.aerospaceTOML(from: template())
-        XCTAssertTrue(toml.contains("ctrl-alt-a = 'workspace chatgpt'"))
-        XCTAssertTrue(toml.contains("alt-backtick = 'workspace 1'"))
-        XCTAssertFalse(toml.contains("alt-shift-1 = ['move-node-to-workspace chatgpt'"))
-    }
-
-    func testNoShortcutChoicePersistsAndOldJSONRetainsDefaults() throws {
-        let oldJSON = Data("""
-        {"workspaces":[{"id":"research","name":"Research","glyph":"book","apps":[]}]}
-        """.utf8)
-        var config = try JSONDecoder().decode(WorkspaceConfiguration.self, from: oldJSON)
-        XCTAssertNil(config.workspaces[0].shortcuts)
+    func testSharedModifiersAndWorkspaceKeys() throws {
+        let config = WorkspaceConfiguration.defaultLayout
         XCTAssertEqual(config.shortcuts(at: 0).switchTo?.binding, "alt-backtick")
-        config.workspaces[0].shortcuts = .init()
-        let home = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        defer { try? FileManager.default.removeItem(at: home) }
-        let paths = Paths(home: home)
-        try config.save(to: paths)
-        let saved = try WorkspaceConfiguration.load(from: paths)
-        XCTAssertEqual(saved, config)
-        XCTAssertNil(saved.shortcuts(at: 0).switchTo)
-        XCTAssertNil(saved.shortcuts(at: 0).moveWindow)
-        XCTAssertFalse(try saved.aerospaceTOML(from: template()).contains("= 'workspace research'"))
+        XCTAssertEqual(config.shortcuts(at: 0).moveWindow?.binding, "alt-shift-backtick")
+        var extended = config
+        extended.workspaces.append(.init(id: "extra", name: "Extra", glyph: "star"))
+        XCTAssertNil(extended.shortcuts(at: 13).switchTo)
+        try extended.validate(aerospaceTemplate: template())
     }
 
-    func testDuplicateModifiersAreCanonicalizedForConflictChecks() throws {
+    func testGlobalModifierChangeAppliesToBothActions() throws {
         var config = WorkspaceConfiguration.defaultLayout
-        config.workspaces[0].shortcuts = .init(switchTo: .init(key: "r", modifiers: ["alt", "ctrl"]))
-        config.workspaces[1].shortcuts = .init(moveWindow: .init(key: "r", modifiers: ["ctrl", "alt"]))
-        XCTAssertThrowsError(try config.validate())
-        config.workspaces[1].shortcuts = .init(switchTo: .init(key: "1"), moveWindow: .init(key: "1"))
-        XCTAssertThrowsError(try config.validate())
+        config.keymap = .init(switchModifiers: ["ctrl", "alt"], moveModifiers: ["ctrl", "alt", "shift"])
+        config.workspaces[0].shortcutKey = "r"
+        config.workspaces.swapAt(0, 1)
+        XCTAssertEqual(config.shortcuts(at: 1).switchTo?.binding, "ctrl-alt-r")
+        XCTAssertEqual(config.shortcuts(at: 1).moveWindow?.binding, "ctrl-alt-shift-r")
+        let toml = try config.aerospaceTOML(from: template())
+        XCTAssertTrue(toml.contains("ctrl-alt-r = 'workspace chatgpt'"))
+        XCTAssertTrue(toml.contains("ctrl-alt-shift-r = ['move-node-to-workspace chatgpt'"))
     }
 
-    func testReservedProfileActionsCannotBeOverwritten() throws {
+    func testInsertionMovesCardWithoutReplacingIt() throws {
         var config = WorkspaceConfiguration.defaultLayout
-        for shortcut in [WorkspaceShortcut(key: "f"), .init(key: "left", modifiers: ["ctrl", "alt"]),
-                         .init(key: "tab", modifiers: ["alt", "shift"])] {
-            config.workspaces[0].shortcuts = .init(switchTo: shortcut)
-            XCTAssertThrowsError(try config.aerospaceTOML(from: template()))
-        }
-        config.workspaces[0].shortcuts = .init(switchTo: .init(key: "r", modifiers: ["ctrl", "alt"]))
-        let updated = try template().replacingOccurrences(of: "# Resize\n", with: "# Resize\nalt-ctrl-r = 'resize width -25'\n")
-        XCTAssertThrowsError(try config.aerospaceTOML(from: updated))
+        let original = config.workspaces
+        config.insertWorkspace("chatgpt", at: 3)
+        XCTAssertEqual(config.workspaces.count, original.count)
+        XCTAssertEqual(config.workspaces[2], original[0])
+        config.insertWorkspace("chatgpt", at: 0)
+        XCTAssertEqual(config.workspaces, original)
     }
 
-    func testConflictsCanBeRepairedOneWorkspaceAtATime() throws {
-        var config = WorkspaceConfiguration.defaultLayout
-        for (index, key) in ["r", "r", "t", "t"].enumerated() {
-            config.workspaces[index].shortcuts = .init(switchTo: .init(key: key, modifiers: ["ctrl", "alt"]))
-        }
-        XCTAssertThrowsError(try config.validate(checkingShortcutsFor: config.workspaces[0].id))
-        config.workspaces[0].shortcuts?.switchTo?.key = "g"
-        try config.validate(aerospaceTemplate: template(), checkingShortcutsFor: config.workspaces[0].id)
-        XCTAssertThrowsError(try config.validate())
-        config.workspaces[2].shortcuts?.switchTo?.key = "y"
+    func testLegacyShortcutJSONUsesSharedModifiers() throws {
+        let old = Data("""
+        {"workspaces":[{"id":"research","name":"Research","glyph":"book","apps":[],
+        "shortcuts":{"switchTo":{"key":"r","modifiers":["ctrl","alt"]},
+        "moveWindow":{"key":"f12","modifiers":["cmd","shift"]}}}]}
+        """.utf8)
+        let config = try JSONDecoder().decode(WorkspaceConfiguration.self, from: old)
+        XCTAssertEqual(config.keymap, .init())
+        XCTAssertEqual(config.shortcuts(at: 0).switchTo?.binding, "alt-r")
+        XCTAssertEqual(config.shortcuts(at: 0).moveWindow?.binding, "alt-shift-r")
         try config.validate(aerospaceTemplate: template())
     }
 
-    func testInvalidKeysAndModifiersAreRejectedBeforeGeneration() throws {
+    func testDuplicateAndReservedKeysAreRejected() throws {
         var config = WorkspaceConfiguration.defaultLayout
-        for shortcut in [WorkspaceShortcut(key: "r'; injected = 'command"),
-                         .init(key: "r", modifiers: []), .init(key: "r", modifiers: ["hyper"]),
-                         .init(key: "r", modifiers: ["ctrl", "ctrl"])] {
-            config.workspaces[0].shortcuts = .init(switchTo: shortcut)
-            XCTAssertThrowsError(try config.validate())
-        }
-        for key in ["leftSquareBracket", "keypadPlus", "f20", "pageUp"] {
-            try WorkspaceShortcut(key: key, modifiers: ["cmd", "ctrl", "alt", "shift"]).validate()
-        }
+        config.workspaces[0].shortcutKey = "1"
+        XCTAssertThrowsError(try config.validate())
+        config.workspaces[0].shortcutKey = "left"
+        XCTAssertThrowsError(try config.validate(aerospaceTemplate: template()))
+        config.workspaces[0].shortcutKey = "r"
+        config.keymap = .init(switchModifiers: ["alt"], moveModifiers: ["alt"])
+        XCTAssertThrowsError(try config.validate())
+        config.keymap = .init(switchModifiers: ["alt"], moveModifiers: ["ctrl", "alt", "shift"])
+        try config.validate(aerospaceTemplate: template())
+    }
+
+    func testDisabledAndUnsupportedKey() throws {
+        var config = WorkspaceConfiguration.defaultLayout
+        config.workspaces[0].shortcutKey = ""
+        XCTAssertNil(config.shortcuts(at: 0).switchTo)
+        config.workspaces[0].shortcutKey = "invalid-command"
+        XCTAssertThrowsError(try config.validate())
     }
 }

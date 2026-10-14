@@ -7,47 +7,39 @@ final class WorkspaceConfigurationTests: XCTestCase {
         return try String(contentsOf: url, encoding: .utf8)
     }
 
-    func testTomitoDefaultAndOptionalWorkspace() throws {
+    func testOptionalAppsPreserveEmptyWorkspaces() throws {
         let config = WorkspaceConfiguration.defaultLayout
         try config.validate()
         XCTAssertEqual(config.workspaces.count, 13)
-        XCTAssertEqual(config.workspaces.last?.id, "timer")
-        XCTAssertEqual(config.workspaces.last?.requiresTask, "tomito")
-        XCTAssertEqual(config.workspaces.last?.apps, ["com.tomito.tomito"])
-        let toml = try config.aerospaceTOML(from: template("aerospace/aerospace.toml"))
-        XCTAssertTrue(toml.contains("com.tomito.tomito"))
-        XCTAssertTrue(toml.contains("alt-equal = 'workspace timer'"))
-        XCTAssertTrue(toml.contains("alt-9 = 'workspace music'"))
-
-        let withoutTomito = config.forSelectedTasks(["aerospace-profile", "sketchybar-profile"])
-        XCTAssertEqual(withoutTomito.workspaces.count, 12)
-        XCTAssertFalse(withoutTomito.workspaces.contains { $0.id == "timer" })
-        let generated = try withoutTomito.aerospaceTOML(from: template("aerospace/aerospace.toml"))
-        XCTAssertFalse(generated.contains("com.tomito.tomito"))
-        XCTAssertFalse(generated.contains("workspace timer"))
-        XCTAssertEqual(config.workspaces.count, 13, "Filtering must not mutate the user's saved layout")
+        let chosen: Set<String> = ["aerospace-profile", "sketchybar-profile"]
+        let missing = config.forSelectedTasks(chosen, installedBundleIDs: [])
+        XCTAssertEqual(missing.workspaces.count, config.workspaces.count)
+        for id in ["timer", "notes", "music"] {
+            XCTAssertTrue(missing.workspaces.contains { $0.id == id && $0.apps.isEmpty })
+        }
+        let toml = try missing.aerospaceTOML(from: template("aerospace/aerospace.toml"))
+        XCTAssertTrue(toml.contains("workspace timer"))
+        XCTAssertFalse(toml.contains("com.tomito.tomito"))
+        XCTAssertFalse(toml.contains("md.obsidian"))
+        XCTAssertFalse(toml.contains("com.spotify.client"))
+        let requested = config.forSelectedTasks(chosen.union(["tomito", "obsidian"]),
+                                                installedBundleIDs: [])
+        XCTAssertTrue(requested.workspaces.contains { $0.id == "timer" && $0.apps == ["com.tomito.tomito"] })
+        XCTAssertTrue(requested.workspaces.contains { $0.id == "notes" && $0.apps == ["md.obsidian"] })
         XCTAssertEqual(config.forSelectedTasks(nil), config)
-        XCTAssertEqual(config.forSelectedTasks(["tomito"]), config)
+        XCTAssertEqual(config.forSelectedTasks(chosen, installedBundleIDs: [
+            "com.tomito.tomito", "md.obsidian", "com.spotify.client"
+        ]), config)
     }
 
-    func testHiddenOptionalWorkspaceSurvivesVisibleEdits() throws {
+    func testEditingDoesNotDuplicateOptionalWorkspaces() throws {
         let original = WorkspaceConfiguration.defaultLayout
-        var visible = original.forSelectedTasks(["aerospace-profile"])
-        XCTAssertFalse(visible.workspaces.contains { $0.id == "timer" })
+        var visible = original.forSelectedTasks(["aerospace-profile"], installedBundleIDs: [])
         visible.workspaces[0].name = "Development"
-        visible.workspaces[0].glyph = "terminal"
-
         let merged = try original.mergingVisible(visible, selectedTasks: ["aerospace-profile"])
-        XCTAssertEqual(merged.workspaces.first?.name, "Development")
-        XCTAssertEqual(merged.workspaces.last?.id, "timer")
-        XCTAssertEqual(merged.workspaces.last?.requiresTask, "tomito")
-        XCTAssertTrue(merged.forSelectedTasks(["aerospace-profile"])
-            .workspaces.allSatisfy { $0.id != "timer" })
-
-        visible.workspaces.append(WorkspaceDefinition(id: "extra", name: "Extra", glyph: "star"))
-        let expanded = try original.mergingVisible(visible, selectedTasks: ["aerospace-profile"])
-        XCTAssertEqual(expanded.workspaces.count, 14)
-        XCTAssertTrue(expanded.workspaces.contains { $0.id == "timer" })
+        XCTAssertEqual(merged.workspaces.count, original.workspaces.count)
+        XCTAssertEqual(merged.workspaces[0].name, "Development")
+        XCTAssertTrue(merged.workspaces.contains { $0.id == "timer" })
     }
 
     func testRearrangeRenameDeleteAndAssignApps() throws {
@@ -131,9 +123,9 @@ final class WorkspaceConfigurationTests: XCTestCase {
         let first = try engine.apply(Catalog.task("aerospace-profile"))
         let file = paths.config.appendingPathComponent("aerospace/aerospace.toml")
         let withoutTomito = try String(contentsOf: file, encoding: .utf8)
-        XCTAssertFalse(withoutTomito.contains("workspace timer"))
+        XCTAssertTrue(withoutTomito.contains("workspace timer"))
         XCTAssertFalse(withoutTomito.contains("com.tomito.tomito"))
-        XCTAssertFalse(withoutTomito.contains("alt-equal = 'workspace timer'"))
+        XCTAssertTrue(withoutTomito.contains("alt-equal = 'workspace timer'"))
 
         engine.selectedWorkspaceTaskIDs = ["tomito", "aerospace-profile", "sketchybar-profile"]
         XCTAssertEqual(try engine.state(Catalog.task("aerospace-profile")), .ready)
