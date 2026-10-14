@@ -263,9 +263,13 @@ do {
             var editor = WorkspacePickerUI(
                 layout: try WorkspaceConfiguration.load(from: engine.paths),
                 installed: ApplicationDiscovery.scan(home: engine.paths.home))
-            guard let updated = editor.run(in: terminal) else { return false }
-            try updated.save(to: engine.paths)
-            return true
+            switch editor.run(in: terminal) {
+            case .saved(let updated):
+                try updated.save(to: engine.paths)
+                return true
+            case .kept, .cancelled:
+                return false
+            }
         }()
         if saved {
             print("Workspace configuration saved.")
