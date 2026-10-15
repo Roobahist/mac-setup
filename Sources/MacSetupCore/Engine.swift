@@ -12,6 +12,9 @@ public final class Engine {
     /// retains all saved workspaces for standalone profile reapplication.
     public var selectedWorkspaceTaskIDs: Set<String>?
     public var deferRestarts = false
+    /// Tunable for headless integration tests and slower desktop reloads.
+    public var workspaceVerificationAttempts = 10
+    public var workspaceVerificationRetryDelay: TimeInterval = 0.2
     public private(set) var pendingRestarts = Set<String>()
     private let displayHelper: URL?
     private var brewRefreshed = false
@@ -254,14 +257,17 @@ public final class Engine {
                             // Wait for the active bar to expose the new item order.
                             let expected = try WorkspaceConfiguration.load(from: paths).workspaces.map(\.id)
                             var issue: String?
-                            for attempt in 0..<10 {
+                            let attempts = max(1, workspaceVerificationAttempts)
+                            for attempt in 0..<attempts {
                                 let query = try runner.run(sketchybar, ["--query", "bar"])
                                 issue = query.status == 0
                                     ? WorkspaceRuntimeVerification.sketchyBarOrderIssue(
                                         query: query.output, expectedIDs: expected)
                                     : "SketchyBar did not respond after reload."
                                 if issue == nil { break }
-                                if attempt < 9 { Thread.sleep(forTimeInterval: 0.2) }
+                                if attempt + 1 < attempts {
+                                    Thread.sleep(forTimeInterval: max(0, workspaceVerificationRetryDelay))
+                                }
                             }
                             if let issue { throw SetupError("SketchyBar reload was not verified: \(issue)") }
                         } else if (try? journal.serviceStarted()) == true {
