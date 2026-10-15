@@ -17,6 +17,9 @@ Usage:
   mac-setup reference            Show the bundled dot-files source revision
   mac-setup workspaces           Edit only workspace layout and app routing
   mac-setup shortcuts            Edit application and window shortcuts
+  mac-setup macos plan           Preview the shared macOS preference file
+  mac-setup macos apply          Apply enabled settings with local backups
+  mac-setup macos on|off         Enable or restore the whole preference group
   mac-setup dotfiles status      Inspect local public dotfiles checkout
   mac-setup dotfiles update      Pull new dotfiles using Git fast-forward
   mac-setup update              Reapply previously installed bundled profiles
@@ -32,6 +35,7 @@ Options:
   --preset NAME                 repair, complete, minimal, productivity, developer
   --dry-run                     Preview instead of making changes
   --yes                         Approve automatic tasks; guided tasks stay pending
+  --config PATH                 With macos: use a specific preference JSON file
   --image PATH                  Choose an image for wallpaper-colors
   --once                        With watch: refresh once, then exit
   --force                       With restore only: discard edits made after setup
@@ -50,6 +54,7 @@ struct Options {
     var dryRun = false
     var yes = false
     var force = false
+    var config: URL?
     var image: URL?
     var once = false
     var upgrades = Set<String>()
@@ -59,7 +64,7 @@ struct Options {
         if args.contains("--help") || args.first == "help" { command = "help"; return }
         if args.contains("--version") { command = "version"; return }
         if let first = args.first, !first.hasPrefix("--") { command = args.removeFirst() }
-        let commands = ["menu", "gui", "terminal", "list", "status", "plan", "setup", "update", "backups", "restore", "profiles", "reference", "workspaces", "shortcuts", "dotfiles", "watch", "watcher-status", "watcher-stop", "watcher-disable", "watcher-enable"]
+        let commands = ["menu", "gui", "terminal", "list", "status", "plan", "setup", "update", "backups", "restore", "profiles", "reference", "workspaces", "shortcuts", "dotfiles", "macos", "watch", "watcher-status", "watcher-stop", "watcher-disable", "watcher-enable"]
         guard commands.contains(command) else { throw SetupError("Unknown command '\(command)'. Run mac-setup --help.") }
         while !args.isEmpty {
             let value = args.removeFirst()
@@ -74,6 +79,9 @@ struct Options {
             case "--yes": yes = true
             case "--force": force = true
             case "--once": once = true
+            case "--config":
+                guard !args.isEmpty, !args[0].hasPrefix("--") else { throw SetupError("--config requires a JSON file path.") }
+                config = URL(fileURLWithPath: (args.removeFirst() as NSString).expandingTildeInPath)
             case "--image":
                 guard !args.isEmpty, !args[0].hasPrefix("--") else { throw SetupError("--image requires an image path.") }
                 image = URL(fileURLWithPath: (args.removeFirst() as NSString).expandingTildeInPath)
@@ -81,6 +89,10 @@ struct Options {
                 guard !value.hasPrefix("--") else { throw SetupError("Unknown option '\(value)'.") }
                 ids.append(value)
             }
+        }
+        if config != nil && command != "macos" { throw SetupError("--config is only valid with macos.") }
+        if command == "macos" && (ids.count > 1 || !["plan", "status", "apply", "on", "off"].contains(ids.first ?? "plan")) {
+            throw SetupError("Use mac-setup macos plan, status, apply, on or off.")
         }
         if dryRun && ["menu", "gui", "terminal", "workspaces", "shortcuts"].contains(command) {
             throw SetupError("--dry-run is for task commands. Use plan to preview configuration without opening an editor.")
@@ -322,6 +334,20 @@ do {
             let count = TaskPickerState(preset: preset).selectedCount
             print("  \(preset.rawValue): \(count) tasks. \(preset.summary)")
         }
+    case "macos":
+        let service = MacOSPreferenceService(paths: engine.paths, journal: engine.journal,
+                                             runner: engine.runner, profileURL: options.config)
+        let action = options.ids.first ?? "plan"
+        let enabled: Bool? = action == "on" ? true : action == "off" ? false : nil
+        let reviewed = try service.profile().encoded()
+        print(try service.preview(enabled: enabled).joined(separator: "\n"))
+        if ["plan", "status"].contains(action) || options.dryRun { break }
+        guard options.yes || (isatty(STDIN_FILENO) != 0 && ask("Apply these macOS preference changes?")) else {
+            print("Cancelled. Use --yes for an already reviewed noninteractive apply."); break
+        }
+        let outcome = try service.apply(enabled: enabled, expected: reviewed)
+        print("Applied. Recovery record: \(outcome.transaction)")
+        if let warning = outcome.refreshWarning { print(warning) }
     case "dotfiles":
         let action = options.ids.first ?? "status"
         print("Public dotfiles checkout: \(engine.dotfiles.source.checkout.path)")

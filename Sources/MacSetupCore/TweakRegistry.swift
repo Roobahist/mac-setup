@@ -167,7 +167,11 @@ public final class TweakService {
                     name: Notification.Name(name), object: nil)
             }
         }
-        guard let process = tweak.restart else { return nil }
+        return Self.refresh(tweak.restart, runner: runner)
+    }
+
+    static func refresh(_ process: String?, runner: CommandRunning) -> String? {
+        guard let process else { return nil }
         do {
             let result = try runner.run("/usr/bin/killall", [process])
             // An active macOS Dock normally relaunches through launchd.
@@ -216,12 +220,17 @@ public final class TweakService {
         let lock = try SetupLock(paths: paths)
         defer { withExtendedLifetime(lock) {} }
         let transaction = try journal.begin(tweak.id)
-        if Self.usesSystemDefault(tweak, value: prepared) {
-            try journal.clearPreference(tweak.domain, tweak.key, transaction: transaction)
-        } else {
-            try journal.setPreference(tweak.domain, tweak.key, prepared, transaction: transaction)
+        let profileService = MacOSPreferenceService(paths: paths, journal: journal, runner: runner)
+        do {
+            let value: Any? = Self.usesSystemDefault(tweak, value: prepared) ? nil : prepared
+            let profile = try profileService.profile().updating(domain: tweak.domain, key: tweak.key, value: value)
+            let setting = profile.settings.first { $0.domain == tweak.domain && $0.key == tweak.key }!
+            _ = try profileService.apply(profile, transaction: transaction, settingID: setting.id)
+            try journal.finish(transaction)
+        } catch {
+            try journal.restore(transaction)
+            throw error
         }
-        try journal.finish(transaction)
         return TweakChangeResult(transaction: transaction, refreshWarning: refreshed(tweak))
     }
 
@@ -230,8 +239,16 @@ public final class TweakService {
         let lock = try SetupLock(paths: paths)
         defer { withExtendedLifetime(lock) {} }
         let transaction = try journal.begin(tweak.id + ".reset")
-        try journal.clearPreference(tweak.domain, tweak.key, transaction: transaction)
-        try journal.finish(transaction)
+        let profileService = MacOSPreferenceService(paths: paths, journal: journal, runner: runner)
+        do {
+            let profile = try profileService.profile().updating(domain: tweak.domain, key: tweak.key, value: nil)
+            let setting = profile.settings.first { $0.domain == tweak.domain && $0.key == tweak.key }!
+            _ = try profileService.apply(profile, transaction: transaction, settingID: setting.id)
+            try journal.finish(transaction)
+        } catch {
+            try journal.restore(transaction)
+            throw error
+        }
         return TweakChangeResult(transaction: transaction, refreshWarning: refreshed(tweak))
     }
 

@@ -230,3 +230,18 @@ to open or focus the app.
 If you previously assigned these app hotkeys in Raycast, clear those assignments when
 migrating so the shortcut has one owner. Existing Mac Setup settings gain the
 new shortcuts once; each stays disabled if its chord is already assigned.
+
+## Shared macOS preference file
+
+`macos/preferences.json` in [dot-files](https://github.com/Roobahist/dot-files/tree/main/macos) is the canonical source for native macOS preferences. The app bundles the reviewed file and uses `~/.config/macos/preferences.json` when installed (including a dotfiles link). Missing local configuration is created on first apply; malformed configuration is reported instead of silently replaced. Existing app profiles and privacy permissions remain separate.
+
+```sh
+mac-setup macos plan
+mac-setup macos apply
+mac-setup macos off
+mac-setup macos on
+```
+
+Mutating commands review and confirm unless `--yes` is supplied. `--config` selects an explicit JSON path, and `--dry-run` previews without writing. The top-level `enabled` flag controls the group; each setting also has `enabled` and `value`. False is an actual preference value; null removes an override. Disabling, or removing a setting and applying the whole profile, restores its saved baseline while preserving later manual edits. macOS does not watch this file; reapply after edits or pulls. Some changes require logout or reopening apps.
+
+Appearance contains the group review/on/off control. Individual controls write the same file and journal their changes. Guided setup includes a Shared macOS preferences task; older task IDs still apply their respective subset from the same file. Group backups and recovery records are private, live outside the dotfiles repo, and retain values from before the first managed apply. On an already customized reference Mac, that baseline may already contain its customizations. Off does not reconstruct unknown factory values. Nothing automatically commits or pushes local customization.
