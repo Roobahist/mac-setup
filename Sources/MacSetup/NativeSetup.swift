@@ -37,6 +37,7 @@ final class SetupModel: ObservableObject {
     @Published var appSheet = false
     @Published var appSearch = ""
     @Published var runLog = ""
+    @Published private(set) var runtimeIssues: [String] = []
     var scope: SetupScope = .full
     private let worker = DispatchQueue(label: "mac-setup.native", qos: .userInitiated)
     private var setupLock: SetupLock?
@@ -139,7 +140,15 @@ final class SetupModel: ObservableObject {
         do {
             switch selected {
             case .full:
-                try shortcuts.validate(workspaces: layout, aerospaceTemplate: aerospaceTemplate)
+                let selected = Set(picker.orderedSelection)
+                if !selected.isDisjoint(with: ["aerospace-profile", "sketchybar-profile",
+                                             "karabiner-profile", "raycast-profile"]) {
+                    let pendingLayout = selected.isDisjoint(with: ["aerospace-profile", "sketchybar-profile"])
+                        ? appliedLayout : layout
+                    let pendingShortcuts = selected.isDisjoint(with: ["aerospace-profile", "karabiner-profile", "raycast-profile"])
+                        ? appliedShortcuts : shortcuts
+                    try pendingShortcuts.validate(workspaces: pendingLayout, aerospaceTemplate: aerospaceTemplate)
+                }
             case .workspaces:
                 var pending = layout
                 pending.keymap = appliedLayout.keymap
@@ -157,33 +166,44 @@ final class SetupModel: ObservableObject {
     func start() {
         do {
             setupLock = try SetupLock(paths: engine.paths)
-            // Applying one section must never save an unrelated unsaved draft.
+            // Record a recoverable snapshot of only the selected editor sections.
+            let writer = SetupConfigurationWriter(journal: engine.journal)
+            let configurationRecovery: String?
             switch scope {
             case .full:
-                if let error = workspaceError(in: layout) { throw SetupError(error) }
-                try shortcuts.save(to: engine.paths)
-                try layout.save(to: engine.paths)
+                if let error = configurationError(for: .full) { throw SetupError(error) }
+                let selected = Set(tasks.map(\.id))
+                configurationRecovery = try writer.save(
+                    layout: selected.isDisjoint(with: ["aerospace-profile", "sketchybar-profile"]) ? nil : layout,
+                    shortcuts: selected.isDisjoint(with: ["aerospace-profile", "karabiner-profile", "raycast-profile"]) ? nil : shortcuts)
             case .workspaces:
                 var chosen = layout
                 chosen.keymap = appliedLayout.keymap
                 try appliedShortcuts.validateWorkspaceBindings(chosen, aerospaceTemplate: aerospaceTemplate)
-                try chosen.save(to: engine.paths)
+                configurationRecovery = try writer.save(layout: chosen)
             case .shortcuts:
                 var chosen = appliedLayout
                 chosen.keymap = layout.keymap
                 try shortcuts.validate(workspaces: chosen, aerospaceTemplate: aerospaceTemplate)
-                try chosen.save(to: engine.paths)
-                try shortcuts.save(to: engine.paths)
-            case .feature: break
+                configurationRecovery = try writer.save(layout: chosen, shortcuts: shortcuts)
+            case .feature:
+                configurationRecovery = nil
             }
             engine.selectedWorkspaceTaskIDs = scope == .full ? picker.selected : nil
             pausedSetup = false
+            runtimeIssues = []
             index = 0; results = [:]; runLog = ""
             log("Starting \(scope) with \(tasks.count) selected tasks")
+            if let configurationRecovery {
+                log("Saved editor configuration recovery record: \(configurationRecovery). Restore it only after reversing later profile changes.")
+            }
             log("Workspace order: \(layout.workspaces.map(\.id).joined(separator: ", "))")
             log("Switch modifiers: \(layout.keymap.switchModifiers.joined(separator: "+")); move modifiers: \(layout.keymap.moveModifiers.joined(separator: "+"))")
             advance()
-        } catch { message = String(describing: error) }
+        } catch {
+            setupLock = nil
+            message = String(describing: error)
+        }
     }
 
     func advance() {
@@ -199,13 +219,26 @@ final class SetupModel: ObservableObject {
             worker.async { [self] in
                 do {
                     try engine.finishRestarts()
+                    let ids = Set(tasks.map(\.id))
+                    let issues = engine.workspaceRuntimeIssues(
+                        checkAeroSpace: ids.contains("aerospace-profile"),
+                        checkSketchyBar: ids.contains("sketchybar-profile"))
                     let updatedLayout = try? WorkspaceConfiguration.load(from: engine.paths)
                     let updatedShortcuts = try? ShortcutSettings.load(
                         from: engine.paths, aerospaceTemplate: aerospaceTemplate)
                     DispatchQueue.main.async {
-                        self.log("Selected files verified and refresh requested. Confirm the live desktop reflects them.")
-                        if let updatedLayout { self.appliedLayout = updatedLayout }
-                        if let updatedShortcuts { self.appliedShortcuts = updatedShortcuts }
+                        self.runtimeIssues = issues
+                        self.log(issues.isEmpty
+                            ? "Selected files updated. Live workspace queries passed where applicable; verify actual shortcuts and desktop behavior."
+                            : "Selected files updated, but live workspace verification reported \(issues.count) issue(s).")
+                        if issues.isEmpty && !self.results.values.contains("Pending") {
+                            if let updatedLayout, ids.contains("aerospace-profile") || ids.contains("sketchybar-profile") {
+                                self.appliedLayout = updatedLayout
+                            }
+                            if let updatedShortcuts, !ids.isDisjoint(with: ["aerospace-profile", "karabiner-profile", "raycast-profile"]) {
+                                self.appliedShortcuts = updatedShortcuts
+                            }
+                        }
                         self.busy = false
                         self.page = .finished
                         self.setupLock = nil
@@ -271,6 +304,24 @@ final class SetupModel: ObservableObject {
                     self.log("\(task.id): FAILED: \(error)")
                     self.busy = false; self.message = Self.recoveryHint(task)
                     self.details = String(describing: error); self.page = .failed
+                }
+            }
+        }
+    }
+
+    func refreshRuntimeVerification() {
+        let ids = Set(tasks.map(\.id))
+        busy = true
+        worker.async { [self] in
+            let issues = engine.workspaceRuntimeIssues(
+                checkAeroSpace: ids.contains("aerospace-profile"),
+                checkSketchyBar: ids.contains("sketchybar-profile"))
+            let updated = try? WorkspaceConfiguration.load(from: engine.paths)
+            DispatchQueue.main.async {
+                self.runtimeIssues = issues
+                self.busy = false
+                if issues.isEmpty && !self.results.values.contains("Pending"), let updated {
+                    self.appliedLayout = updated
                 }
             }
         }
@@ -400,8 +451,10 @@ final class SetupModel: ObservableObject {
             if let previousID, !selectedIDs.contains(previousID) {
                 log("Removed interrupted task \(previousID) from this run")
             }
-            try shortcuts.save(to: engine.paths)
-            try layout.save(to: engine.paths)
+            if let id = try SetupConfigurationWriter(journal: engine.journal).save(
+                layout: layout, shortcuts: shortcuts) {
+                log("Updated editor configuration recovery record: \(id)")
+            }
             engine.selectedWorkspaceTaskIDs = picker.selected
             index = 0
             pausedSetup = false
@@ -684,13 +737,13 @@ struct SetupView: View {
     private var workspaces: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Workspaces").font(SetupDesign.pageTitle)
-            Text("Drag the dotted grip to reorder. The bar preview updates immediately; review and apply to update your desktop.")
+            Text("Drag the dotted grip or right-click a workspace to move it. The preview updates immediately; review and apply to update the actual configuration.")
                 .font(.callout).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             menuBarPreview
 
             HStack(spacing: 12) {
-                Label(model.workspaceHasDraftChanges ? "Unapplied workspace changes" : "Workspace layout is saved",
+                Label(model.workspaceHasDraftChanges ? "Workspace changes need applying or verification" : "No local workspace edits",
                       systemImage: model.workspaceHasDraftChanges ? "square.and.pencil" : "checkmark.circle")
                     .foregroundStyle(model.workspaceHasDraftChanges ? Color.orange : Color.secondary)
                 Spacer()
@@ -723,6 +776,7 @@ struct SetupView: View {
             .padding(.top, 4)
 
             workspaceAppearance
+            DesktopAccentControls(engine: model.engine)
 
             if let error = model.configurationError(for: .workspaces) {
                 Label(error, systemImage: "exclamationmark.triangle")
@@ -739,7 +793,7 @@ struct SetupView: View {
     private var workspaceAppearance: some View {
         let style = model.layout.barStyle
         return VStack(alignment: .leading, spacing: 14) {
-            Text("SketchyBar appearance").font(.headline)
+            Text("SketchyBar layout and colors").font(.headline)
             Text("Adjust the bar background, blur, and occupied or empty workspaces that are not focused. Wallpaper highlighting of the focused workspace stays separate.")
                 .font(.callout).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -869,6 +923,18 @@ struct SetupView: View {
         }
         .frame(maxWidth: 720)
         .frame(maxWidth: .infinity)
+        .contextMenu {
+            Button("Move up") { moveWorkspace(item.id, by: -1) }
+                .disabled(index == 0)
+            Button("Move down") { moveWorkspace(item.id, by: 1) }
+                .disabled(index == model.layout.workspaces.count - 1)
+        }
+        .accessibilityAction(named: Text("Move workspace up")) {
+            moveWorkspace(item.id, by: -1)
+        }
+        .accessibilityAction(named: Text("Move workspace down")) {
+            moveWorkspace(item.id, by: 1)
+        }
         .dropDestination(for: String.self) { dragged, location in
             let prefix = "mac-setup-workspace:\(workspaceDragSession):"
             guard dragged.count == 1, let raw = dragged.first, raw.hasPrefix(prefix) else { return false }
@@ -882,6 +948,14 @@ struct SetupView: View {
         } isTargeted: { hovering in
             if hovering { dropTargetWorkspaceID = item.id }
             else if dropTargetWorkspaceID == item.id { dropTargetWorkspaceID = nil }
+        }
+    }
+
+    private func moveWorkspace(_ id: String, by offset: Int) {
+        guard let index = model.layout.workspaces.firstIndex(where: { $0.id == id }),
+              model.layout.workspaces.indices.contains(index + offset) else { return }
+        withAnimation(.easeInOut(duration: 0.16)) {
+            model.layout.insertWorkspace(id, at: offset < 0 ? index - 1 : index + 2)
         }
     }
 
@@ -1050,10 +1124,27 @@ struct SetupView: View {
 
     private var finished: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text(model.results.values.contains("Pending") ? "Setup saved; some tasks still need attention" : "Setup complete").font(.title2.bold())
+            Text(model.results.values.contains("Pending")
+                 ? "Setup saved; some tasks still need attention"
+                 : (model.runtimeIssues.isEmpty ? "Setup tasks finished" : "Files updated; live checks need attention"))
+                .font(.title2.bold())
             Button { copyLog() } label: { Label("Copy apply log", systemImage: "doc.on.doc") }
             Text("Move the pointer to the bottom edge: the Dock should reveal promptly. The macOS menu bar should hide when the pointer leaves the top. Its reveal timing is controlled by macOS. If it still stays visible, set Automatically hide and show the menu bar to Always in System Settings, then log out and back in.")
             Text("Check the workspace highlight with your chosen modifiers and destination key, then use the move-window shortcut to send a window to another workspace.")
+            if !model.runtimeIssues.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("Live workspace verification needs attention", systemImage: "exclamationmark.triangle")
+                        .font(.headline)
+                    ForEach(model.runtimeIssues, id: \.self) { issue in
+                        Text(issue).font(.callout).textSelection(.enabled)
+                    }
+                    Button("Check running apps again") { model.refreshRuntimeVerification() }
+                        .disabled(model.busy)
+                }
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+            }
             ForEach(model.tasks, id: \.id) { task in
                 HStack { Text(task.title); Spacer(); Text(model.results[task.id] ?? "Pending").foregroundStyle(model.results[task.id] == "Pending" ? Color.orange : Color.secondary) }
             }
@@ -1069,8 +1160,8 @@ struct SetupView: View {
             switch model.page {
             case .workspaces, .shortcuts:
                 Text(model.page == .workspaces
-                     ? (model.workspaceHasDraftChanges ? "Draft changes are not yet active." : "Workspace order is saved.")
-                     : (model.shortcutsHaveDraftChanges ? "Shortcut changes are not yet active." : "Shortcuts are saved."))
+                     ? (model.workspaceHasDraftChanges ? "Workspace edits are not confirmed active." : "No local workspace edits.")
+                     : (model.shortcutsHaveDraftChanges ? "Shortcut edits are not confirmed active." : "No local shortcut edits."))
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button(model.page == .workspaces ? "Review & apply workspaces" : "Review & apply shortcuts") {

@@ -12,6 +12,9 @@ public final class Engine {
     /// retains all saved workspaces for standalone profile reapplication.
     public var selectedWorkspaceTaskIDs: Set<String>?
     public var deferRestarts = false
+    /// Tunable for headless integration tests and slower desktop reloads.
+    public var workspaceVerificationAttempts = 10
+    public var workspaceVerificationRetryDelay: TimeInterval = 0.2
     public private(set) var pendingRestarts = Set<String>()
     private let displayHelper: URL?
     private var brewRefreshed = false
@@ -93,7 +96,7 @@ public final class Engine {
             let text = (try? String(contentsOf: file, encoding: .utf8)) ?? ""
             return hasAtuinInit(text) ? .done : .ready
         case .service:
-            guard executable("sketchybar") != nil else { return .blocked }
+            guard tools("sketchybar") != nil else { return .blocked }
             return try journal.serviceStarted() ? .done : .ready
         case .wallpaperWatcher:
             if try WallpaperWatcher.isCurrent(engine: self) { return .done }
@@ -246,16 +249,33 @@ public final class Engine {
                     // The running bar is the authority, not Homebrew's service
                     // status. Users can run SketchyBar independently of brew
                     // services. A successful file copy must refresh that bar.
-                    if let sketchybar = executable("sketchybar") {
+                    if let sketchybar = tools("sketchybar") {
                         let running = try runner.run(sketchybar, ["--query", "bar"])
                         if running.status == 0 {
                             try runner.checked(sketchybar, ["--reload"])
+                            // A zero exit code only confirms receipt of the reload request.
+                            // Wait for the active bar to expose the new item order.
+                            let expected = try WorkspaceConfiguration.load(from: paths).workspaces.map(\.id)
+                            var issue: String?
+                            let attempts = max(1, workspaceVerificationAttempts)
+                            for attempt in 0..<attempts {
+                                let query = try runner.run(sketchybar, ["--query", "bar"])
+                                issue = query.status == 0
+                                    ? WorkspaceRuntimeVerification.sketchyBarOrderIssue(
+                                        query: query.output, expectedIDs: expected)
+                                    : "SketchyBar did not respond after reload."
+                                if issue == nil { break }
+                                if attempt + 1 < attempts {
+                                    Thread.sleep(forTimeInterval: max(0, workspaceVerificationRetryDelay))
+                                }
+                            }
+                            if let issue { throw SetupError("SketchyBar reload was not verified: \(issue)") }
                         } else if (try? journal.serviceStarted()) == true {
                             throw SetupError("SketchyBar service is registered but its bar is unavailable. Restart SketchyBar and retry.")
                         }
                     }
                 }
-                if directories.contains("aerospace"), let tool = executable("aerospace") {
+                if directories.contains("aerospace"), let tool = tools("aerospace") {
                     let running = try runner.run(tool, ["list-workspaces", "--all"])
                     if running.status == 0 { try runner.checked(tool, ["reload-config"]) }
                 }
@@ -444,6 +464,60 @@ public final class Engine {
         }
     }
 
+    /// Inspect the currently running applications, not just the generated files.
+    /// An unavailable app or stale bar stays visible as a verification issue.
+    public func workspaceRuntimeIssues(checkAeroSpace: Bool, checkSketchyBar: Bool) -> [String] {
+        guard checkAeroSpace || checkSketchyBar else { return [] }
+        let layout: WorkspaceConfiguration
+        do { layout = try WorkspaceConfiguration.load(from: paths) }
+        catch { return ["Unable to read saved workspaces: \(error)"] }
+
+        let expected = layout.workspaces.map(\.id)
+        var issues: [String] = []
+        if checkAeroSpace {
+            if let aerospace = tools("aerospace") {
+                do {
+                    let config = try runner.run(aerospace, ["config", "--config-path"])
+                    let expectedPath = paths.config.appendingPathComponent("aerospace/aerospace.toml")
+                        .standardizedFileURL.path
+                    let actualPath = config.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if config.status != 0 || URL(fileURLWithPath: actualPath).standardizedFileURL.path != expectedPath {
+                        issues.append("AeroSpace is not using the managed configuration at \(expectedPath). Active path: \(actualPath.isEmpty ? "unknown" : actualPath).")
+                    }
+                    let active = try runner.run(aerospace, ["list-workspaces", "--all"])
+                    if active.status != 0 {
+                        issues.append("AeroSpace did not respond to a live workspace query.")
+                    } else {
+                        let missing = WorkspaceRuntimeVerification.missingAeroSpaceIDs(
+                            output: active.text, expectedIDs: expected)
+                        if !missing.isEmpty {
+                            issues.append("AeroSpace is missing configured workspaces: "
+                                + missing.joined(separator: ", "))
+                        }
+                    }
+                } catch { issues.append("Unable to verify running AeroSpace: \(error)") }
+            } else {
+                issues.append("AeroSpace is not installed or its command is unavailable; its live configuration was not verified.")
+            }
+        }
+        if checkSketchyBar {
+            if let sketchybar = tools("sketchybar") {
+                do {
+                    let running = try runner.run(sketchybar, ["--query", "bar"])
+                    if running.status != 0 {
+                        issues.append("SketchyBar is not responding; configuration files were written but the running bar could not be verified.")
+                    } else if let issue = WorkspaceRuntimeVerification.sketchyBarOrderIssue(
+                        query: running.output, expectedIDs: expected) {
+                        issues.append(issue)
+                    }
+                } catch { issues.append("Unable to verify running SketchyBar: \(error)") }
+            } else {
+                issues.append("SketchyBar is not installed or its command is unavailable; its live workspace order was not verified.")
+            }
+        }
+        return issues
+    }
+
     public func updateTasks() -> [String] {
         Catalog.tasks.filter { task in
             let isProfile: Bool
@@ -630,7 +704,7 @@ public final class Engine {
     }
 
     private func wallpaperAccentData(image: URL?) throws -> (URL, Data) {
-        guard let python = executable("python3"), executable("magick") != nil else { throw SetupError("Install wallpaper-tools first.") }
+        guard let python = tools("python3"), tools("magick") != nil else { throw SetupError("Install wallpaper-tools first.") }
         let wallpaper: URL
         if let image { wallpaper = image }
         else {
@@ -663,7 +737,7 @@ public final class Engine {
     }
 
     private func notifyWallpaperAccentChange() throws {
-        if let sketchybar = executable("sketchybar"), let aerospace = executable("aerospace") {
+        if let sketchybar = tools("sketchybar"), let aerospace = tools("aerospace") {
             let focused = try runner.run(aerospace, ["list-workspaces", "--focused"])
             if focused.status == 0 && !focused.text.isEmpty {
                 try runner.checked(sketchybar, ["--trigger", "aerospace_workspace_change", "FOCUSED_WORKSPACE=" + focused.text])

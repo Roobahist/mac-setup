@@ -135,6 +135,40 @@ public struct WorkspaceDefinition: Codable, Equatable {
 
 /// Appearance values used by the installed SketchyBar profile. The defaults
 /// reproduce the bundled configuration, including its translucent dark bar.
+/// Fail closed when a bundled profile no longer contains exactly one setting.
+/// Replacing an entire line would lose the shell continuation after blur_radius.
+private enum WorkspaceTemplateSetting {
+    static func replace(_ source: String, key: String, value: String,
+                        exported: Bool = false,
+                        sectionStart: String? = nil, sectionEnd: String? = nil) throws -> String {
+        let area: Range<String.Index>
+        if let sectionStart, let sectionEnd {
+            guard let first = source.range(of: sectionStart),
+                  let last = source.range(of: sectionEnd,
+                                          range: first.upperBound..<source.endIndex) else {
+                throw SetupError("Unsupported SketchyBar profile: missing section for \(key).")
+            }
+            area = first.upperBound..<last.lowerBound
+        } else {
+            area = source.startIndex..<source.endIndex
+        }
+        let text = String(source[area])
+        let prefix = exported ? "export[ \\t]+" : ""
+        let expression = try NSRegularExpression(
+            pattern: "(?m)^([ \\t]*" + prefix
+                + NSRegularExpression.escapedPattern(for: key)
+                + "=[ \\t]*)([^ \\t\\r\\n\\\\#]+)")
+        let matches = expression.matches(in: text,
+                                         range: NSRange(text.startIndex..<text.endIndex, in: text))
+        guard matches.count == 1,
+              let valueRange = Range(matches[0].range(at: 2), in: text) else {
+            throw SetupError("Unsupported SketchyBar profile: expected one assignment for \(key).")
+        }
+        return source.replacingCharacters(in: area,
+            with: text.replacingCharacters(in: valueRange, with: value))
+    }
+}
+
 public struct WorkspaceBarStyle: Codable, Equatable {
     public var itemWidth: Int
     public var blurRadius: Int
@@ -157,13 +191,16 @@ public struct WorkspaceBarStyle: Codable, Equatable {
     /// Keep wallpaper-driven HIGHLIGHT_COLOR and other user script settings.
     public func colorsShell(from template: String) throws -> String {
         try validate()
-        return template
-            .replacingOccurrences(of: "export BAR_COLOR=0x35000000",
-                                  with: "export BAR_COLOR=\(backgroundColor)")
-            .replacingOccurrences(of: "export BASE_WHITE=0xffffffff",
-                                  with: "export BASE_WHITE=\(occupiedColor)")
-            .replacingOccurrences(of: "export BASE_GRAY=0x30000000",
-                                  with: "export BASE_GRAY=\(emptyColor)")
+        var rendered = template
+        for (key, color) in [
+            ("BAR_COLOR", backgroundColor),
+            ("BASE_WHITE", occupiedColor),
+            ("BASE_GRAY", emptyColor)
+        ] {
+            rendered = try WorkspaceTemplateSetting.replace(
+                rendered, key: key, value: color, exported: true)
+        }
+        return rendered
     }
 
     public func validate() throws {
@@ -520,10 +557,11 @@ public struct WorkspaceConfiguration: Codable, Equatable {
                                     from: "# Read workspace names and order directly from AeroSpace\n",
                                     to: "# Create workspace items\n",
                                     with: "# Workspace order follows workspaces.json\nworkspace_ids=(\(orderedIDs))\n\n")
-        rendered = rendered.replacingOccurrences(of: "label.width=21",
-                with: "label.width=\(barStyle.itemWidth)")
-        rendered = rendered.replacingOccurrences(of: "blur_radius=50",
-                with: "blur_radius=\(barStyle.blurRadius)")
+        rendered = try WorkspaceTemplateSetting.replace(
+            rendered, key: "label.width", value: String(barStyle.itemWidth),
+            sectionStart: "# Create workspace items\n", sectionEnd: "##### Clock #####")
+        rendered = try WorkspaceTemplateSetting.replace(
+            rendered, key: "blur_radius", value: String(barStyle.blurRadius))
         return DisplayGeometry.barShell(rendered)
     }
 
