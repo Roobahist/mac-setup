@@ -444,6 +444,60 @@ public final class Engine {
         }
     }
 
+    /// Inspect the currently running applications, not just the generated files.
+    /// An unavailable app or stale bar stays visible as a verification issue.
+    public func workspaceRuntimeIssues(checkAeroSpace: Bool, checkSketchyBar: Bool) -> [String] {
+        guard checkAeroSpace || checkSketchyBar else { return [] }
+        let layout: WorkspaceConfiguration
+        do { layout = try WorkspaceConfiguration.load(from: paths) }
+        catch { return ["Unable to read saved workspaces: \(error)"] }
+
+        let expected = layout.workspaces.map(\.id)
+        var issues: [String] = []
+        if checkAeroSpace {
+            if let aerospace = tools("aerospace") {
+                do {
+                    let config = try runner.run(aerospace, ["config", "--config-path"])
+                    let expectedPath = paths.config.appendingPathComponent("aerospace/aerospace.toml")
+                        .standardizedFileURL.path
+                    let actualPath = config.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if config.status != 0 || URL(fileURLWithPath: actualPath).standardizedFileURL.path != expectedPath {
+                        issues.append("AeroSpace is not using the managed configuration at \(expectedPath). Active path: \(actualPath.isEmpty ? "unknown" : actualPath).")
+                    }
+                    let active = try runner.run(aerospace, ["list-workspaces", "--all"])
+                    if active.status != 0 {
+                        issues.append("AeroSpace did not respond to a live workspace query.")
+                    } else {
+                        let missing = WorkspaceRuntimeVerification.missingAeroSpaceIDs(
+                            output: active.text, expectedIDs: expected)
+                        if !missing.isEmpty {
+                            issues.append("AeroSpace is missing configured workspaces: "
+                                + missing.joined(separator: ", "))
+                        }
+                    }
+                } catch { issues.append("Unable to verify running AeroSpace: \(error)") }
+            } else {
+                issues.append("AeroSpace is not installed or its command is unavailable; its live configuration was not verified.")
+            }
+        }
+        if checkSketchyBar {
+            if let sketchybar = tools("sketchybar") {
+                do {
+                    let running = try runner.run(sketchybar, ["--query", "bar"])
+                    if running.status != 0 {
+                        issues.append("SketchyBar is not responding; configuration files were written but the running bar could not be verified.")
+                    } else if let issue = WorkspaceRuntimeVerification.sketchyBarOrderIssue(
+                        query: running.output, expectedIDs: expected) {
+                        issues.append(issue)
+                    }
+                } catch { issues.append("Unable to verify running SketchyBar: \(error)") }
+            } else {
+                issues.append("SketchyBar is not installed or its command is unavailable; its live workspace order was not verified.")
+            }
+        }
+        return issues
+    }
+
     public func updateTasks() -> [String] {
         Catalog.tasks.filter { task in
             let isProfile: Bool
