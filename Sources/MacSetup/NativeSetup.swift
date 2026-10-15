@@ -140,7 +140,15 @@ final class SetupModel: ObservableObject {
         do {
             switch selected {
             case .full:
-                try shortcuts.validate(workspaces: layout, aerospaceTemplate: aerospaceTemplate)
+                let selected = Set(picker.orderedSelection)
+                if !selected.isDisjoint(with: ["aerospace-profile", "sketchybar-profile",
+                                             "karabiner-profile", "raycast-profile"]) {
+                    let pendingLayout = selected.isDisjoint(with: ["aerospace-profile", "sketchybar-profile"])
+                        ? appliedLayout : layout
+                    let pendingShortcuts = selected.isDisjoint(with: ["aerospace-profile", "karabiner-profile", "raycast-profile"])
+                        ? appliedShortcuts : shortcuts
+                    try pendingShortcuts.validate(workspaces: pendingLayout, aerospaceTemplate: aerospaceTemplate)
+                }
             case .workspaces:
                 var pending = layout
                 pending.keymap = appliedLayout.keymap
@@ -158,36 +166,37 @@ final class SetupModel: ObservableObject {
     func start() {
         do {
             setupLock = try SetupLock(paths: engine.paths)
-            // Applying one section must never save an unrelated unsaved draft.
+            // Record a recoverable snapshot of only the selected editor sections.
+            let writer = SetupConfigurationWriter(journal: engine.journal)
+            let configurationRecovery: String?
             switch scope {
             case .full:
-                if let error = workspaceError(in: layout) { throw SetupError(error) }
-                // An app-only run must not commit unrelated editor drafts.
+                if let error = configurationError(for: .full) { throw SetupError(error) }
                 let selected = Set(tasks.map(\.id))
-                if !selected.isDisjoint(with: ["aerospace-profile", "karabiner-profile", "raycast-profile"]) {
-                    try shortcuts.save(to: engine.paths)
-                }
-                if !selected.isDisjoint(with: ["aerospace-profile", "sketchybar-profile"]) {
-                    try layout.save(to: engine.paths)
-                }
+                configurationRecovery = try writer.save(
+                    layout: selected.isDisjoint(with: ["aerospace-profile", "sketchybar-profile"]) ? nil : layout,
+                    shortcuts: selected.isDisjoint(with: ["aerospace-profile", "karabiner-profile", "raycast-profile"]) ? nil : shortcuts)
             case .workspaces:
                 var chosen = layout
                 chosen.keymap = appliedLayout.keymap
                 try appliedShortcuts.validateWorkspaceBindings(chosen, aerospaceTemplate: aerospaceTemplate)
-                try chosen.save(to: engine.paths)
+                configurationRecovery = try writer.save(layout: chosen)
             case .shortcuts:
                 var chosen = appliedLayout
                 chosen.keymap = layout.keymap
                 try shortcuts.validate(workspaces: chosen, aerospaceTemplate: aerospaceTemplate)
-                try chosen.save(to: engine.paths)
-                try shortcuts.save(to: engine.paths)
-            case .feature: break
+                configurationRecovery = try writer.save(layout: chosen, shortcuts: shortcuts)
+            case .feature:
+                configurationRecovery = nil
             }
             engine.selectedWorkspaceTaskIDs = scope == .full ? picker.selected : nil
             pausedSetup = false
             runtimeIssues = []
             index = 0; results = [:]; runLog = ""
             log("Starting \(scope) with \(tasks.count) selected tasks")
+            if let configurationRecovery {
+                log("Saved editor configuration recovery record: \(configurationRecovery). Restore it only after reversing later profile changes.")
+            }
             log("Workspace order: \(layout.workspaces.map(\.id).joined(separator: ", "))")
             log("Switch modifiers: \(layout.keymap.switchModifiers.joined(separator: "+")); move modifiers: \(layout.keymap.moveModifiers.joined(separator: "+"))")
             advance()
@@ -442,8 +451,10 @@ final class SetupModel: ObservableObject {
             if let previousID, !selectedIDs.contains(previousID) {
                 log("Removed interrupted task \(previousID) from this run")
             }
-            try shortcuts.save(to: engine.paths)
-            try layout.save(to: engine.paths)
+            if let id = try SetupConfigurationWriter(journal: engine.journal).save(
+                layout: layout, shortcuts: shortcuts) {
+                log("Updated editor configuration recovery record: \(id)")
+            }
             engine.selectedWorkspaceTaskIDs = picker.selected
             index = 0
             pausedSetup = false
