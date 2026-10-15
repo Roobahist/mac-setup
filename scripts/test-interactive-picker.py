@@ -132,23 +132,19 @@ def verify_glyph_columns(data: bytes) -> None:
         rows = rendered_terminal_rows(data, private_use_width=fallback_width)
         header = next(line for line in rows if "SHORTCUT" in line and "GLYPH" in line)
         glyph_col = header.index("GLYPH")
-        id_col = header.index("ID", glyph_col + len("GLYPH"))
-        apps_col = header.index("APPS", id_col + len("ID"))
-        for shortcut, glyph, workspace_id, count in (
-            ("Alt+" + chr(96), "U+100D3D", "ai", "2"),
-            ("Alt+1", "U+0031", "1", "0"),
-            ("Alt+9", "U+10046C", "music", "1"),
-            ("Alt+0", "U+100332", "messages", "3"),
-            ("Alt+-", "U+10022B", "notes", "1"),
-            ("Alt+=", "U+10042F", "timer", "1"),
+        apps_col = header.index("APPS", glyph_col + len("GLYPH"))
+        for shortcut, glyph, count in (
+            ("Alt+" + chr(96), "U+100D3D", "2"),
+            ("Alt+1", "U+0031", "0"),
+            ("Alt+9", "U+10046C", "1"),
+            ("Alt+0", "U+100332", "3"),
+            ("Alt+-", "U+10022B", "1"),
+            ("Alt+=", "U+10042F", "1"),
         ):
             line = next((line for line in rows if shortcut in line and line.index(shortcut) < glyph_col), None)
             assert line is not None, f"Missing workspace {shortcut} with fallback width {fallback_width}"
             assert line[glyph_col:].startswith(glyph), (
                 f"{shortcut} glyph name moved for fallback width {fallback_width}: {line!r}"
-            )
-            assert line[id_col:].startswith(workspace_id), (
-                f"{shortcut} ID moved for fallback width {fallback_width}: {line!r}"
             )
             assert line[apps_col:].startswith(count), (
                 f"{shortcut} app count moved for fallback width {fallback_width}: {line!r}"
@@ -202,7 +198,7 @@ try:
     os.write(master, b"w")
     read_until(lambda b: b"WORKSPACE EDITOR" in active_screen(b)
                and b"APP RULES" in active_screen(b)
-               and b"G Glyph" in active_screen(b), timeout=15.0)
+               and b"G Icon" in active_screen(b), timeout=15.0)
     workspace_screen = active_screen(bytes(captured))
     assert_consistent_chrome(bytes(captured), b"2 Workspaces")
     assert b"MAC SETUP" in workspace_screen and b"2 Workspaces" in workspace_screen
@@ -216,6 +212,11 @@ try:
     assert b"U+100D3D" in workspace_screen, "Glyph code point must be readable without the selected font"
     verify_glyph_columns(workspace_screen)
     assert b"\x1b[1;38;5;231;48;5;24m" in workspace_screen, "Selection has no highlight"
+    assert b"R Rename" in workspace_screen and b"AeroSpace ID" not in workspace_screen
+    os.write(master, b"r")
+    read_until(lambda b: b"RENAME WORKSPACE" in active_screen(b))
+    os.write(master, b"\x7f\x7fResearch\r")
+    read_until(lambda b: b"Research" in active_screen(b) and b"R Rename" in active_screen(b))
     os.write(master, b"g")
     read_until(lambda b: b"Tab changes the font" in active_screen(b))
     os.write(master, b"\t")
@@ -231,7 +232,7 @@ try:
     os.write(master, b"u+0041")
     read_until(lambda b: b"Search: u+0041" in active_screen(b) and b"U+0041" in active_screen(b))
     os.write(master, b"\r")
-    read_until(lambda b: b"G Glyph" in active_screen(b)
+    read_until(lambda b: b"G Icon" in active_screen(b)
                and b"UNSAVED CHANGES" in active_screen(b))
     os.write(master, b"p")
     read_until(lambda b: b"Type to filter installed apps" in active_screen(b), timeout=15.0)
@@ -241,7 +242,7 @@ try:
     read_until(lambda b: b"installed apps found" in active_screen(b)
                and b"Search: " in active_screen(b))
     os.write(master, b"\x1b")
-    read_until(lambda b: b"G Glyph" in active_screen(b))
+    read_until(lambda b: b"G Icon" in active_screen(b))
     os.write(master, b"\x1b")
     read_until(lambda b: b"DISCARD YOUR CHANGES?" in active_screen(b))
     os.write(master, b"n")

@@ -230,18 +230,68 @@ final class EngineTests: XCTestCase {
         XCTAssertEqual(try engine.state(task), .done)
     }
 
-    func testProfilePreservesExistingSymlinkAndRefusesToOverwrite() throws {
+    func testEditedProfileDetachesSymlinkAndRestoreReconnectsWithoutEditingSource() throws {
         let original = try write("private/aerospace.toml", "personal original\n")
         let extra = try write("private/local-note.txt", "keep this\n")
         try FileManager.default.createDirectory(at: paths.config, withIntermediateDirectories: true)
         let target = paths.config.appendingPathComponent("aerospace")
         try FileManager.default.createSymbolicLink(at: target, withDestinationURL: original.deletingLastPathComponent())
-        XCTAssertEqual(try engine.state(Catalog.task("aerospace-profile")), .blocked)
-        XCTAssertThrowsError(try engine.apply(Catalog.task("aerospace-profile")))
+        XCTAssertEqual(try engine.state(Catalog.task("aerospace-profile")), .ready)
+        let transaction = try engine.apply(Catalog.task("aerospace-profile"))
+        XCTAssertEqual(try engine.state(Catalog.task("aerospace-profile")), .done)
+        XCTAssertFalse(engine.dotfiles.isSymlink(target))
+        XCTAssertEqual(try String(contentsOf: target.appendingPathComponent("local-note.txt")), "keep this\n")
         XCTAssertEqual(try String(contentsOf: original), "personal original\n")
         XCTAssertEqual(try String(contentsOf: extra), "keep this\n")
+        try engine.journal.restore(transaction)
         XCTAssertEqual(try FileManager.default.destinationOfSymbolicLink(atPath: target.path),
                        original.deletingLastPathComponent().path)
+    }
+
+    func testProfileDetachmentPreservesRelativeExtraLinks() throws {
+        let source = try write("private/config/aerospace.toml", "personal\n").deletingLastPathComponent()
+        let extra = try write("private/shared/note.txt", "linked extra\n")
+        try FileManager.default.createSymbolicLink(atPath: source.appendingPathComponent("note.txt").path,
+                                                   withDestinationPath: "../shared/note.txt")
+        try FileManager.default.createDirectory(at: paths.config, withIntermediateDirectories: true)
+        let target = paths.config.appendingPathComponent("aerospace")
+        try FileManager.default.createSymbolicLink(at: target, withDestinationURL: source)
+        let transaction = try engine.apply(Catalog.task("aerospace-profile"))
+        XCTAssertEqual(try String(contentsOf: target.appendingPathComponent("note.txt")), "linked extra\n")
+        XCTAssertEqual(try String(contentsOf: extra), "linked extra\n")
+        XCTAssertEqual(try FileManager.default.destinationOfSymbolicLink(atPath: source.appendingPathComponent("note.txt").path), "../shared/note.txt")
+        try engine.journal.restore(transaction)
+        XCTAssertEqual(try FileManager.default.destinationOfSymbolicLink(atPath: target.path), source.path)
+    }
+
+    func testCoordinatedWorkspaceApplyRecoversLinkedConfigsAndCanRetry() throws {
+        let source = try write("private/aerospace/aerospace.toml", "original source\n").deletingLastPathComponent()
+        let legacy = try write(".aerospace.toml", "legacy source\n")
+        try FileManager.default.createDirectory(at: paths.config, withIntermediateDirectories: true)
+        let target = paths.config.appendingPathComponent("aerospace")
+        try FileManager.default.createSymbolicLink(at: target, withDestinationURL: source)
+        var layout = WorkspaceConfiguration.defaultLayout
+        try layout.renameWorkspace("ai", to: "Research")
+        let tasks = try Catalog.ordered(["aerospace-profile", "sketchybar-profile"], includingDependencies: false)
+        // Failure after AeroSpace has detached its link must restore both locations.
+        let failing = try Engine(paths: paths, runner: runner, displayHelper: nil, tools: { _ in nil })
+        XCTAssertThrowsError(try failing.applyConfiguration(layout: layout, tasks: tasks)) { error in
+            XCTAssertTrue(String(describing: error).contains("Previous files and saved settings were restored"))
+            XCTAssertFalse(String(describing: error).contains("Run mac-setup restore"))
+        }
+        XCTAssertEqual(try FileManager.default.destinationOfSymbolicLink(atPath: target.path), source.path)
+        XCTAssertEqual(try String(contentsOf: legacy), "legacy source\n")
+        XCTAssertFalse(Journal.exists(WorkspaceConfiguration.path(in: paths)))
+        let helper = try write("helpers/display", "test helper")
+        let retry = try Engine(paths: paths, runner: runner, displayHelper: helper, tools: { _ in nil })
+        _ = try retry.applyConfiguration(layout: layout, tasks: tasks)
+        XCTAssertFalse(retry.dotfiles.isSymlink(target))
+        XCTAssertFalse(Journal.exists(legacy))
+        XCTAssertEqual(try String(contentsOf: source.appendingPathComponent("aerospace.toml")), "original source\n")
+        XCTAssertEqual(try WorkspaceConfiguration.load(from: paths), layout)
+        XCTAssertTrue(try String(contentsOf: target.appendingPathComponent("aerospace.toml")).contains("research"))
+        XCTAssertEqual(try retry.state(Catalog.task("aerospace-profile")), .done)
+        XCTAssertEqual(try retry.state(Catalog.task("sketchybar-profile")), .done)
     }
 
     func testLinkedDotfilesPreservesAndRestoresOldConfiguration() throws {
@@ -428,10 +478,14 @@ final class EngineTests: XCTestCase {
         XCTAssertFalse(Journal.exists(home.appendingPathComponent(".gitignore_global")))
     }
 
-    func testAeroSpaceAlternativeConfigIsNotOverwritten() throws {
+    func testAeroSpaceLegacyConfigIsJournaledAndRestored() throws {
         let file = try write(".aerospace.toml", "personal")
-        XCTAssertEqual(try engine.state(Catalog.task("aerospace-profile")), .blocked)
-        XCTAssertThrowsError(try engine.apply(Catalog.task("aerospace-profile")))
+        XCTAssertEqual(try engine.state(Catalog.task("aerospace-profile")), .ready)
+        XCTAssertTrue(try engine.preview(Catalog.task("aerospace-profile")).joined().contains("legacy"))
+        let transaction = try engine.apply(Catalog.task("aerospace-profile"))
+        XCTAssertFalse(Journal.exists(file))
+        XCTAssertEqual(try engine.state(Catalog.task("aerospace-profile")), .done)
+        try engine.journal.restore(transaction)
         XCTAssertEqual(try String(contentsOf: file), "personal")
     }
 

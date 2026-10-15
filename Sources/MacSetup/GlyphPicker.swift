@@ -79,7 +79,7 @@ struct GlyphPicker: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Glyph for \(workspaceName)").font(.title2.bold())
+            Text("Glyph for \(workspaceName)").font(SetupDesign.sheetTitle)
             Text("Browse installed fonts. Search the font's glyph names, Unicode names or code points, or paste a character.").foregroundStyle(.secondary)
             HStack(alignment: .top, spacing: 20) {
                 VStack(alignment: .leading, spacing: 10) {
@@ -146,6 +146,6 @@ struct GlyphPicker: View {
             }
             Text("Names come from the font and Unicode. Some fonts provide internal code names rather than descriptions. Only characters with a Unicode mapping can be used in the bar.")
                 .font(.system(size: 12)).foregroundStyle(.secondary)
-        }.padding(24).font(.system(size: 15)).frame(width: 760, height: 640)
+        }.padding(24).font(SetupDesign.body).frame(width: 760, height: 640)
     }
 }

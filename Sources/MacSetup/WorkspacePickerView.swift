@@ -6,7 +6,7 @@ import MacSetupCore
 /// terminal cell widths so the same screens work in narrow and wide terminals.
 struct WorkspacePickerView {
     enum Page {
-        case workspaces, glyphs, fonts, apps, editID, editName, manualApp, confirmDelete, confirmCancel
+        case workspaces, glyphs, fonts, apps, editName, manualApp, confirmDelete, confirmCancel
     }
 
     let layout: WorkspaceConfiguration
@@ -133,21 +133,20 @@ struct WorkspacePickerView {
         return start..<(start + count)
     }
 
-    private func workspaceColumns(width: Int, includeID: Bool)
-        -> (shortcut: Int, name: Int, icon: Int, glyph: Int, id: Int, apps: Int) {
+    private func workspaceColumns(width: Int)
+        -> (shortcut: Int, name: Int, icon: Int, glyph: Int, apps: Int) {
         let shortcut = 9
         let icon = 4
         let glyph = width >= 63 ? 13 : 10
-        let id = includeID ? min(20, max(12, width / 4)) : 0
         let apps = 5
         let spacing = 3 + shortcut + 2 + 2 + icon + 2
-            + glyph + (includeID ? 2 + id : 0) + 2 + apps
-        return (shortcut, max(7, width - spacing), icon, glyph, id, apps)
+            + glyph + 2 + apps
+        return (shortcut, max(7, width - spacing), icon, glyph, apps)
     }
 
-    private func tableRow(_ index: Int, width: Int, includeID: Bool) -> Line {
+    private func tableRow(_ index: Int, width: Int) -> Line {
         let ws = layout.workspaces[index]
-        let columns = workspaceColumns(width: width, includeID: includeID)
+        let columns = workspaceColumns(width: width)
         let symbol = ws.resolvedIcon.symbol
         let iconOffset = 3 + columns.shortcut + 2 + columns.name + 2
         let text = " \(index == selected ? ">" : " ") "
@@ -155,21 +154,19 @@ struct WorkspacePickerView {
             + fit(ws.name, to: columns.name, padded: true) + "  "
             + String(repeating: " ", count: columns.icon) + "  "
             + fit(ws.resolvedIcon.codePoint, to: columns.glyph, padded: true)
-            + (includeID ? "  " + fit(ws.id, to: columns.id, padded: true) : "")
             + "  " + fit(String(ws.apps.count), to: columns.apps, padded: true)
         return Line(fit(text, to: width, padded: true),
                     index == selected ? .selected : .normal,
                     glyph: GlyphPlacement(symbol: symbol, offset: iconOffset))
     }
 
-    private func tableHeading(width: Int, includeID: Bool) -> Line {
-        let columns = workspaceColumns(width: width, includeID: includeID)
+    private func tableHeading(width: Int) -> Line {
+        let columns = workspaceColumns(width: width)
         let text = "   "
             + fit("SHORTCUT", to: columns.shortcut, padded: true) + "  "
             + fit("NAME", to: columns.name, padded: true) + "  "
             + fit("ICON", to: columns.icon, padded: true) + "  "
             + fit("GLYPH", to: columns.glyph, padded: true)
-            + (includeID ? "  " + fit("ID", to: columns.id, padded: true) : "")
             + "  " + fit("APPS", to: columns.apps, padded: true)
         return Line(fit(text, to: width), .accent)
     }
@@ -188,8 +185,6 @@ struct WorkspacePickerView {
             Line(fit(workspace.name, to: max(10, availableWidth / 3)), .title),
             Line(),
             Line("Shortcut    \(shortcut(at: selected))", .normal),
-            Line("AeroSpace ID", .muted),
-            Line("  \(workspace.id)", .normal),
             Line("SketchyBar glyph", .muted),
             Line("        \(workspace.resolvedIcon.codePoint)", .normal,
                  glyph: GlyphPlacement(symbol: workspace.resolvedIcon.symbol,
@@ -217,20 +212,19 @@ struct WorkspacePickerView {
     private func tableAndInspector() -> [String] {
         let leftWidth = wide ? max(62, (availableWidth * 63) / 100) : availableWidth
         let rightWidth = wide ? availableWidth - leftWidth - 3 : 0
-        let includeID = leftWidth >= 66
         let listHeight = max(1, SetupChrome.bodyCapacity(height: height) - (wide ? 4 : 7))
         let range = selectionRange(total: layout.workspaces.count, limit: listHeight, cursor: selected)
         var left: [Line] = [
             Line("WORKSPACE ORDER", .accent),
             Line(),
-            tableHeading(width: leftWidth, includeID: includeID)
+            tableHeading(width: leftWidth)
         ]
-        for index in range { left.append(tableRow(index, width: leftWidth, includeID: includeID)) }
+        for index in range { left.append(tableRow(index, width: leftWidth)) }
         if range.count < layout.workspaces.count {
             left.append(Line("  Showing \(range.lowerBound + 1)-\(range.upperBound) of \(layout.workspaces.count); use ↑↓ to scroll", .muted))
         }
         if !wide {
-            left += [Line(), Line("SELECTED: \(workspace.name)  |  ID: \(workspace.id)  |  Glyph: \(workspace.resolvedIcon.codePoint)", .accent)]
+            left += [Line(), Line("SELECTED: \(workspace.name)  |  Glyph: \(workspace.resolvedIcon.codePoint)", .accent)]
             if !workspace.apps.isEmpty {
                 left.append(Line("Assigned: " + appNames().joined(separator: ", "), .muted))
             } else {
@@ -349,12 +343,9 @@ struct WorkspacePickerView {
         let descriptor: String
         let explanation: String
         switch page {
-        case .editID:
-            descriptor = "RENAME WORKSPACE ID"
-            explanation = "AeroSpace uses this unique ID in window rules and keyboard shortcuts."
         case .editName:
             descriptor = "RENAME WORKSPACE"
-            explanation = "Renaming also updates the runtime ID in app routing, shortcuts and SketchyBar."
+            explanation = "Renaming updates app routing, shortcuts and SketchyBar together."
         default:
             descriptor = "ASSIGN AN APPLICATION"
             explanation = "Enter the application's bundle ID, such as com.example.app."
@@ -373,7 +364,7 @@ struct WorkspacePickerView {
                     Line(), Line("Y  Discard changes    N / Esc  Continue editing", .caution)]
         }
         return [Line("REMOVE WORKSPACE?", .danger), Line(),
-                Line("Name: \(workspace.name)    AeroSpace ID: \(workspace.id)"),
+                Line("Name: \(workspace.name)"),
                 Line("This also removes its \(workspace.apps.count) app routing rule(s).", .caution),
                 Line(), Line("Y  Remove workspace    N / Esc  Keep workspace", .caution)]
     }
@@ -382,7 +373,7 @@ struct WorkspacePickerView {
         switch page {
         case .workspaces:
             return [
-                Line("↑↓ Select   [ ] Reorder   A Add   D Remove   R ID   N Label   G Glyph   P Apps", .accent),
+                Line("↑↓ Select   [ ] Reorder   A Add   D Remove   R Rename   G Icon   P Apps", .accent),
                 guidedSetup
                     ? Line("Enter / K Keep layout   S Save & Continue   Esc Back to features", .muted)
                     : Line("S Save   Q Cancel   Apply AeroSpace / SketchyBar profiles afterward.", .muted)
@@ -396,7 +387,7 @@ struct WorkspacePickerView {
         case .apps:
             return [Line("↑↓ Select    Space / Enter Assign or remove    + Manual bundle ID    Esc Clear / Back", .accent),
                     Line("An app belongs to at most one workspace. Reassigning it replaces its old rule.", .muted)]
-        case .editID, .editName, .manualApp:
+        case .editName, .manualApp:
             return [Line("Enter  Confirm    Backspace  Delete    Esc  Cancel", .accent)]
         case .confirmDelete, .confirmCancel:
             return [Line("Y  Confirm    N / Esc  Go back", .caution)]
@@ -418,7 +409,7 @@ struct WorkspacePickerView {
         case .glyphs: body = glyphRows().map { styled($0, width: availableWidth) }
         case .fonts: body = fontRows().map { styled($0, width: availableWidth) }
         case .apps: body = appRows().map { styled($0, width: availableWidth) }
-        case .editID, .editName, .manualApp: body = promptRows().map { styled($0, width: availableWidth) }
+        case .editName, .manualApp: body = promptRows().map { styled($0, width: availableWidth) }
         case .confirmDelete, .confirmCancel: body = warningRows().map { styled($0, width: availableWidth) }
         }
 
@@ -430,7 +421,7 @@ struct WorkspacePickerView {
         let description: String
         switch page {
         case .workspaces:
-            title = "\(workspace.name)  [\(workspace.id)]   |   \(workspace.apps.count) app rules"
+            title = "\(workspace.name)   |   \(workspace.apps.count) app rules"
             description = "Edit the selected workspace's shortcut order, label, glyph or application assignments."
         case .glyphs:
             title = "GLYPH LIBRARY   |   \(workspace.name)"
@@ -441,7 +432,7 @@ struct WorkspacePickerView {
         case .apps:
             title = "APP ROUTING   |   \(workspace.name)"
             description = "Filter installed apps by name or bundle ID and toggle their workspace assignments."
-        case .editID, .editName, .manualApp:
+        case .editName, .manualApp:
             title = "EDIT WORKSPACE   |   \(workspace.name)"
             description = "Enter a new value, then confirm or cancel."
         case .confirmDelete, .confirmCancel:

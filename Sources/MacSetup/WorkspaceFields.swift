@@ -3,22 +3,19 @@ import MacSetupCore
 
 struct WorkspaceNameField: View {
     let name: String
-    let runtimeID: String
     let rename: (String) -> Void
     @LocalViewState private var draft = ""
     @FocusState private var focused: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            TextField("Workspace name", text: $draft)
-                .textFieldStyle(.roundedBorder)
-                .focused($focused)
-                .onSubmit { commit() }
-                .onChange(of: focused) { value in if !value { commit() } }
-                .accessibilityLabel("Name for \(name)")
-            Text("ID: \(runtimeID)").font(.caption2).foregroundStyle(.secondary)
-                .help("The workspace name updates this ID in AeroSpace, app routing and SketchyBar when you finish editing.")
-        }
+        TextField("Workspace name", text: $draft)
+            .textFieldStyle(.plain)
+            .padding(.horizontal, 8)
+            .workspaceControl()
+            .focused($focused)
+            .onSubmit { commit() }
+            .onChange(of: focused) { value in if !value { commit() } }
+            .accessibilityLabel("Name for \(name)")
         .onAppear { draft = name }
         .onChange(of: name) { value in if !focused { draft = value } }
     }
@@ -34,15 +31,13 @@ struct WorkspaceModifierControls: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Workspace keyboard controls").font(.headline)
+            Text("Workspace keyboard controls").font(SetupDesign.sectionTitle)
             Text("Each workspace keeps its destination key when you reorder or remove another workspace.")
-                .font(.callout).foregroundStyle(.secondary)
+                .font(SetupDesign.body).foregroundStyle(.secondary)
             modifierRow("Switch to workspace", modifiers: $keymap.switchModifiers)
             modifierRow("Move window to workspace", modifiers: $keymap.moveModifiers)
         }
-        .padding(18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 13))
+        .setupCard()
     }
 
     private func modifierRow(_ title: String, modifiers: Binding<[String]>) -> some View {

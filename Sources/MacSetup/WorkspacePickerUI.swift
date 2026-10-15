@@ -89,12 +89,9 @@ struct WorkspacePickerUI {
                             WorkspaceDefinition(id: id, name: "New Workspace", glyph: "terminal", shortcutKey: ""),
                             at: selected + 1)
                         selected += 1
-                        message = "Choose R to rename the workspace ID, N for its label, or G for a glyph."
+                        message = "Choose R to rename the workspace, or G for an icon."
                     case "d": page = .confirmDelete
-                    case "r":
-                        editing = layout.workspaces[selected].id
-                        page = .editID
-                    case "n":
+                    case "r", "n":
                         editing = layout.workspaces[selected].name
                         page = .editName
                     case "g":
@@ -209,18 +206,11 @@ struct WorkspacePickerUI {
                     }
                 default: break
                 }
-            case .editID, .editName, .manualApp:
+            case .editName, .manualApp:
                 switch key {
                 case .enter:
                     let candidate = editing.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if page == .editID {
-                        let old = layout.workspaces[selected].id
-                        layout.workspaces[selected].id = candidate
-                        if (try? layout.validate()) == nil {
-                            layout.workspaces[selected].id = old
-                            message = "ID must be unique and contain only letters, digits, _ or -."
-                        } else { page = .workspaces }
-                    } else if page == .editName {
+                    if page == .editName {
                         guard !candidate.isEmpty else { message = "Name cannot be empty."; break }
                         do {
                             try layout.renameWorkspace(layout.workspaces[selected].id, to: candidate)

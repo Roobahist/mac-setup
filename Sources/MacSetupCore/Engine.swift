@@ -3,6 +3,14 @@ import AppKit
 
 public enum TaskState: String { case ready = "Ready", done = "Verified", guided = "Guided", confirmed = "User confirmed", blocked = "Needs prerequisite" }
 
+private struct TaskApplyFailure: Error, CustomStringConvertible {
+    let cause: Error
+    let record: String
+    var description: String {
+        "\(cause)\nRecovery record: \(record). Run mac-setup restore \(record) to undo recorded changes; installed apps remain installed."
+    }
+}
+
 public final class Engine {
     public let paths: Paths
     public let runner: CommandRunning
@@ -57,11 +65,14 @@ public final class Engine {
         case .linkedDotfiles:
             return dotfiles.status()
         case let .profile(directories):
-            if directories.contains("aerospace"), Journal.exists(paths.home.appendingPathComponent(".aerospace.toml")) { return .blocked }
+            if directories.contains("aerospace"), Journal.exists(paths.home.appendingPathComponent(".aerospace.toml")) { return .ready }
             for name in directories {
                 let target = paths.config.appendingPathComponent(name)
                 let generated = ["aerospace", "sketchybar", "karabiner"].contains(name)
                 if dotfiles.isSymlink(target) {
+                    // Editing owns the local config path, never the linked checkout.
+                    // installProfile snapshots its contents and journals the link itself.
+                    if generated { return .ready }
                     if dotfiles.source.isLinked(name, config: paths.config),
                        Journal.exists(dotfiles.source.checkout.appendingPathComponent(name)) {
                         // Managed workspace profiles are local copies, not links into a Git checkout.
@@ -153,7 +164,10 @@ public final class Engine {
                 lines.append("Merge bundled files into \(paths.config.appendingPathComponent(name).path). Existing unrelated files are preserved.")
             }
             lines.append("Portable application profiles can be linked from dot-files. AeroSpace, SketchyBar and Karabiner are rendered as local, backed-up copies so personal shortcuts never alter your Git checkout.")
-            lines.append("Existing directories are backed up. Unrelated symlinks are never overwritten.")
+            lines.append("Existing configuration paths are backed up. Edited profiles become local copies; linked source folders stay untouched. Restore reconnects the original link.")
+            if directories.contains("aerospace"), Journal.exists(paths.home.appendingPathComponent(".aerospace.toml")) {
+                lines.append("Back up and remove the legacy ~/.aerospace.toml so AeroSpace uses the reviewed configuration in the config folder. Restore brings the legacy file back.")
+            }
         case let .preferences(preferences, restart):
             if task.id == "raycast-profile" {
                 lines.append("com.raycast.macos / raycastGlobalHotkey: \(try shortcutSettings().raycastHotkey)")
@@ -235,12 +249,13 @@ public final class Engine {
                 try dotfiles.install(transaction: id)
                 guard dotfiles.status() == .done else { throw SetupError("Dotfiles installation could not be verified.") }
             case let .profile(directories):
-                for name in directories where dotfiles.isSymlink(paths.config.appendingPathComponent(name)) &&
+                for name in directories where !["aerospace", "sketchybar", "karabiner"].contains(name) &&
+                    dotfiles.isSymlink(paths.config.appendingPathComponent(name)) &&
                     !dotfiles.source.isLinked(name, config: paths.config) {
                     throw SetupError("\(name) uses an unrelated configuration symlink. Resolve it manually.")
                 }
                 if directories.contains("aerospace"), Journal.exists(paths.home.appendingPathComponent(".aerospace.toml")) {
-                    throw SetupError("~/.aerospace.toml exists. AeroSpace refuses ambiguous config locations. Move that file aside yourself, then retry.")
+                    try journal.remove(paths.home.appendingPathComponent(".aerospace.toml"), transaction: id)
                 }
                 for name in directories {
                     if dotfiles.status() == .done && !["aerospace", "sketchybar", "karabiner"].contains(name) {
@@ -330,7 +345,7 @@ public final class Engine {
                 catch { throw SetupError("Profile failed and recovery needs attention: \(error). Recovery record: \(id)") }
                 throw SetupError("Profile was not applied; its previous files and saved settings were restored. \(error)")
             }
-            throw SetupError("\(error)\nRecovery record: \(id). Run mac-setup restore \(id) to undo recorded changes; installed apps remain installed.")
+            throw TaskApplyFailure(cause: error, record: id)
         }
     }
 
@@ -393,7 +408,7 @@ public final class Engine {
             return workspaceRuntimeIssues(checkAeroSpace: ids.contains("aerospace-profile"),
                                           checkSketchyBar: ids.contains("sketchybar-profile"))
         } catch {
-            let original = error
+            let original = (error as? TaskApplyFailure)?.cause ?? error
             let records = journal.transactions.filter { !previousIDs.contains($0.id) }.map(\.id).reversed()
             var failures: [String] = []
             for id in records {
@@ -712,7 +727,23 @@ public final class Engine {
         if FileManager.default.fileExists(atPath: target.path) {
             var isDirectory: ObjCBool = false
             guard FileManager.default.fileExists(atPath: target.path, isDirectory: &isDirectory), isDirectory.boolValue else { throw SetupError("Config path is not a directory: \(target.path)") }
-            try FileManager.default.copyItem(at: target.resolvingSymlinksInPath(), to: staging)
+            let existing = target.resolvingSymlinksInPath()
+            try FileManager.default.copyItem(at: existing, to: staging)
+            if dotfiles.isSymlink(target),
+               let contents = FileManager.default.enumerator(atPath: staging.path) {
+                // A relative link originally resolves inside the source checkout.
+                // Preserve that destination when moving the directory to .config.
+                for case let relative as String in contents {
+                    let copy = staging.appendingPathComponent(relative)
+                    guard dotfiles.isSymlink(copy) else { continue }
+                    let destination = try FileManager.default.destinationOfSymbolicLink(atPath: copy.path)
+                    guard !destination.hasPrefix("/") else { continue }
+                    let original = existing.appendingPathComponent(relative).deletingLastPathComponent()
+                        .appendingPathComponent(destination).standardizedFileURL
+                    try FileManager.default.removeItem(at: copy)
+                    try FileManager.default.createSymbolicLink(at: copy, withDestinationURL: original)
+                }
+            }
         } else { try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true) }
         for file in try bundledFiles(name) {
             let relative = String(file.path.dropFirst(root.path.count + 1))
