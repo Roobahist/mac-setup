@@ -96,7 +96,7 @@ public final class Engine {
             let text = (try? String(contentsOf: file, encoding: .utf8)) ?? ""
             return hasAtuinInit(text) ? .done : .ready
         case .service:
-            guard executable("sketchybar") != nil else { return .blocked }
+            guard tools("sketchybar") != nil else { return .blocked }
             return try journal.serviceStarted() ? .done : .ready
         case .wallpaperWatcher:
             if try WallpaperWatcher.isCurrent(engine: self) { return .done }
@@ -249,7 +249,7 @@ public final class Engine {
                     // The running bar is the authority, not Homebrew's service
                     // status. Users can run SketchyBar independently of brew
                     // services. A successful file copy must refresh that bar.
-                    if let sketchybar = executable("sketchybar") {
+                    if let sketchybar = tools("sketchybar") {
                         let running = try runner.run(sketchybar, ["--query", "bar"])
                         if running.status == 0 {
                             try runner.checked(sketchybar, ["--reload"])
@@ -275,7 +275,7 @@ public final class Engine {
                         }
                     }
                 }
-                if directories.contains("aerospace"), let tool = executable("aerospace") {
+                if directories.contains("aerospace"), let tool = tools("aerospace") {
                     let running = try runner.run(tool, ["list-workspaces", "--all"])
                     if running.status == 0 { try runner.checked(tool, ["reload-config"]) }
                 }
@@ -704,7 +704,7 @@ public final class Engine {
     }
 
     private func wallpaperAccentData(image: URL?) throws -> (URL, Data) {
-        guard let python = executable("python3"), executable("magick") != nil else { throw SetupError("Install wallpaper-tools first.") }
+        guard let python = tools("python3"), tools("magick") != nil else { throw SetupError("Install wallpaper-tools first.") }
         let wallpaper: URL
         if let image { wallpaper = image }
         else {
@@ -737,7 +737,7 @@ public final class Engine {
     }
 
     private func notifyWallpaperAccentChange() throws {
-        if let sketchybar = executable("sketchybar"), let aerospace = executable("aerospace") {
+        if let sketchybar = tools("sketchybar"), let aerospace = tools("aerospace") {
             let focused = try runner.run(aerospace, ["list-workspaces", "--focused"])
             if focused.status == 0 && !focused.text.isEmpty {
                 try runner.checked(sketchybar, ["--trigger", "aerospace_workspace_change", "FOCUSED_WORKSPACE=" + focused.text])
