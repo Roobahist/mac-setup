@@ -40,7 +40,7 @@ struct WorkspaceShortcutEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            Text("Shortcuts for \(name)").font(.title2.bold())
+            Text("Shortcuts for \(name)").font(SetupDesign.sheetTitle)
             Picker("Shortcut mode", selection: $mode) {
                 Text("Default number row").tag(0)
                 Text("Custom").tag(1)
@@ -74,7 +74,7 @@ struct WorkspaceShortcutEditor: View {
                     save(value); dismiss()
                 }.disabled(validationMessage != nil).keyboardShortcut(.defaultAction)
             }
-        }.padding(24).font(.system(size: 15)).frame(width: 600, height: 540)
+        }.padding(24).font(SetupDesign.body).frame(width: 600, height: 540)
     }
 }
 

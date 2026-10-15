@@ -9,16 +9,16 @@ enum ControlDestination: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .home: return "Overview"
-        case .apps: return "Apps & Features"
+        case .apps: return "Apps & features"
         case .workspaces: return "Workspaces"
-        case .workspaceBar: return "Workspace Bar"
-        case .shortcuts: return "Keyboard Shortcuts"
+        case .workspaceBar: return "Workspace bar"
+        case .shortcuts: return "Keyboard shortcuts"
         case .appearance: return "Appearance"
         case .dock: return "Dock"
-        case .menuBar: return "Menu Bar & Clock"
+        case .menuBar: return "Menu bar & clock"
         case .finder: return "Finder"
         case .updates: return "Updates"
-        case .guidedSetup: return "Guided Setup"
+        case .guidedSetup: return "Guided setup"
         }
     }
     var symbol: String {
@@ -45,7 +45,9 @@ struct ControlCenterView: View {
     @LocalViewState private var previousDestination: ControlDestination = .home
     @LocalViewState private var query = ""
     @LocalViewState private var activeFeature: String?
+    @LocalViewState private var hoveredDestination: ControlDestination?
     @LocalViewState private var compactSidebar = false
+    @FocusState private var navigationFocus: ControlDestination?
     @LocalViewState private var guidedStep: Int?
     @LocalViewState private var expandedFeatureCategories = Set<String>()
 
@@ -66,13 +68,8 @@ struct ControlCenterView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            // Render one full-width sidebar in both modes. Only the outside
-            // viewport gets narrower. This preserves the *same* native rows,
-            // icon positions, hover areas, selection highlights and spacing.
             sidebar
-                .frame(width: 248, alignment: .leading)
-                .frame(width: compactSidebar ? 70 : 248, alignment: .leading)
-                .clipped()
+                .frame(width: compactSidebar ? SetupDesign.sidebarRail : SetupDesign.sidebarWidth)
                 .background(.regularMaterial)
             Divider()
             VStack(spacing: 0) {
@@ -104,6 +101,7 @@ struct ControlCenterView: View {
             }
             .background(Color(nsColor: .windowBackgroundColor))
         }
+        .font(SetupDesign.body)
         .frame(minWidth: 1040, minHeight: 740)
         .onChange(of: destination) { next in
             // A running installer owns its editor until its operation completes.
@@ -141,7 +139,7 @@ struct ControlCenterView: View {
             case .appearance:
                 scrollSettings("Appearance", category: "Appearance")
             case .dock: scrollSettings("Dock", category: "Dock")
-            case .menuBar: scrollSettings("Menu Bar & Clock", category: "Menu Bar")
+            case .menuBar: scrollSettings("Menu bar & clock", category: "Menu Bar")
             case .finder: scrollSettings("Finder", category: "Finder")
             case .updates: UpdateCenter()
             case .guidedSetup: overview // This destination starts a tour, not another editor.
@@ -149,124 +147,118 @@ struct ControlCenterView: View {
         }
     }
 
-    // Expanded and collapsed sidebar use identical rows, icon sizes, and
-    // leading offsets. Collapsing only removes their titles.
+    // One set of buttons in both modes. The icon rail never changes position;
+    // the actual row width, including its selection background, does change.
     private var sidebar: some View {
-        // The sidebar NEVER changes its internal geometry when collapsed.
-        // It is always 248pt wide; the parent only masks everything after
-        // 70pt. Exactly one native List supplies both navigation modes.
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 12) {
+            HStack(spacing: 0) {
                 Button {
                     compactSidebar.toggle()
                     if compactSidebar { query = "" }
                 } label: {
                     Image(systemName: "sidebar.left")
                         .font(.system(size: 17, weight: .medium))
-                        .frame(width: 30, height: 30)
+                        .frame(width: SetupDesign.sidebarIconColumn, height: SetupDesign.sidebarRowHeight)
                 }
                 .buttonStyle(.plain)
                 .help(compactSidebar ? "Expand sidebar" : "Collapse sidebar")
                 .accessibilityLabel(compactSidebar ? "Expand sidebar" : "Collapse sidebar")
-
-                HStack(spacing: 9) {
-                    Image(systemName: "slider.horizontal.3")
-                        .font(.system(size: 19, weight: .medium))
-                        .foregroundStyle(Color.accentColor)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Mac Setup").font(.headline)
-                        Text("Your Mac, your way")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Mac Setup").font(SetupDesign.sectionTitle)
+                    Text("Your Mac, your way").font(SetupDesign.caption).foregroundStyle(.secondary)
                 }
-                // Preserve header layout while hiding decorative branding
-                // in the cropped view. The collapse button never moves.
-                .opacity(compactSidebar ? 0 : 1)
-                Spacer(minLength: 0)
+                .fixedSize(horizontal: true, vertical: false)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(width: compactSidebar ? 0 : nil, alignment: .leading)
+                .opacity(compactSidebar ? 0 : 1).clipped().accessibilityHidden(compactSidebar)
             }
-            .padding(.horizontal, 14)
-            .padding(.top, 19)
-            .padding(.bottom, 12)
+            .padding(.horizontal, 8).padding(.top, 16).padding(.bottom, 8)
 
-            // Search keeps its normal full-width layout too. Only the
-            // magnifier is exposed within the narrow viewport.
-            TextField("Search settings", text: $query)
-                .textFieldStyle(.roundedBorder)
-                .padding(.horizontal, 12)
-                .opacity(compactSidebar ? 0 : 1)
-                .overlay(alignment: .leading) {
-                    if compactSidebar {
-                        Button { compactSidebar = false } label: {
-                            Image(systemName: "magnifyingglass")
-                                .font(.system(size: 17))
-                                .frame(width: 32, height: 28)
-                        }
-                        .buttonStyle(.plain)
-                        .padding(.leading, 19)
-                        .help("Expand sidebar to search settings")
-                        .accessibilityLabel("Expand sidebar to search settings")
-                    }
+            HStack(spacing: 0) {
+                Button { compactSidebar = false } label: {
+                    Image(systemName: "magnifyingglass").font(.system(size: 17))
+                        .frame(width: SetupDesign.sidebarIconColumn, height: SetupDesign.sidebarRowHeight)
                 }
-                .accessibilityLabel("Search settings and features")
-
-            List(selection: $destination) {
-                Section {
-                    ForEach(customization) { item in
-                        sidebarNavigationLabel(item).tag(item)
-                    }
-                } header: {
-                    Text("Customize")
-                        .opacity(compactSidebar ? 0 : 1)
-                        .accessibilityHidden(compactSidebar)
-                }
-
-                Section {
-                    Button(action: beginGuided) {
-                        sidebarNavigationLabel(.guidedSetup)
-                            .foregroundStyle(guidedStep != nil
-                                ? Color.accentColor : Color.primary)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Walk through the existing customization sections")
-                    .accessibilityLabel("Guided Setup")
-
-                    sidebarNavigationLabel(.updates)
-                        .tag(ControlDestination.updates)
-                } header: {
-                    Text("Mac Setup")
-                        .opacity(compactSidebar ? 0 : 1)
-                        .accessibilityHidden(compactSidebar)
-                }
+                .buttonStyle(.plain).accessibilityLabel("Search settings")
+                TextField("Search settings", text: $query)
+                    .textFieldStyle(.plain)
+                    .frame(maxWidth: .infinity)
+                    .frame(width: compactSidebar ? 0 : nil)
+                    .opacity(compactSidebar ? 0 : 1).clipped()
+                    .accessibilityHidden(compactSidebar)
             }
-            .listStyle(.sidebar)
-            .scrollContentBackground(.hidden)
+            .background(Color.primary.opacity(compactSidebar ? 0 : 0.04), in: RoundedRectangle(cornerRadius: 8))
+            .padding(.horizontal, 8)
 
-            HStack(spacing: 8) {
-                Text("Version \(MacSetupVersion.installed)")
-                Spacer(minLength: 0)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 4) {
+                    sidebarSection("Customize")
+                    ForEach(customization) { item in sidebarNavigationRow(item) }
+                    sidebarSection("Mac Setup").padding(.top, 12)
+                    sidebarNavigationRow(.guidedSetup)
+                    sidebarNavigationRow(.updates)
+                }
+                .padding(.horizontal, 8)
+            }
+
+            HStack(spacing: 0) {
                 Circle().fill(model.busy ? Color.orange : Color.green)
                     .frame(width: 7, height: 7)
+                    .frame(width: SetupDesign.sidebarIconColumn, height: 24)
                     .accessibilityLabel(model.busy ? "Checking or applying settings" : "Ready")
-            }
-            .font(.caption2)
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 16)
-            .padding(.bottom, 12)
-            .opacity(compactSidebar ? 0 : 1)
+                Text("Version \(MacSetupVersion.installed)").lineLimit(1)
+                    .font(SetupDesign.caption).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(width: compactSidebar ? 0 : nil, alignment: .leading)
+                    .opacity(compactSidebar ? 0 : 1).clipped().accessibilityHidden(compactSidebar)
+            }.padding(.horizontal, 8).padding(.bottom, 12)
         }
+        .font(SetupDesign.body)
     }
 
-    /// The same native Label is used in both widths. Its Text stays in the
-    /// layout (so the icon and List row geometry cannot shift), but is fully
-    /// transparent when the sidebar viewport is collapsed.
-    private func sidebarNavigationLabel(_ item: ControlDestination) -> some View {
-        Label {
-            Text(item.title)
-                .opacity(compactSidebar ? 0 : 1)
-        } icon: {
-            Image(systemName: item.symbol)
+    private func sidebarSection(_ title: String) -> some View {
+        Text(title).font(SetupDesign.caption.weight(.semibold)).foregroundStyle(.secondary)
+            .frame(height: 20).padding(.leading, 12)
+            .opacity(compactSidebar ? 0 : 1).accessibilityHidden(compactSidebar)
+    }
+
+    private func sidebarNavigationRow(_ item: ControlDestination) -> some View {
+        let selected = item == .guidedSetup ? guidedStep != nil : destination == item && guidedStep == nil
+        return Button { selectDestination(item) } label: {
+            HStack(spacing: 0) {
+                Image(systemName: item.symbol)
+                    .font(.system(size: 17, weight: .regular))
+                    .frame(width: SetupDesign.sidebarIconColumn, height: SetupDesign.sidebarRowHeight)
+                    .accessibilityHidden(true)
+                Text(item.title).fontWeight(selected ? .semibold : .regular).lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(width: compactSidebar ? 0 : nil, alignment: .leading)
+                    .opacity(compactSidebar ? 0 : 1).clipped()
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(RoundedRectangle(cornerRadius: 8))
+            .foregroundStyle(Color.primary)
+            .background(selected ? Color.accentColor.opacity(0.15)
+                        : hoveredDestination == item ? Color.primary.opacity(0.06) : Color.clear,
+                        in: RoundedRectangle(cornerRadius: 8))
         }
-        .accessibilityLabel(item.title)
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            if hovering { hoveredDestination = item }
+            else if hoveredDestination == item { hoveredDestination = nil }
+        }
+        .help(item.title).accessibilityLabel(item.title)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .focused($navigationFocus, equals: item)
+        .disabled(model.page == .running || model.page == .guide)
+        .onMoveCommand { direction in
+            let items = customization + [.guidedSetup, .updates]
+            guard let index = items.firstIndex(of: item), direction == .up || direction == .down else { return }
+            let next = index + (direction == .up ? -1 : 1)
+            guard items.indices.contains(next) else { return }
+            navigationFocus = items[next]
+            selectDestination(items[next])
+        }
     }
 
     private func selectDestination(_ item: ControlDestination) {
@@ -321,21 +313,16 @@ struct ControlCenterView: View {
         let configured = Catalog.tasks.filter { model.states[$0.id] == TaskState.done.rawValue }.count
         let total = Catalog.tasks.count
         return ScrollView {
-            VStack(alignment: .leading, spacing: 23) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Mac Setup at a glance")
-                        .font(SetupDesign.pageTitle)
-                    Text("Your customization dashboard. Choose a setting from the sidebar, review what is installed, or run the guided setup on a new Mac.")
-                        .font(.callout).foregroundStyle(.secondary)
-                }
+            VStack(alignment: .leading, spacing: SetupDesign.pageSpacing) {
+                SetupPageHeader("Mac Setup at a glance", subtitle: "Review your setup, customize each part of your Mac, or follow Guided Setup on a new machine.")
                 HStack(spacing: 16) {
                     VStack(alignment: .leading, spacing: 9) {
                         Label("Setup status", systemImage: "checkmark.circle")
-                            .font(.headline)
+                            .font(SetupDesign.sectionTitle)
                         Text("\(configured) of \(total) setup components verified")
                             .font(.title3.weight(.medium))
                         Text("Detected from this Mac. Unconfigured tasks are not errors.")
-                            .font(.callout).foregroundStyle(.secondary)
+                            .font(SetupDesign.body).foregroundStyle(.secondary)
                         HStack(spacing: 10) {
                             Button("Review components") { jump(.apps) }
                                 .buttonStyle(.borderedProminent)
@@ -344,18 +331,16 @@ struct ControlCenterView: View {
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(22)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+                    .setupCard()
                     VStack(alignment: .leading, spacing: 9) {
                         Label("New to Mac Setup?", systemImage: "wand.and.stars")
-                            .font(.headline)
+                            .font(SetupDesign.sectionTitle)
                         Text("Use Guided Setup once to choose apps, shortcuts, and workspaces. You can change each area independently afterward.")
-                            .font(.callout).foregroundStyle(.secondary)
+                            .font(SetupDesign.body).foregroundStyle(.secondary)
                         Button("Open guided setup") { jump(.guidedSetup) }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(22)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+                    .setupCard()
                 }
                 VStack(alignment: .leading, spacing: 12) {
                     Text("How changes work").font(.title3.weight(.semibold))
@@ -366,10 +351,9 @@ struct ControlCenterView: View {
                     Button("Check for updates") { jump(.updates) }
                         .padding(.top, 4)
                 }
-                .font(.callout)
+                .font(SetupDesign.body)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(22)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+                .setupCard()
             }
             .padding(SetupDesign.pagePadding)
             .frame(maxWidth: SetupDesign.pageWidth, alignment: .leading)
@@ -379,10 +363,8 @@ struct ControlCenterView: View {
 
     private func scrollSettings(_ title: String, category: String) -> some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Text(title).font(SetupDesign.pageTitle)
-                Text("Changes are applied individually and saved to the recovery journal.")
-                    .foregroundStyle(.secondary).font(.callout)
+            VStack(alignment: .leading, spacing: SetupDesign.pageSpacing) {
+                SetupPageHeader(title, subtitle: "Changes are applied individually and saved to the recovery journal.")
                 ForEach(TweakRegistry.filtered("", category: category)) { tweak in
                     TweakControl(tweak: tweak,
                         service: TweakService(journal: model.engine.journal,
@@ -401,10 +383,8 @@ struct ControlCenterView: View {
                 .contains { $0.localizedCaseInsensitiveContains(needle) }
         }
         return ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("Search results").font(SetupDesign.pageTitle)
-                Text("\(matches.count) settings and \(tasks.count) features for “\(needle)”")
-                    .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: SetupDesign.pageSpacing) {
+                SetupPageHeader("Search results", subtitle: "\(matches.count) settings and \(tasks.count) features for “\(needle)”")
                 ForEach(matches) { tweak in
                     TweakControl(tweak: tweak,
                         service: TweakService(journal: model.engine.journal,
@@ -418,8 +398,8 @@ struct ControlCenterView: View {
                     } label: {
                         HStack {
                             VStack(alignment: .leading) {
-                                Text(task.title).font(.headline)
-                                Text(task.category).font(.callout).foregroundStyle(.secondary)
+                                Text(task.title).font(SetupDesign.sectionTitle)
+                                Text(task.category).font(SetupDesign.body).foregroundStyle(.secondary)
                             }
                             Spacer()
                             Image(systemName: "chevron.right")
@@ -429,9 +409,9 @@ struct ControlCenterView: View {
                 if matches.isEmpty && tasks.isEmpty {
                     VStack(spacing: 8) {
                         Image(systemName: "magnifyingglass").font(.title2)
-                        Text("No matching controls").font(.headline)
+                        Text("No matching controls").font(SetupDesign.sectionTitle)
                         Text("Try Dock, clock, accent, or workspaces.")
-                            .font(.callout).foregroundStyle(.secondary)
+                            .font(SetupDesign.body).foregroundStyle(.secondary)
                     }.frame(maxWidth: .infinity).padding(40)
                 }
             }.padding(SetupDesign.pagePadding).frame(maxWidth: SetupDesign.pageWidth, alignment: .leading)
@@ -445,10 +425,8 @@ struct ControlCenterView: View {
                 SetupView(model: model, embedded: true, onReturn: resetFeature)
             } else {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 18) {
-                        Text("Apps & Features").font(SetupDesign.pageTitle)
-                        Text("Choose a ready-made setup or select entire categories. You don't need to open each feature individually.")
-                            .font(.callout).foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: SetupDesign.pageSpacing) {
+                        SetupPageHeader("Apps & features", subtitle: "Choose a ready-made setup or select individual components. Review your selection before applying changes.")
                         featureBatchControls
                         TextField("Find a feature", text: $model.search)
                             .textFieldStyle(.roundedBorder)
@@ -456,7 +434,7 @@ struct ControlCenterView: View {
                             featureCategory(category)
                         }
                         Text("Nothing is installed by selecting a checkbox. Review the selected tasks and confirm before anything runs. Dependencies are included automatically.")
-                            .font(.caption).foregroundStyle(.secondary)
+                            .font(SetupDesign.caption).foregroundStyle(.secondary)
                     }
                     .padding(SetupDesign.pagePadding)
                     .frame(maxWidth: SetupDesign.pageWidth, alignment: .leading)
@@ -486,24 +464,23 @@ struct ControlCenterView: View {
             }
             if let preset = model.picker.preset {
                 Text("\(preset.title): \(preset.summary)")
-                    .font(.callout).foregroundStyle(.secondary)
+                    .font(SetupDesign.body).foregroundStyle(.secondary)
             } else {
                 Text("Custom selection. Required dependencies are added automatically.")
-                    .font(.callout).foregroundStyle(.secondary)
+                    .font(SetupDesign.body).foregroundStyle(.secondary)
             }
             HStack(spacing: 12) {
                 Button("Review & apply selected features") { reviewSelectedFeatures() }
                     .buttonStyle(.borderedProminent)
                     .disabled(model.busy || model.picker.selectedCount == 0)
                 Text("Review first. No automatic installation.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(SetupDesign.caption).foregroundStyle(.secondary)
             }
             if !model.message.isEmpty {
-                Text(model.message).font(.caption).foregroundStyle(.orange)
+                Text(model.message).font(SetupDesign.caption).foregroundStyle(.orange)
             }
         }
-        .padding(18)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+        .setupCard()
     }
 
     private func featureCategory(_ category: String) -> some View {
@@ -523,7 +500,7 @@ struct ControlCenterView: View {
                     HStack(spacing: 10) {
                         Image(systemName: expanded ? "chevron.down" : "chevron.right")
                             .frame(width: 16)
-                        Text(category).font(.headline)
+                        Text(category).font(SetupDesign.sectionTitle)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
@@ -551,23 +528,23 @@ struct ControlCenterView: View {
                             VStack(alignment: .leading, spacing: 5) {
                                 Text(task.title).fontWeight(.medium)
                                 Text(task.summary)
-                                    .font(.callout).foregroundStyle(.secondary)
+                                    .font(SetupDesign.body).foregroundStyle(.secondary)
                                     .fixedSize(horizontal: false, vertical: true)
                                 Text(model.states[task.id] ?? "Checking...")
-                                    .font(.caption2).foregroundStyle(.secondary)
+                                    .font(SetupDesign.caption).foregroundStyle(.secondary)
                             }
                         }
                         .toggleStyle(.checkbox)
                         .disabled(model.busy)
                         Spacer(minLength: 8)
                         Text(task.guided ? "Approval" : "Automatic")
-                            .font(.caption2).foregroundStyle(.secondary)
+                            .font(SetupDesign.caption).foregroundStyle(.secondary)
                     }
                     .padding(.horizontal, 16).padding(.vertical, 9)
                 }
             }
         }
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 13))
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: SetupDesign.cardRadius))
     }
 
     private func reviewSelectedFeatures() {

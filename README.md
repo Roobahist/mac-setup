@@ -176,7 +176,7 @@ mac-setup dotfiles update
 
 ## Development and releases
 
-We maintain public portable configurations in [dot-files](https://github.com/Roobahist/dot-files). Linking is optional. AeroSpace and SketchyBar are generated locally so editing workspaces never modifies the public checkout. We preserve unrelated symlinks instead of overwriting them.
+We maintain public portable configurations in [dot-files](https://github.com/Roobahist/dot-files). Linking is optional. AeroSpace and SketchyBar are generated locally so editing workspaces never modifies the public checkout. Editing a generated profile backs up an existing directory symlink and replaces it with a local copy. The linked source stays untouched, and Restore reconnects the original link. A legacy home-level AeroSpace config is also backed up before switching to the reviewed config location.
 
 ```sh
 python3 scripts/check-profile.py

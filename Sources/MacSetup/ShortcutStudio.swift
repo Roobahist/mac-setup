@@ -32,18 +32,11 @@ struct ShortcutStudio: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("Keyboard shortcuts").font(SetupDesign.pageTitle)
-                Spacer()
-                Text("\(settings.entries.filter(\.enabled).count) active")
-                    .font(.subheadline).foregroundStyle(.secondary)
-            }
-            Text("Every standard shortcut managed by this setup is listed below. Select a shortcut to change its keys or action, switch it off, or add another.")
-                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: SetupDesign.pageSpacing) {
+            SetupPageHeader("Keyboard shortcuts", subtitle: "Change a shortcut’s keys or action, switch it off, or add another. \(settings.entries.filter(\.enabled).count) shortcuts are active.")
 
             Text("Workspace switch and move modifiers, destination keys and app routing are configured together in Workspaces.")
-                .font(.callout).foregroundStyle(.secondary)
+                .font(SetupDesign.body).foregroundStyle(.secondary)
 
             ForEach(ShortcutProvider.allCases, id: \.self) { provider in
                 providerSection(provider)
@@ -52,7 +45,7 @@ struct ShortcutStudio: View {
                 }
             }
             Text("Advanced Karabiner rules are editable as JSON to retain their stateful behavior. Edit only rules you understand. Mac Setup checks structure before saving.")
-                .font(.callout).foregroundStyle(.secondary)
+                .font(SetupDesign.body).foregroundStyle(.secondary)
         }
         .sheet(item: $editing) { item in
             ShortcutItemEditor(item: item, aerospaceActions: aerospaceActions, apps: apps,
@@ -93,15 +86,15 @@ struct ShortcutStudio: View {
 
     private var advancedKarabinerSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Advanced Karabiner rules").font(.headline)
+            Text("Advanced Karabiner rules").font(SetupDesign.sectionTitle)
             Text("Complex multi-key sequences and state-based remappings from the Portable profile.")
-                .font(.callout).foregroundStyle(.secondary)
+                .font(SetupDesign.body).foregroundStyle(.secondary)
             ForEach(advancedTemplates) { item in
                 let rule = currentAdvanced(item)
                 HStack(spacing: 14) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(item.id).fontWeight(.medium)
-                        Text("Edit the rule as JSON").font(.caption).foregroundStyle(.secondary)
+                        Text("Edit the rule as JSON").font(SetupDesign.caption).foregroundStyle(.secondary)
                     }.frame(maxWidth: .infinity, alignment: .leading)
                     Toggle("Enabled", isOn: Binding(
                         get: { currentAdvanced(item).enabled },
@@ -117,17 +110,15 @@ struct ShortcutStudio: View {
                 if item.id != advancedTemplates.last?.id { Divider().opacity(0.5) }
             }
         }
-        .padding(18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .setupCard()
     }
 
     private func providerSection(_ provider: ShortcutProvider) -> some View {
         let entries = settings.entries.filter { $0.provider == provider }
         return VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text(provider.rawValue).font(.headline)
-                Text("\(entries.count) shortcuts").font(.caption).foregroundStyle(.secondary)
+                Text(provider.rawValue).font(SetupDesign.sectionTitle)
+                Text("\(entries.count) shortcuts").font(SetupDesign.caption).foregroundStyle(.secondary)
                 Spacer()
                 if provider != .raycast {
                     Button {
@@ -142,9 +133,7 @@ struct ShortcutStudio: View {
                 if entry.id != entries.last?.id { Divider().opacity(0.5) }
             }
         }
-        .padding(18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .setupCard()
     }
 
     private func bundleIDForShortcut(_ entry: ManagedShortcut) -> String? {
@@ -275,7 +264,7 @@ private struct ShortcutItemEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("Edit \(draft.provider.rawValue) shortcut").font(.title2.bold())
+            Text("Edit \(draft.provider.rawValue) shortcut").font(SetupDesign.sheetTitle)
             if draft.provider == .aerospace {
                 Picker("Action", selection: $selectedAction) {
                     ForEach(aerospaceActions.map { $0.action }, id: \.self) { action in
@@ -294,7 +283,7 @@ private struct ShortcutItemEditor: View {
                 if selectedAction == "open-app" {
                     TextField("Application bundle ID", text: $bundleID)
                         .textFieldStyle(.roundedBorder)
-                    Text("Example: com.apple.Safari").font(.callout).foregroundStyle(.secondary)
+                    Text("Example: com.apple.Safari").font(SetupDesign.body).foregroundStyle(.secondary)
                     if !apps.isEmpty {
                         Picker("Installed app", selection: $bundleID) {
                             Text("Choose an installed app").tag("")
@@ -379,9 +368,9 @@ private struct AdvancedKarabinerEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(value.id).font(.title2.bold())
+            Text(value.id).font(SetupDesign.sheetTitle)
             Text("Advanced Karabiner configuration. The rule description must remain unchanged, and each manipulator needs from and to fields.")
-                .font(.callout).foregroundStyle(.secondary)
+                .font(SetupDesign.body).foregroundStyle(.secondary)
             TextEditor(text: $value.json)
                 .font(.system(size: 12, design: .monospaced))
                 .frame(minHeight: 340)
@@ -389,7 +378,7 @@ private struct AdvancedKarabinerEditor: View {
                     .stroke(.quaternary, lineWidth: 1))
             if !message.isEmpty {
                 Label(message, systemImage: "exclamationmark.triangle")
-                    .font(.callout).foregroundStyle(.red)
+                    .font(SetupDesign.body).foregroundStyle(.red)
             }
             HStack {
                 Toggle("Enabled", isOn: $value.enabled).toggleStyle(.checkbox)

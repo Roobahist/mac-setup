@@ -11,9 +11,9 @@ struct DesktopAccentControls: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Desktop accent").font(.headline)
+            Text("Desktop accent").font(SetupDesign.sectionTitle)
             Text("Choose whether SketchyBar follows your wallpaper or uses your own highlight color.")
-                .font(.callout).foregroundStyle(.secondary)
+                .font(SetupDesign.body).foregroundStyle(.secondary)
             Toggle("Match wallpaper automatically", isOn: Binding(
                 get: { watcherEnabled },
                 set: { updateWatcher($0) }))
@@ -26,13 +26,11 @@ struct DesktopAccentControls: View {
             }
             if watcherEnabled {
                 Text("Turn off automatic updates to choose a fixed color.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(SetupDesign.caption).foregroundStyle(.secondary)
             }
-            if !status.isEmpty { Text(status).font(.caption).foregroundStyle(.secondary) }
+            if !status.isEmpty { Text(status).font(SetupDesign.caption).foregroundStyle(.secondary) }
         }
-        .padding(17)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 13))
+        .setupCard()
         .onAppear(perform: reload)
     }
 

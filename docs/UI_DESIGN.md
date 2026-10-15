@@ -1,0 +1,24 @@
+# Native interface rules
+
+The control center uses `SetupDesign` for shared typography, spacing and surfaces. Treat these as product roles; avoid screen-specific replacements for the same role.
+
+| Role | Rule |
+| --- | --- |
+| Page heading and description | `SetupPageHeader`: 27 pt semibold heading, 13 pt description, 8 pt gap |
+| Page column | 980 pt maximum including 28 pt gutters; 20 pt between content groups |
+| Body and controls | 13 pt system font |
+| Section heading | 15 pt semibold |
+| Sheet heading | 20 pt semibold |
+| Supporting caption | 11 pt |
+| Card | 18 pt padding, 12 pt corner radius, native material |
+| Workspace field | 32 pt height, shared border and fill |
+
+The sidebar has one set of native buttons. Its width is 248 pt expanded and 70 pt collapsed. The 54 pt icon column and 8 pt outer inset keep every icon centered at x=35 in either mode. Rows stay 36 pt high. Hide only the title area; size the row, focus/hit area, hover and selection backgrounds to the actual sidebar width. Do not clip a full-width navigation list to simulate a compact rail. Selection uses a shape and semibold title, with accessible selected state. Buttons keep their labels and tooltips when collapsed, and support keyboard navigation.
+
+Workspace column titles are centered over their input group. Headers and rows share `WorkspaceColumns`, including the flexible name column, gutters and vertical inset. Display is a peer column alongside icon, name, apps and key. Use native menus for key and display, with the shared control surface applied outside the menu label; macOS can flatten a custom menu label. App assignment opens a sheet and uses a right disclosure arrow. Apps, key and display share a 9 pt semibold chevron in a 10 pt frame, centered vertically and inset 8 pt from the right edge. Apps points right; key and display point down. Hide the native menu indicator so it cannot override this placement. The drag insertion boundary follows the actual row height.
+
+Users edit one workspace name. Internal routing keys remain an implementation detail of the saved configuration and generated AeroSpace/SketchyBar files. A rename updates those keys and routing together; neither the native editor nor terminal editor offers an independent second identity. Existing portable source identifiers remain compatible until renamed. Diagnostic repair remains available for imported malformed settings.
+
+A page must keep its draft when validation or apply fails. Review precedes changes. Generated-profile migration explains local copies and backups in the plan; applying must never write through a directory link into the original checkout. Successful automatic rollback must not instruct the user to undo the same operation again.
+
+Before delivery, inspect expanded and collapsed navigation, the narrow supported window, workspace rows and menus, rename/reorder/app assignment, neighboring settings pages, review and error/retry states. Confirm keyboard labels and focus, the standard Edit menu, and reduced-motion behavior. Screenshot comparisons complement behavior tests; source-text assertions about a particular layout are not visual verification.

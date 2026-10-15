@@ -18,8 +18,8 @@ struct TweakControl: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(tweak.title).font(.headline)
-                    Text(tweak.summary).font(.callout).foregroundStyle(.secondary)
+                    Text(tweak.title).font(SetupDesign.sectionTitle)
+                    Text(tweak.summary).font(SetupDesign.body).foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 18)
                 switch tweak.kind {
@@ -47,11 +47,11 @@ struct TweakControl: View {
                 }
             }
             if let warning = tweak.warning {
-                Text(warning).font(.caption).foregroundStyle(.secondary)
+                Text(warning).font(SetupDesign.caption).foregroundStyle(.secondary)
             }
             HStack(spacing: 12) {
                 Text(status.isEmpty ? (isStored ? "Customized" : "System default") : status)
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(SetupDesign.caption).foregroundStyle(.secondary)
                 Spacer()
                 Button("Reload") { load() }.disabled(working)
                     .buttonStyle(.borderless)
@@ -67,8 +67,7 @@ struct TweakControl: View {
                     .buttonStyle(.borderedProminent)
             }
         }
-        .padding(17)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 13))
+        .setupCard()
         .onAppear(perform: load)
     }
 

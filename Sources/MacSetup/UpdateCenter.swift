@@ -10,13 +10,11 @@ struct UpdateCenter: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                Text("Updates").font(SetupDesign.pageTitle)
-                Text("Get new controls and improvements from verified GitHub releases.")
-                    .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: SetupDesign.pageSpacing) {
+                SetupPageHeader("Updates", subtitle: "Get new controls and improvements from verified GitHub releases.")
                 VStack(alignment: .leading, spacing: 14) {
                     Label("Installed version: \(MacSetupVersion.installed)", systemImage: "desktopcomputer")
-                        .font(.headline)
+                        .font(SetupDesign.sectionTitle)
                     if let release {
                         Text("Latest release: \(release.tag)")
                         Text(MacSetupVersion.isNewer(release.version, than: MacSetupVersion.installed)
@@ -33,12 +31,12 @@ struct UpdateCenter: View {
                         if checking || installing { ProgressView().controlSize(.small) }
                     }
                     if !message.isEmpty {
-                        Text(message).font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
+                        Text(message).font(SetupDesign.body).foregroundStyle(.secondary).textSelection(.enabled)
                     }
                 }
-                .padding(20).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+                .setupCard()
                 Text("Updates are installed into versioned directories. Restart Mac Setup to use newly installed features. Previous installation versions remain available for recovery.")
-                    .font(.callout).foregroundStyle(.secondary)
+                    .font(SetupDesign.body).foregroundStyle(.secondary)
             }
             .padding(SetupDesign.pagePadding).frame(maxWidth: SetupDesign.pageWidth, alignment: .leading)
                 .frame(maxWidth: .infinity)
