@@ -222,7 +222,7 @@ final class WorkspaceConfigurationTests: XCTestCase {
         _ = try engine.apply(Catalog.task("sketchybar-profile"))
         let persisted = try WorkspaceConfiguration.load(from: paths).workspaces.map(\.id)
         XCTAssertNotEqual(persisted, original)
-        XCTAssertEqual(persisted[1], "notes")
+        XCTAssertEqual(persisted[2], "notes")
         let aerospace = try String(contentsOf:
             paths.config.appendingPathComponent("aerospace/aerospace.toml"), encoding: .utf8)
         let bar = try String(contentsOf:
