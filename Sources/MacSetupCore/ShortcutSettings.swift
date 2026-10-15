@@ -13,6 +13,17 @@ public struct ManagedShortcut: Codable, Equatable, Identifiable {
     public var shortcut: WorkspaceShortcut
     public var enabled: Bool
 
+    /// Resolve both bundled friendly names and user-selected application targets.
+    public var applicationBundleID: String? {
+        switch provider {
+        case .aerospace: return "bobko.aerospace"
+        case .raycast: return "com.raycast.macos"
+        case .karabiner:
+            if action.hasPrefix("open:") { return String(action.dropFirst(5)) }
+            return ShortcutSettings.scripts.first { $0.name == action }?.bundleID
+        }
+    }
+
     public init(id: String = UUID().uuidString, provider: ShortcutProvider,
                 action: String, shortcut: WorkspaceShortcut, enabled: Bool = true) {
         self.id = id
@@ -90,12 +101,12 @@ public struct ShortcutSettings: Codable, Equatable {
         }
     }
 
-    public static let scripts: [(name: String, shell: String)] = [
-        ("Alacritty", "\"$HOME/.config/karabiner/scripts/alacritty/open_new_window.sh\""),
-        ("Visual Studio Code", "\"$HOME/.config/karabiner/scripts/vscode/open_new_window.sh\""),
-        ("Finder", "\"$HOME/.config/karabiner/scripts/finder/open_window.sh\""),
-        ("Telegram", "/usr/bin/open -b ru.keepcoder.Telegram"),
-        ("WhatsApp", "/usr/bin/open -b net.whatsapp.WhatsApp")
+    public static let scripts: [(name: String, bundleID: String, shell: String)] = [
+        ("Alacritty", "org.alacritty", "\"$HOME/.config/karabiner/scripts/alacritty/open_new_window.sh\""),
+        ("Visual Studio Code", "com.microsoft.VSCode", "\"$HOME/.config/karabiner/scripts/vscode/open_new_window.sh\""),
+        ("Finder", "com.apple.finder", "\"$HOME/.config/karabiner/scripts/finder/open_window.sh\""),
+        ("Telegram", "ru.keepcoder.Telegram", "/usr/bin/open -b ru.keepcoder.Telegram"),
+        ("WhatsApp", "net.whatsapp.WhatsApp", "/usr/bin/open -b net.whatsapp.WhatsApp")
     ]
 
     /// Carbon virtual key codes used by the Raycast global hotkey preference.

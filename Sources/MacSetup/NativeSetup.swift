@@ -722,9 +722,9 @@ struct SetupView: View {
                                 .font(.system(size: 13))
                                 .foregroundStyle(.secondary)
                         }
-                        .contentShape(Rectangle())
                         .frame(maxWidth: .infinity, minHeight: 56)
                         .padding(.horizontal, 18)
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("\(category), \(selectedCount) selected")
@@ -892,10 +892,10 @@ struct SetupView: View {
             Text("Adjust the bar background, blur, and occupied or empty workspaces that are not focused. Wallpaper highlighting of the focused workspace stays separate.")
                 .font(SetupDesign.body).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: 18) {
-                ColorPicker("Occupied", selection: appearanceColor(\.occupiedColor), supportsOpacity: true)
-                ColorPicker("Empty", selection: appearanceColor(\.emptyColor), supportsOpacity: true)
-                ColorPicker("Bar background", selection: appearanceColor(\.backgroundColor), supportsOpacity: true)
+            HStack(alignment: .top, spacing: 18) {
+                WorkspaceColorControl(title: "Occupied", hex: $model.layout.barStyle.occupiedColor)
+                WorkspaceColorControl(title: "Empty", hex: $model.layout.barStyle.emptyColor)
+                WorkspaceColorControl(title: "Bar background", hex: $model.layout.barStyle.backgroundColor)
             }
             HStack(spacing: 18) {
                 VStack(alignment: .leading, spacing: 5) {
@@ -922,20 +922,13 @@ struct SetupView: View {
                     Slider(value: Binding(
                         get: { Double(model.layout.barStyle.blurRadius) },
                         set: { model.layout.barStyle.blurRadius = Int($0) }),
-                        in: 0...100, step: 5)
-                    Text("SketchyBar blur radius; macOS renders the final effect.")
+                        in: 0...100, step: 1)
+                    Text("0 removes blur. Use a translucent background to see the effect.")
                         .font(SetupDesign.caption).foregroundStyle(.secondary)
                 }
             }
         }
         .setupCard()
-    }
-
-    private func appearanceColor(_ key: WritableKeyPath<WorkspaceBarStyle, String>) -> Binding<Color> {
-        Binding(
-            get: { WorkspaceColor.swiftUI(model.layout.barStyle[keyPath: key]) },
-            set: { model.layout.barStyle[keyPath: key] = WorkspaceColor.argb($0) }
-        )
     }
 
     private func workspaceCard(at index: Int) -> some View {
@@ -981,17 +974,14 @@ struct SetupView: View {
 
             workspaceShortcutKey(at: index).frame(width: WorkspaceColumns.key)
 
-            Menu {
-                Button("Automatic") { model.layout.workspaces[index].monitor = .automatic }
-                Button("Main display") { model.layout.workspaces[index].monitor = .main }
-                Button("Secondary display") { model.layout.workspaces[index].monitor = .secondary }
-            } label: {
-                Text(item.resolvedMonitor == .automatic ? "Automatic" : item.resolvedMonitor == .main ? "Main" : "Secondary")
-            }
-            .workspaceDropdown()
-            .frame(width: WorkspaceColumns.display)
-            .accessibilityValue(item.resolvedMonitor.rawValue)
-            .help("Preferred display for \(item.name)").accessibilityLabel("Display for \(item.name)")
+            SetupDropdown(title: "Display for \(item.name)",
+                          selection: Binding(get: { model.layout.workspaces[index].resolvedMonitor },
+                                             set: { model.layout.workspaces[index].monitor = $0 }),
+                          choices: [.init(value: .automatic, title: "Automatic"),
+                                    .init(value: .main, title: "Main"),
+                                    .init(value: .secondary, title: "Secondary")])
+                .frame(width: WorkspaceColumns.display)
+                .help("Preferred display for \(item.name)")
 
             Button { model.layout.removeWorkspace(item.id) } label: {
                 Image(systemName: "trash").font(.system(size: 13))
@@ -1052,24 +1042,15 @@ struct SetupView: View {
         let key = item.shortcutKey ?? item.shortcuts?.switchTo?.key
             ?? (WorkspaceConfiguration.keys.indices.contains(index)
                 ? WorkspaceConfiguration.keys[index] : "")
-        return Menu {
-            Button("None") {
-                model.layout.workspaces[index].shortcutKey = ""
-                model.layout.workspaces[index].shortcuts = nil
-            }
-            ForEach(workspaceKeys, id: \.self) { selected in
-                Button(WorkspaceShortcut.keyLabel(selected)) {
-                    model.layout.workspaces[index].shortcutKey = selected
-                    model.layout.workspaces[index].shortcuts = nil
-                }
-            }
-        } label: {
-            Text(key.isEmpty ? "None" : WorkspaceShortcut.keyLabel(key))
-        }
-        .workspaceDropdown()
-        .accessibilityValue(key.isEmpty ? "None" : WorkspaceShortcut.keyLabel(key))
-        .help("Click to change shortcut for \(item.name)")
-        .accessibilityLabel("Change shortcut for \(item.name)")
+        return SetupDropdown(title: "Change shortcut for \(item.name)",
+                             selection: Binding(get: { key }, set: { selected in
+                                 model.layout.workspaces[index].shortcutKey = selected
+                                 model.layout.workspaces[index].shortcuts = nil
+                             }),
+                             choices: [.init(value: "", title: "None")] + workspaceKeys.map {
+                                 .init(value: $0, title: WorkspaceShortcut.keyLabel($0))
+                             })
+            .help("Click to change shortcut for \(item.name)")
     }
 
     private func workspaceMenuLabel(_ title: String) -> some View {

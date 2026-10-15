@@ -14,7 +14,7 @@ enum WorkspaceColor {
     }
 
     static func argb(_ color: Color) -> String {
-        guard let rgb = NSColor(color).usingColorSpace(.deviceRGB) else {
+        guard let rgb = NSColor(color).usingColorSpace(.sRGB) else {
             return "0xffffffff"
         }
         func byte(_ value: CGFloat) -> Int {

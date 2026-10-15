@@ -209,8 +209,10 @@ are retained on upgrade.
 
 Workspaces contains workspace names and runtime IDs, destination keys, shared
 switch/move modifiers, application routing, glyphs and display assignments.
-Workspace Bar contains SketchyBar colors, spacing, blur and explicit wallpaper
-accent controls. Keyboard Shortcuts contains other AeroSpace, Karabiner and Raycast
+Workspace Bar contains SketchyBar RGB colors, separate opacity controls, spacing,
+single-step blur adjustment and explicit wallpaper accent controls. The entire bar
+follows the native menu-bar height at the current display scaling, including notch
+safe areas; changing workspace order does not choose a new height. Keyboard Shortcuts contains other AeroSpace, Karabiner and Raycast
 actions. Renaming a workspace updates the runtime identity; reordering or removing
 another workspace preserves its key. Missing applications keep their routes.
 

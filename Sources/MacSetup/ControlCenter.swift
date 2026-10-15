@@ -159,6 +159,7 @@ struct ControlCenterView: View {
                     Image(systemName: "sidebar.left")
                         .font(.system(size: 17, weight: .medium))
                         .frame(width: SetupDesign.sidebarIconColumn, height: SetupDesign.sidebarRowHeight)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .help(compactSidebar ? "Expand sidebar" : "Collapse sidebar")
@@ -178,6 +179,7 @@ struct ControlCenterView: View {
                 Button { compactSidebar = false } label: {
                     Image(systemName: "magnifyingglass").font(.system(size: 17))
                         .frame(width: SetupDesign.sidebarIconColumn, height: SetupDesign.sidebarRowHeight)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain).accessibilityLabel("Search settings")
                 TextField("Search settings", text: $query)
@@ -405,6 +407,7 @@ struct ControlCenterView: View {
                             Spacer()
                             Image(systemName: "chevron.right")
                         }.padding(16).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                            .contentShape(RoundedRectangle(cornerRadius: 12))
                     }.buttonStyle(.plain)
                 }
                 if matches.isEmpty && tasks.isEmpty {

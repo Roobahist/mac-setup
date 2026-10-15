@@ -36,14 +36,10 @@ struct TweakControl: View {
                             .frame(width: 210).disabled(working)
                     }
                 case let .selection(choices):
-                    Picker(tweak.title, selection: Binding(
-                        get: { Int(draft) },
-                        set: { draft = Double($0) })) {
-                            ForEach(choices) { choice in
-                                Text(choice.title).tag(choice.value)
-                            }
-                        }
-                        .labelsHidden().frame(width: 150).disabled(working)
+                    SetupDropdown(title: tweak.title, selection: Binding(
+                        get: { Int(draft) }, set: { draft = Double($0) }),
+                        choices: choices.map { .init(value: $0.value, title: $0.title) })
+                        .frame(width: 150).disabled(working)
                 }
             }
             if let warning = tweak.warning {
