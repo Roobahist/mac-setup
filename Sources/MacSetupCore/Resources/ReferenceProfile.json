@@ -1,0 +1,305 @@
+{
+  "files": {
+    "aerospace/aerospace.toml": "f7bb9d2c83056bcb45b4f9b364b30d233e4d86a03f2d35b7093a32b08bdd3ba2",
+    "alacritty/alacritty.toml": "47bdf434fc1c3264db3eef866e5ccc782e8dcf59195f881673303d944b8d2a07",
+    "alacritty/themes/themes/github_dark.toml": "a5ef98ad83693ba63158e1620890e58a803e2d23ef08f881f22f50bf70dae5d6",
+    "atuin/config.toml": "6ee13f0e129d934f0f96e852e417edd59c880e774c2ec81cda7b82bf9bfd8aed",
+    "karabiner/karabiner.json": "a15bea7b2d0a005934ad1450750da51b4c64cb696a9401e91a99f1e6cea045f7",
+    "karabiner/scripts/alacritty/open_new_window.sh": "7ce760fbbf8679781e45a838503b7cb4cdbbef12398f2347bbc7d76c45b6f48d",
+    "karabiner/scripts/chrome/open_incognito.sh": "73baa0f5101b0920976c716d0eeed83eaddb612d201bb7979c0bd99aae3f2ef1",
+    "karabiner/scripts/chrome/open_profile.sh": "cf576bf41ec27aa272925354a3a2f96558a31080df0aae4cf06358227c948263",
+    "karabiner/scripts/finder/open_window.sh": "2320eed855a3d18767e243b44e763d7d3840f1ff514e29dd5c1f36905569dee4",
+    "karabiner/scripts/vscode/open_new_window.sh": "2de716bcdadf4b80191887c4b1e4ab854330fa71b25ee579391916af7fa1f49c",
+    "sketchybar/plugins/aerospace.sh": "44375bc4bbe6f71e44134048bc03d907ea103937c4813263bbf0f0b3e69ce105",
+    "sketchybar/plugins/battery.sh": "883a701a58f14684246ed1353e70b9e3d275184e39d851230a4b334bc38cae5b",
+    "sketchybar/plugins/clock.sh": "392157e65670cca3e12d4cc510d18f79397b63176b86b43be22c9d21cada6e92",
+    "sketchybar/plugins/colors.sh": "efa76a87b8026689dd420d47594d107c1c07dd83e6ad2445cd79497e64e5288f",
+    "sketchybar/plugins/front_app.sh": "bb2cf56782e24a37ae8f766972bf022b2283df54e38f361567b07ad7cfa9fb30",
+    "sketchybar/plugins/icons.sh": "d64d12decd11894522f7843da24e4185f7f279876f40189a11ec238e65331f9e",
+    "sketchybar/plugins/space.sh": "5d651ff60c6ed3cf02c9aaf822f7f7932aee10d6af2b664e44dddf22db87a90a",
+    "sketchybar/plugins/volume.sh": "6c7152562097f2d748c720103e322bdcf4d747acc277016359f9515bf6c77757",
+    "sketchybar/sketchybarrc": "0370dfaaea3e1de096dfae877c0725322b039a75ce33b4a40a503dec471b6622",
+    "unsplash/get_wallpaper_accent.py": "1dfea9285010eefb3d1fa2da389f6c67881f30c381d2dc6320a89d2b90b1bc27"
+  },
+  "karabinerShortcuts": [
+    {
+      "action": "Alacritty",
+      "enabled": true,
+      "id": "karabiner:alacritty",
+      "provider": "Karabiner",
+      "shortcut": {
+        "key": "enter",
+        "modifiers": [
+          "alt"
+        ]
+      }
+    },
+    {
+      "action": "Visual Studio Code",
+      "enabled": true,
+      "id": "karabiner:vscode",
+      "provider": "Karabiner",
+      "shortcut": {
+        "key": "v",
+        "modifiers": [
+          "alt"
+        ]
+      }
+    },
+    {
+      "action": "Finder",
+      "enabled": true,
+      "id": "karabiner:finder",
+      "provider": "Karabiner",
+      "shortcut": {
+        "key": "e",
+        "modifiers": [
+          "alt"
+        ]
+      }
+    }
+  ],
+  "layout": {
+    "barStyle": {
+      "backgroundColor": "0x35000000",
+      "blurRadius": 50,
+      "emptyColor": "0x30000000",
+      "itemWidth": 21,
+      "occupiedColor": "0xffffffff"
+    },
+    "keymap": {
+      "moveModifiers": [
+        "alt",
+        "shift"
+      ],
+      "switchModifiers": [
+        "alt"
+      ]
+    },
+    "workspaces": [
+      {
+        "apps": [
+          "com.openai.chat",
+          "com.openai.codex"
+        ],
+        "glyph": "robot",
+        "icon": {
+          "font": {
+            "family": "SF Pro",
+            "postScriptName": "SFPro-Regular",
+            "style": "Regular"
+          },
+          "symbol": "\udbc3\udd3d"
+        },
+        "id": "ai",
+        "monitor": "automatic",
+        "name": "AI",
+        "shortcutKey": "backtick"
+      },
+      {
+        "apps": [],
+        "glyph": "1",
+        "icon": {
+          "font": {
+            "family": "Hack Nerd Font",
+            "postScriptName": "HackNF-Bold",
+            "style": "Bold"
+          },
+          "symbol": "1"
+        },
+        "id": "1",
+        "monitor": "automatic",
+        "name": "1",
+        "shortcutKey": "1"
+      },
+      {
+        "apps": [],
+        "glyph": "2",
+        "icon": {
+          "font": {
+            "family": "Hack Nerd Font",
+            "postScriptName": "HackNF-Bold",
+            "style": "Bold"
+          },
+          "symbol": "2"
+        },
+        "id": "2",
+        "monitor": "secondary",
+        "name": "2",
+        "shortcutKey": "2"
+      },
+      {
+        "apps": [],
+        "glyph": "3",
+        "icon": {
+          "font": {
+            "family": "Hack Nerd Font",
+            "postScriptName": "HackNF-Bold",
+            "style": "Bold"
+          },
+          "symbol": "3"
+        },
+        "id": "3",
+        "monitor": "automatic",
+        "name": "3",
+        "shortcutKey": "3"
+      },
+      {
+        "apps": [],
+        "glyph": "4",
+        "icon": {
+          "font": {
+            "family": "Hack Nerd Font",
+            "postScriptName": "HackNF-Bold",
+            "style": "Bold"
+          },
+          "symbol": "4"
+        },
+        "id": "4",
+        "monitor": "automatic",
+        "name": "4",
+        "shortcutKey": "4"
+      },
+      {
+        "apps": [],
+        "glyph": "5",
+        "icon": {
+          "font": {
+            "family": "Hack Nerd Font",
+            "postScriptName": "HackNF-Bold",
+            "style": "Bold"
+          },
+          "symbol": "5"
+        },
+        "id": "5",
+        "monitor": "automatic",
+        "name": "5",
+        "shortcutKey": "5"
+      },
+      {
+        "apps": [],
+        "glyph": "6",
+        "icon": {
+          "font": {
+            "family": "Hack Nerd Font",
+            "postScriptName": "HackNF-Bold",
+            "style": "Bold"
+          },
+          "symbol": "6"
+        },
+        "id": "6",
+        "monitor": "automatic",
+        "name": "6",
+        "shortcutKey": "6"
+      },
+      {
+        "apps": [],
+        "glyph": "7",
+        "icon": {
+          "font": {
+            "family": "Hack Nerd Font",
+            "postScriptName": "HackNF-Bold",
+            "style": "Bold"
+          },
+          "symbol": "7"
+        },
+        "id": "7",
+        "monitor": "automatic",
+        "name": "7",
+        "shortcutKey": "7"
+      },
+      {
+        "apps": [],
+        "glyph": "8",
+        "icon": {
+          "font": {
+            "family": "Hack Nerd Font",
+            "postScriptName": "HackNF-Bold",
+            "style": "Bold"
+          },
+          "symbol": "8"
+        },
+        "id": "8",
+        "monitor": "automatic",
+        "name": "8",
+        "shortcutKey": "8"
+      },
+      {
+        "apps": [
+          "com.spotify.client"
+        ],
+        "glyph": "music",
+        "icon": {
+          "font": {
+            "family": "SF Pro",
+            "postScriptName": "SFPro-Regular",
+            "style": "Regular"
+          },
+          "symbol": "\udbc1\udc6c"
+        },
+        "id": "music",
+        "monitor": "automatic",
+        "name": "Music",
+        "shortcutKey": "9"
+      },
+      {
+        "apps": [
+          "ru.keepcoder.Telegram",
+          "net.whatsapp.WhatsApp",
+          "com.apple.MobileSMS"
+        ],
+        "glyph": "chat",
+        "icon": {
+          "font": {
+            "family": "SF Pro",
+            "postScriptName": "SFPro-Regular",
+            "style": "Regular"
+          },
+          "symbol": "\udbc0\udf32"
+        },
+        "id": "messages",
+        "monitor": "automatic",
+        "name": "Messages",
+        "shortcutKey": "0"
+      },
+      {
+        "apps": [
+          "md.obsidian"
+        ],
+        "glyph": "notes",
+        "icon": {
+          "font": {
+            "family": "SF Pro",
+            "postScriptName": "SFPro-Regular",
+            "style": "Regular"
+          },
+          "symbol": "\udbc0\ude2b"
+        },
+        "id": "notes",
+        "monitor": "automatic",
+        "name": "Notes",
+        "shortcutKey": "minus"
+      },
+      {
+        "apps": [
+          "com.tomito.tomito"
+        ],
+        "glyph": "clock",
+        "icon": {
+          "font": {
+            "family": "SF Pro",
+            "postScriptName": "SFPro-Regular",
+            "style": "Regular"
+          },
+          "symbol": "\udbc1\udc2f"
+        },
+        "id": "timer",
+        "monitor": "automatic",
+        "name": "Pomodoro",
+        "shortcutKey": "equal"
+      }
+    ]
+  },
+  "repository": "https://github.com/Roobahist/dot-files.git",
+  "revision": "1dcbe2f80805f0189444a1de57e173f3ea099972"
+}

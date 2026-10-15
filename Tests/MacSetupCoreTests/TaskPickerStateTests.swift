@@ -36,6 +36,12 @@ final class TaskPickerStateTests: XCTestCase {
         XCTAssertFalse(edited.selected.contains("alacritty"))
     }
 
+    func testEveryPresetLeavesFolderMetadataResetExplicit() {
+        for preset in SetupPreset.allCases {
+            XCTAssertFalse(TaskPickerState(preset: preset).selected.contains("finder-reset-views"), preset.rawValue)
+        }
+    }
+
     func testCompletePresetIncludesWatcherPermissionsAndExcludesRemovedDockTask() {
         let state = TaskPickerState()
         XCTAssertTrue(state.selected.contains("sketchybar-start"))

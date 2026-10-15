@@ -2,12 +2,6 @@
 
 PLUGIN_DIR="$CONFIG_DIR/plugins"
 source "$PLUGIN_DIR/colors.sh"
-# AppKit supplies logical point heights for this host and its notch.
-BAR_HEIGHT=22
-NOTCH_HEIGHT=0
-if [ -x "$PLUGIN_DIR/mac-setup-display" ]; then
-  read -r BAR_HEIGHT NOTCH_HEIGHT < <("$PLUGIN_DIR/mac-setup-display" sizes)
-fi
 
 
 ##### Bar Appearance #####
@@ -16,16 +10,12 @@ fi
 # rendering issue, and this bar intentionally uses a large blur radius.
 sketchybar --bar \
   position=top \
-  height="$BAR_HEIGHT" \
-  notch_display_height="$NOTCH_HEIGHT" \
-  y_offset=0 \
-  notch_offset=0 \
-  margin=0 \
+  height=30 \
   blur_radius=50 \
   shadow=off \
   color="$BAR_COLOR" \
   display=all \
-  topmost=window \
+  topmost=off \
   hidden=off
 
 
@@ -97,7 +87,7 @@ sketchybar --add event aerospace_workspace_change
 
 workspace_icon() {
   case "$1" in
-    chatgpt)  echo "$ICON_CHATGPT" ;;
+    ai)  echo "$ICON_CHATGPT" ;;
     music)    echo "$ICON_MUSIC" ;;
     messages) echo "$ICON_MESSAGES" ;;
     notes)    echo "$ICON_NOTES" ;;
@@ -123,8 +113,8 @@ workspace_icon() {
 
 workspace_font() {
   case "$1" in
-    chatgpt)
-      echo "$FONT_FA_BRANDS"
+    ai|music|messages|notes|timer)
+      echo "SF Pro:Regular:14.5"
       ;;
 
     1|2|3|4|5|6|7|8)
@@ -205,8 +195,8 @@ for workspace in "${workspace_ids[@]}"; do
 
 done
 
-# Update on workspace and foreground-app events, not on a polling timer.
-# Repeated scheduled updates previously caused unnecessary full-bar redraws.
+# A single observer updates every workspace together. Per-workspace subscribers
+# caused redundant AeroSpace queries, long event queues, and stale colors.
 printf -v WORKSPACE_ARGS ' %q' "${workspace_ids[@]}"
 
 sketchybar \
@@ -263,13 +253,4 @@ if [ -n "$INITIAL_FOCUSED_WORKSPACE" ]; then
     > "$HOME/.cache/sketchybar/focused-workspace"
   sketchybar --trigger aerospace_workspace_change \
     FOCUSED="$INITIAL_FOCUSED_WORKSPACE"
-fi
-
-##### Host Display Geometry #####
-sketchybar --add item display_geometry left \
-  --set display_geometry drawing=off updates=on update_freq=0 \
-    script="/bin/bash '$PLUGIN_DIR/geometry.sh'" \
-  --subscribe display_geometry display_change system_woke
-if [ -x "$PLUGIN_DIR/mac-setup-display" ]; then
-  /bin/bash "$PLUGIN_DIR/geometry.sh"
 fi

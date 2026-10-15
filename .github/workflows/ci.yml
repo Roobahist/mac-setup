@@ -21,6 +21,8 @@ jobs:
         run: python3 scripts/test-installer-isolation.py
       - name: Test with isolated homes and fake system commands
         run: swift test --build-system native
+      - name: Test optimized release validators and generated profiles
+        run: swift test -c release --build-system native
       - name: Smoke-test CLI commands
         run: |
           swift run --build-system native mac-setup --version
@@ -33,6 +35,10 @@ jobs:
         run: python3 scripts/test-wallpaper-accent.py
       - name: Validate public profile
         run: python3 scripts/check-profile.py
+      - name: Verify reference source and generated editor defaults
+        run: |
+          python3 scripts/sync-dotfiles.py --verify-bundled
+          python3 scripts/test-reference-profile.py
       - name: Validate shell scripts
         run: |
           bash -n scripts/package.sh scripts/install.sh scripts/build.sh install.sh mac-setup
@@ -58,6 +64,7 @@ jobs:
           xcode-select -p
           swift --version
           swift test --build-system native
+          swift test -c release --build-system native
       - name: Build native app bundle
         run: bash scripts/package.sh arm64 preview
       - name: Build with standalone Command Line Tools when available

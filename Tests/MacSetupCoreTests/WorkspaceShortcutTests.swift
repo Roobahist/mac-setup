@@ -24,8 +24,8 @@ final class WorkspaceShortcutTests: XCTestCase {
         XCTAssertEqual(config.shortcuts(at: 1).switchTo?.binding, "ctrl-alt-r")
         XCTAssertEqual(config.shortcuts(at: 1).moveWindow?.binding, "ctrl-alt-shift-r")
         let toml = try config.aerospaceTOML(from: template())
-        XCTAssertTrue(toml.contains("ctrl-alt-r = 'workspace chatgpt'"))
-        XCTAssertTrue(toml.contains("ctrl-alt-shift-r = ['move-node-to-workspace chatgpt'"))
+        XCTAssertTrue(toml.contains("ctrl-alt-r = 'workspace ai'"))
+        XCTAssertTrue(toml.contains("ctrl-alt-shift-r = ['move-node-to-workspace ai'"))
     }
 
     func testInsertionMovesCardWithoutReplacingIt() throws {
@@ -34,12 +34,12 @@ final class WorkspaceShortcutTests: XCTestCase {
         let originalKeys = config.workspaces.indices.map {
             config.shortcuts(at: $0).switchTo?.key ?? ""
         }
-        config.insertWorkspace("chatgpt", at: 3)
+        config.insertWorkspace("ai", at: 3)
         XCTAssertEqual(config.workspaces.count, original.count)
         XCTAssertEqual(config.workspaces[2].id, original[0].id)
         XCTAssertEqual(config.workspaces[2].name, original[0].name)
         XCTAssertEqual(config.shortcuts(at: 2).switchTo?.key, originalKeys[0])
-        config.insertWorkspace("chatgpt", at: 0)
+        config.insertWorkspace("ai", at: 0)
         XCTAssertEqual(config.workspaces.map(\.id), original.map(\.id))
         for (i, item) in config.workspaces.enumerated() {
             XCTAssertEqual(item.name, original[i].name)

@@ -14,7 +14,9 @@ struct ShortcutStudio: View {
     @LocalViewState private var editingAdvanced: AdvancedKarabinerRule?
 
     private var advancedTemplates: [AdvancedKarabinerRule] {
-        ShortcutSettings.bundledAdvancedKarabinerRules(from: karabinerTemplate)
+        let bundled = ShortcutSettings.bundledAdvancedKarabinerRules(from: karabinerTemplate)
+        let names = Set(bundled.map(\.id))
+        return bundled + (settings.advancedKarabiner ?? []).filter { !names.contains($0.id) }
     }
 
     private func currentAdvanced(_ item: AdvancedKarabinerRule) -> AdvancedKarabinerRule {
@@ -40,7 +42,8 @@ struct ShortcutStudio: View {
             Text("Every standard shortcut managed by this setup is listed below. Select a shortcut to change its keys or action, switch it off, or add another.")
                 .foregroundStyle(.secondary)
 
-            workspaceSection
+            Text("Workspace switch and move modifiers, destination keys and app routing are configured together in Workspaces.")
+                .font(.callout).foregroundStyle(.secondary)
 
             ForEach(ShortcutProvider.allCases, id: \.self) { provider in
                 providerSection(provider)
@@ -117,57 +120,6 @@ struct ShortcutStudio: View {
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-    }
-
-    private var workspaceSection: some View {
-        VStack(alignment: .leading, spacing: 15) {
-            HStack {
-                Label("Workspace destinations", systemImage: "square.grid.2x2")
-                    .font(.headline)
-                Spacer()
-                Text("AeroSpace").font(.caption).foregroundStyle(.tertiary)
-            }
-            Text("The modifier sets apply to every workspace. Destination keys are chosen on the next screen.")
-                .font(.callout).foregroundStyle(.secondary)
-            modifierRow("Switch to workspace", modifiers: $layout.keymap.switchModifiers)
-            modifierRow("Move window to workspace", modifiers: $layout.keymap.moveModifiers)
-            Divider()
-            ForEach(layout.workspaces.indices, id: \.self) { index in
-                let item = layout.workspaces[index]
-                let pair = layout.shortcuts(at: index)
-                HStack(spacing: 12) {
-                    Text(item.name).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
-                    Text(pair.switchTo?.display ?? "No key")
-                        .frame(width: 122, alignment: .trailing)
-                    Text(pair.moveWindow?.display ?? "No key")
-                        .frame(width: 138, alignment: .trailing)
-                }
-                .font(.system(size: 14, weight: .medium, design: .monospaced))
-                .foregroundStyle(.secondary)
-                .accessibilityElement(children: .combine)
-            }
-        }
-        .padding(18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-    }
-
-    private func modifierRow(_ title: String, modifiers: Binding<[String]>) -> some View {
-        HStack(spacing: 12) {
-            Text(title).frame(width: 192, alignment: .leading).fontWeight(.medium)
-            ForEach(WorkspaceShortcut.modifierNames, id: \.self) { modifier in
-                Toggle(["cmd": "⌘", "ctrl": "⌃", "alt": "⌥", "shift": "⇧"][modifier]!,
-                    isOn: Binding(
-                        get: { modifiers.wrappedValue.contains(modifier) },
-                        set: { selected in
-                            var value = modifiers.wrappedValue
-                            value.removeAll { $0 == modifier }
-                            if selected { value.append(modifier) }
-                            modifiers.wrappedValue = value
-                        }))
-                .toggleStyle(.checkbox).accessibilityLabel("\(title): \(modifier)")
-            }
-        }
     }
 
     private func providerSection(_ provider: ShortcutProvider) -> some View {

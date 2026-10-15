@@ -16,7 +16,9 @@ jobs:
         with:
           python-version: '3.12'
       - run: swift test
+      - run: swift test -c release
       - run: python3 scripts/check-profile.py
+      - run: python3 scripts/sync-dotfiles.py --verify-bundled
       - name: Package
         env:
           RELEASE_TAG: ${{ github.ref_name }}

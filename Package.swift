@@ -8,7 +8,7 @@ let package = Package(
                .executable(name: "mac-setup-display", targets: ["MacSetupDisplay"]),
                .executable(name: "mac-setup-wallpaper-watcher", targets: ["MacSetupWatcher"])],
     targets: [
-        .target(name: "MacSetupCore", resources: [.copy("Resources/Profile"), .copy("Resources/MacSetup.icns")]),
+        .target(name: "MacSetupCore", resources: [.copy("Resources/Profile"), .copy("Resources/ReferenceProfile.json"), .copy("Resources/MacSetup.icns")]),
         .executableTarget(name: "MacSetup", dependencies: ["MacSetupCore"]),
         .executableTarget(name: "MacSetupDisplay", dependencies: ["MacSetupCore"]),
         .executableTarget(name: "MacSetupWatcher", dependencies: ["MacSetupCore"]),

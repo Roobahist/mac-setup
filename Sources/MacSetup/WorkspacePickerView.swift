@@ -353,8 +353,8 @@ struct WorkspacePickerView {
             descriptor = "RENAME WORKSPACE ID"
             explanation = "AeroSpace uses this unique ID in window rules and keyboard shortcuts."
         case .editName:
-            descriptor = "CHANGE WORKSPACE LABEL"
-            explanation = "The label is for this editor. SketchyBar displays your chosen glyph."
+            descriptor = "RENAME WORKSPACE"
+            explanation = "Renaming also updates the runtime ID in app routing, shortcuts and SketchyBar."
         default:
             descriptor = "ASSIGN AN APPLICATION"
             explanation = "Enter the application's bundle ID, such as com.example.app."

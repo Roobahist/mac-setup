@@ -135,7 +135,7 @@ def verify_glyph_columns(data: bytes) -> None:
         id_col = header.index("ID", glyph_col + len("GLYPH"))
         apps_col = header.index("APPS", id_col + len("ID"))
         for shortcut, glyph, workspace_id, count in (
-            ("Alt+" + chr(96), "U+100D3D", "chatgpt", "2"),
+            ("Alt+" + chr(96), "U+100D3D", "ai", "2"),
             ("Alt+1", "U+0031", "1", "0"),
             ("Alt+9", "U+10046C", "music", "1"),
             ("Alt+0", "U+100332", "messages", "3"),

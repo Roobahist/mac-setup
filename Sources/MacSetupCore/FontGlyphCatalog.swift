@@ -22,7 +22,7 @@ public struct GlyphFont: Codable, Equatable, Hashable, Identifiable {
     public func validate() throws {
         for name in [postScriptName, family, style] {
             guard !name.isEmpty, name.count <= 254, !name.contains(":"),
-                  !name.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains) else {
+                  !name.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else {
                 throw SetupError("Font names must be nonempty and cannot contain colons or control characters.")
             }
         }

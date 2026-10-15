@@ -11,6 +11,7 @@ PROFILE_DIR="$BIN_DIR/MacSetup_MacSetupCore.bundle/Contents/Resources/Profile"
 if [[ ! -d "$PROFILE_DIR" ]]; then PROFILE_DIR="$BIN_DIR/MacSetup_MacSetupCore.bundle/Profile"; fi
 cp -RX "$PROFILE_DIR" "$APP_DIR/Contents/Resources/"
 cp -X "$(dirname "$PROFILE_DIR")/MacSetup.icns" "$APP_DIR/Contents/Resources/MacSetup.icns"
+cp -X "$(dirname "$PROFILE_DIR")/ReferenceProfile.json" "$APP_DIR/Contents/Resources/ReferenceProfile.json"
 cp -X "$BIN_DIR/mac-setup-display" "$APP_DIR/Contents/Helpers/mac-setup-display"
 cp -X "$BIN_DIR/mac-setup-wallpaper-watcher" "$APP_DIR/Contents/Helpers/mac-setup-wallpaper-watcher"
 cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
@@ -45,6 +46,7 @@ codesign --force --sign - "$APP_DIR"
 # Verify resources can be resolved by the helper from inside the actual
 # packaged .app, not only from the SwiftPM build directory.
 "$APP_DIR/Contents/Helpers/mac-setup-wallpaper-watcher" --self-check
+"$APP_DIR/Contents/MacOS/mac-setup" reference
 
 if [[ -e "$DEST_APP" || -L "$DEST_APP" ]]; then
   EXISTING_ID="$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$DEST_APP/Contents/Info.plist" 2>/dev/null || true)"

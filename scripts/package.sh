@@ -11,6 +11,12 @@ bash scripts/build.sh -c release --arch "$ARCH"
 BIN_DIR="$(bash scripts/build.sh -c release --arch "$ARCH" --show-bin-path)"
 PACKAGE="mac-setup-$VERSION-macos-$ARCH"
 DEST="dist/$PACKAGE"
+if [[ -L dist || -L "$DEST" ]]; then
+  echo "Refusing to replace a package through a symlink: $DEST" >&2
+  exit 1
+fi
+# Every archive starts clean; old resource files must not survive a rebuild.
+rm -rf "$DEST"
 mkdir -p "$DEST"
 cp "$BIN_DIR/mac-setup" "$DEST/mac-setup"
 cp "$BIN_DIR/mac-setup-display" "$DEST/mac-setup-display"

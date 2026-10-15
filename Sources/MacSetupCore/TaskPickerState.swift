@@ -33,7 +33,7 @@ public enum SetupPreset: String, CaseIterable {
         case .productivity:
             ids = Set(tasks.filter {
                 ["Window management", "Apps", "Appearance", "Finder"].contains($0.category)
-            }.map(\.id)).union(["dotfiles-linked"])
+            }.map(\.id)).union(["dotfiles-linked"]).subtracting(["finder-reset-views"])
         case .developer:
             ids = ["homebrew", "fonts", "dotfiles-linked",
                    "atuin", "atuin-profile", "atuin-shell", "git-ignore"]

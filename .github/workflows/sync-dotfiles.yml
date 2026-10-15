@@ -24,7 +24,9 @@ jobs:
         with:
           branch: automation/sync-dot-files
           delete-branch: true
-          add-paths: Sources/MacSetupCore/Resources/Profile
+          add-paths: |
+            Sources/MacSetupCore/Resources/Profile
+            Sources/MacSetupCore/Resources/ReferenceProfile.json
           title: 'Sync packaged profiles from public dot-files'
           commit-message: 'Sync public dot-files profile snapshots'
           body: |

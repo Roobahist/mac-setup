@@ -3,7 +3,7 @@ import SwiftUI
 import MacSetupCore
 
 enum ControlDestination: String, CaseIterable, Identifiable {
-    case home, apps, workspaces, shortcuts, appearance, dock, menuBar, finder, updates, guidedSetup
+    case home, apps, workspaces, workspaceBar, shortcuts, appearance, dock, menuBar, finder, updates, guidedSetup
 
     var id: Self { self }
     var title: String {
@@ -11,6 +11,7 @@ enum ControlDestination: String, CaseIterable, Identifiable {
         case .home: return "Overview"
         case .apps: return "Apps & Features"
         case .workspaces: return "Workspaces"
+        case .workspaceBar: return "Workspace Bar"
         case .shortcuts: return "Keyboard Shortcuts"
         case .appearance: return "Appearance"
         case .dock: return "Dock"
@@ -25,6 +26,7 @@ enum ControlDestination: String, CaseIterable, Identifiable {
         case .home: return "square.grid.2x2"
         case .apps: return "square.stack.3d.up"
         case .workspaces: return "rectangle.3.group"
+        case .workspaceBar: return "menubar.rectangle"
         case .shortcuts: return "keyboard"
         case .appearance: return "paintpalette"
         case .dock: return "dock.rectangle"
@@ -59,7 +61,7 @@ struct ControlCenterView: View {
 
     // Navigation order matches the guided walkthrough exactly after Overview.
     private let customization: [ControlDestination] = [
-        .home, .apps, .shortcuts, .workspaces, .appearance, .dock, .menuBar, .finder
+        .home, .apps, .shortcuts, .workspaces, .workspaceBar, .appearance, .dock, .menuBar, .finder
     ]
 
     var body: some View {
@@ -84,6 +86,8 @@ struct ControlCenterView: View {
                         canAdvance: model.page != .running && model.page != .guide,
                         hasUnappliedEdits: (GuidedTourStep.steps[index].destination == .workspaces
                             && model.workspaceHasDraftChanges)
+                            || (GuidedTourStep.steps[index].destination == .workspaceBar
+                                && model.barHasDraftChanges)
                             || (GuidedTourStep.steps[index].destination == .shortcuts
                                 && model.shortcutsHaveDraftChanges),
                         onBack: { showGuidedStep(index - 1) },
@@ -118,6 +122,7 @@ struct ControlCenterView: View {
             }
             switch next {
             case .workspaces: model.openEditor(.workspaces)
+            case .workspaceBar: model.openEditor(.workspaceBar)
             case .shortcuts: model.openEditor(.shortcuts)
             default: break
             }
@@ -131,7 +136,7 @@ struct ControlCenterView: View {
             switch destination ?? .home {
             case .home: overview
             case .apps: appFeatures
-            case .workspaces, .shortcuts:
+            case .workspaces, .workspaceBar, .shortcuts:
                 SetupView(model: model, embedded: true, onReturn: resetFeature)
             case .appearance:
                 scrollSettings("Appearance", category: "Appearance")
@@ -303,6 +308,7 @@ struct ControlCenterView: View {
         if destination == next {
             if next == .shortcuts { model.openEditor(.shortcuts) }
             else if next == .workspaces { model.openEditor(.workspaces) }
+            else if next == .workspaceBar { model.openEditor(.workspaceBar) }
         }
         destination = next
     }

@@ -52,7 +52,8 @@ final class FolderViewOverridesTests: XCTestCase {
         let colors = try String(contentsOf: root.appendingPathComponent("plugins/colors.sh"), encoding: .utf8)
         let bar = try String(contentsOf: root.appendingPathComponent("sketchybarrc"), encoding: .utf8)
         XCTAssertTrue(colors.contains("BASE_GRAY=0x30000000"))
-        XCTAssertTrue(bar.contains("display_geometry drawing=off updates=on update_freq=0"))
+        let generated = try WorkspaceConfiguration.defaultLayout.sketchybarShell(from: bar)
+        XCTAssertTrue(generated.contains("display_geometry drawing=off updates=on update_freq=0"))
         XCTAssertFalse(bar.contains("update_freq=15"))
         let aerospace = try String(contentsOf: Paths().profile.appendingPathComponent("aerospace/aerospace.toml"),
                                    encoding: .utf8)

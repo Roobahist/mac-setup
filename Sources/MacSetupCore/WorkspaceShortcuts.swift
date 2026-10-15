@@ -26,6 +26,23 @@ public struct WorkspaceShortcut: Codable, Equatable, Hashable {
         (Self.modifierNames.filter(modifiers.contains) + [key]).joined(separator: "-")
     }
 
+    /// AeroSpace and Karabiner use different names for the same physical keys.
+    public var karabinerKeyCode: String {
+        let names = ["enter": "return_or_enter", "backtick": "grave_accent_and_tilde",
+                     "minus": "hyphen", "equal": "equal_sign", "space": "spacebar",
+                     "leftSquareBracket": "open_bracket", "rightSquareBracket": "close_bracket",
+                     "quote": "quote", "backspace": "delete_or_backspace", "forwardDelete": "delete_forward",
+                     "esc": "escape", "left": "left_arrow", "right": "right_arrow",
+                     "up": "up_arrow", "down": "down_arrow", "pageUp": "page_up", "pageDown": "page_down",
+                     "sectionSign": "non_us_backslash", "keypadClear": "keypad_num_lock",
+                     "keypadDecimalMark": "keypad_period", "keypadDivide": "keypad_slash",
+                     "keypadEnter": "keypad_enter", "keypadEqual": "keypad_equal_sign",
+                     "keypadMinus": "keypad_hyphen", "keypadMultiply": "keypad_asterisk", "keypadPlus": "keypad_plus"]
+        if let name = names[key] { return name }
+        if key.hasPrefix("keypad"), let digit = key.last, digit.isNumber { return "keypad_" + String(digit) }
+        return key
+    }
+
     public var display: String {
         let symbols = [("ctrl", "⌃"), ("alt", "⌥"), ("shift", "⇧"), ("cmd", "⌘")]
         return symbols.filter { modifiers.contains($0.0) }.map(\.1).joined() + " " + Self.keyLabel(key)
@@ -48,7 +65,7 @@ public struct WorkspaceShortcut: Codable, Equatable, Hashable {
             throw SetupError("Choose a supported keyboard key.")
         }
         guard !modifiers.isEmpty, Set(modifiers).count == modifiers.count,
-              modifiers.allSatisfy(Self.modifierNames.contains) else {
+              modifiers.allSatisfy({ Self.modifierNames.contains($0) }) else {
             throw SetupError("Choose at least one modifier: Command, Control, Option or Shift.")
         }
     }

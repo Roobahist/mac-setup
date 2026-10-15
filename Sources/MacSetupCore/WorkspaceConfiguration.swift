@@ -101,19 +101,22 @@ public enum ApplicationDiscovery {
     }
 }
 
+public enum WorkspaceMonitor: String, Codable, CaseIterable { case automatic, main, secondary }
+
 public struct WorkspaceDefinition: Codable, Equatable {
     public var id: String
     public var name: String
-    public var glyph: String
+    public var glyph: String { didSet { icon = nil } }
     public var apps: [String]
     public var requiresTask: String?
     public var shortcuts: WorkspaceShortcuts? // Decodes shortcuts saved by older app versions.
     public var shortcutKey: String?
     public var icon: FontGlyphSelection?
+    public var monitor: WorkspaceMonitor?
 
     public init(id: String, name: String, glyph: String, apps: [String] = [], requiresTask: String? = nil,
                 shortcuts: WorkspaceShortcuts? = nil, icon: FontGlyphSelection? = nil,
-                shortcutKey: String? = nil) {
+                shortcutKey: String? = nil, monitor: WorkspaceMonitor? = nil) {
         self.id = id
         self.name = name
         self.glyph = glyph
@@ -121,8 +124,12 @@ public struct WorkspaceDefinition: Codable, Equatable {
         self.requiresTask = requiresTask
         self.shortcuts = shortcuts
         self.shortcutKey = shortcutKey
+        self.monitor = monitor
         self.icon = icon
     }
+
+    // Older saves inherited the reference's secondary-display assignment for 2.
+    public var resolvedMonitor: WorkspaceMonitor { monitor ?? (id == "2" ? .secondary : .automatic) }
 
     public var resolvedIcon: FontGlyphSelection {
         if let icon { return icon }
@@ -255,51 +262,13 @@ public struct WorkspaceConfiguration: Codable, Equatable {
         referenceGlyphs.contains(glyph) ? "SF Pro" : "Hack Nerd Font"
     }
 
-    // Tomito is not a setup dependency, and the timer workspace is optional.
-    public static var defaultLayout: WorkspaceConfiguration {
-        WorkspaceConfiguration(workspaces: [
-            .init(id: "chatgpt", name: "AI", glyph: "robot", apps: ["com.openai.chat", "com.openai.codex"]),
-            .init(id: "1", name: "1", glyph: "1"),
-            .init(id: "2", name: "2", glyph: "2"),
-            .init(id: "3", name: "3", glyph: "3"),
-            .init(id: "4", name: "4", glyph: "4"),
-            .init(id: "5", name: "5", glyph: "5"),
-            .init(id: "6", name: "6", glyph: "6"),
-            .init(id: "7", name: "7", glyph: "7"),
-            .init(id: "8", name: "8", glyph: "8"),
-            .init(id: "music", name: "Music", glyph: "music", apps: ["com.spotify.client"]),
-            .init(id: "messages", name: "Messages", glyph: "chat", apps: [
-                "ru.keepcoder.Telegram", "net.whatsapp.WhatsApp", "com.apple.MobileSMS"
-            ]),
-            .init(id: "notes", name: "Notes", glyph: "notes", apps: ["md.obsidian"]),
-            .init(id: "timer", name: "Pomodoro", glyph: "clock",
-                  apps: ["com.tomito.tomito"], requiresTask: "tomito")
-        ])
-    }
+    public static var defaultLayout: WorkspaceConfiguration { ReferenceProfile.bundled.layout }
 
-    /// Optional app choices change routing, not the existence of a workspace.
-    /// Installed apps are retained even when their installer task is unchecked.
+    /// App installation and routing are independent choices. Keep assignments for
+    /// missing apps so installing one later gives the same reference behavior.
     public func forSelectedTasks(_ taskIDs: Set<String>?,
                                  installedBundleIDs: Set<String>? = nil) -> WorkspaceConfiguration {
-        guard taskIDs != nil || installedBundleIDs != nil else { return self }
-        var copy = self
-        for index in copy.workspaces.indices {
-            copy.workspaces[index].apps.removeAll { bundle in
-                switch bundle {
-                case "com.tomito.tomito":
-                    return !(taskIDs?.contains("tomito") ?? false)
-                        && !(installedBundleIDs?.contains(bundle) ?? false)
-                case "md.obsidian":
-                    return !(taskIDs?.contains("obsidian") ?? false)
-                        && !(installedBundleIDs?.contains(bundle) ?? false)
-                case "com.spotify.client":
-                    return installedBundleIDs.map { !$0.contains(bundle) } ?? false
-                default:
-                    return false
-                }
-            }
-        }
-        return copy
+        self
     }
 
     /// Keep the complete editable layout. Optional workspaces are never hidden.
@@ -316,7 +285,8 @@ public struct WorkspaceConfiguration: Codable, Equatable {
     public static func load(from paths: Paths) throws -> WorkspaceConfiguration {
         let url = path(in: paths)
         guard FileManager.default.fileExists(atPath: url.path) else { return .defaultLayout }
-        let config = try JSONDecoder().decode(WorkspaceConfiguration.self, from: Data(contentsOf: url))
+        var config = try JSONDecoder().decode(WorkspaceConfiguration.self, from: Data(contentsOf: url))
+        _ = config.migrateLegacyAIWorkspace()
         try config.validate()
         return config
     }
@@ -332,9 +302,60 @@ public struct WorkspaceConfiguration: Codable, Equatable {
         }
         let original = try JSONDecoder().decode(WorkspaceConfiguration.self, from: Data(contentsOf: url))
         var draft = original
-        let repairs = draft.repairWorkspaceIDs()
+        let repairs = draft.migrateLegacyAIWorkspace() + draft.repairWorkspaceIDs()
         try draft.validate()
         return (original, draft, repairs)
+    }
+
+    /// Migrate only the old built-in AI identity; preserve custom workspace names and IDs.
+    @discardableResult
+    public mutating func migrateLegacyAIWorkspace() -> [String] {
+        guard !workspaces.contains(where: { $0.id == "ai" }),
+              let index = workspaces.firstIndex(where: { $0.id == "chatgpt" && $0.name == "AI" }) else { return [] }
+        workspaces[index].id = "ai"
+        return ["AI now uses AeroSpace ID 'ai' instead of the legacy 'chatgpt'."]
+    }
+
+    /// Materialize inherited destination keys before any structural edit.
+    private mutating func preserveShortcutKeys() {
+        for index in workspaces.indices where workspaces[index].shortcutKey == nil
+            && workspaces[index].shortcuts == nil {
+            workspaces[index].shortcutKey = Self.keys.indices.contains(index) ? Self.keys[index] : ""
+        }
+    }
+
+    public mutating func removeWorkspace(_ id: String) {
+        guard workspaces.count > 1, workspaces.contains(where: { $0.id == id }) else { return }
+        preserveShortcutKeys()
+        workspaces.removeAll { $0.id == id }
+    }
+
+    public mutating func addWorkspace() {
+        preserveShortcutKeys()
+        var number = 1
+        while workspaces.contains(where: { $0.id == "workspace-\(number)" }) { number += 1 }
+        workspaces.append(.init(id: "workspace-\(number)", name: "Workspace \(number)",
+                                glyph: "star", shortcutKey: ""))
+    }
+
+    /// Rename the runtime identity with the display name, preserving apps, icon and key.
+    public mutating func renameWorkspace(_ id: String, to name: String) throws {
+        guard let index = workspaces.firstIndex(where: { $0.id == id }) else { return }
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, !name.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else {
+            throw SetupError("Workspace names cannot be empty or contain control characters.")
+        }
+        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789_-")
+        let base = name.lowercased().unicodeScalars.map { allowed.contains($0) ? String($0) : "-" }
+            .joined().split(separator: "-").joined(separator: "-")
+        let root = base.isEmpty ? "workspace" : base
+        let others = Set(workspaces.enumerated().filter { $0.offset != index }.map { $0.element.id })
+        var candidate = root
+        var suffix = 2
+        while others.contains(candidate) { candidate = root + "-" + String(suffix); suffix += 1 }
+        workspaces[index].monitor = workspaces[index].resolvedMonitor
+        workspaces[index].name = name
+        workspaces[index].id = candidate
     }
 
     /// Repairs only duplicate or shell-unsafe identifiers. Never changes
@@ -345,7 +366,7 @@ public struct WorkspaceConfiguration: Codable, Equatable {
         let allowed = CharacterSet(charactersIn:
             "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-")
         func valid(_ id: String) -> Bool {
-            !id.isEmpty && id.unicodeScalars.allSatisfy(allowed.contains)
+            !id.isEmpty && id.unicodeScalars.allSatisfy({ allowed.contains($0) })
         }
         // Reserve all existing valid IDs so a generated repair cannot steal one.
         let reserved = Set(workspaces.map(\.id).filter(valid))
@@ -400,13 +421,7 @@ public struct WorkspaceConfiguration: Codable, Equatable {
         // Dropping on either boundary of the same row is not a move and must
         // not materialize inherited keys or create phantom unsaved changes.
         guard destination != source && destination != source + 1 else { return }
-        // Materialize inherited keys before moving a workspace. Reordering
-        // must not unexpectedly assign it a different keyboard shortcut.
-        for index in workspaces.indices where workspaces[index].shortcutKey == nil
-            && workspaces[index].shortcuts == nil {
-            workspaces[index].shortcutKey = Self.keys.indices.contains(index)
-                ? Self.keys[index] : ""
-        }
+        preserveShortcutKeys()
         let item = workspaces.remove(at: source)
         let index = min(workspaces.count, destination > source ? destination - 1 : destination)
         workspaces.insert(item, at: index)
@@ -429,7 +444,7 @@ public struct WorkspaceConfiguration: Codable, Equatable {
         let allowedID = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-")
         let allowedApp = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-")
         for item in workspaces {
-            guard !item.id.isEmpty && item.id.unicodeScalars.allSatisfy(allowedID.contains) else {
+            guard !item.id.isEmpty && item.id.unicodeScalars.allSatisfy({ allowedID.contains($0) }) else {
                 throw SetupError("Workspace '\(item.name)' has invalid ID '\(item.id)'. Use only letters, numbers, _ or -. Repair IDs in Workspaces.")
             }
             guard names.insert(item.id).inserted else {
@@ -442,9 +457,10 @@ public struct WorkspaceConfiguration: Codable, Equatable {
             guard item.icon != nil || Self.symbol(for: item.glyph) != nil else {
                 throw SetupError("Unknown glyph '\(item.glyph)' for workspace '\(item.id)'.")
             }
-            try item.resolvedIcon.validate()
+            do { try item.resolvedIcon.validate() }
+            catch { throw SetupError("Workspace '\(item.name)' icon: \(error)") }
             for app in item.apps {
-                guard !app.isEmpty && app.unicodeScalars.allSatisfy(allowedApp.contains),
+                guard !app.isEmpty && app.unicodeScalars.allSatisfy({ allowedApp.contains($0) }),
                       applications.insert(app).inserted else {
                     throw SetupError("Each valid app bundle ID can be assigned to only one workspace.")
                 }
@@ -534,28 +550,27 @@ public struct WorkspaceConfiguration: Codable, Equatable {
 
             """
         } }.joined(separator: "\n")
-        let appSection = """
-        # APP ASSIGNMENTS
-        # ============================================================
-
-        # Preserve explicit tiling rules from the public dotfiles.
-        [[on-window-detected]]
-        if = 'test %{app-bundle-id} = com.apple.ScreenContinuity'
-        run = 'layout tiling'
-
-        [[on-window-detected]]
-        if = 'test %{app-bundle-id} = com.apple.systempreferences'
-        run = 'layout tiling'
-
-        \(rules)
-
-        # ============================================================
-        """
-        result = try Self.replace(result, from: "# APP ASSIGNMENTS\n", to: "# MONITOR ASSIGNMENTS\n",
-                                  with: appSection)
-        if !workspaces.contains(where: { $0.id == "2" }) {
-            result = result.replacingOccurrences(of: "2 = 'secondary'", with: "")
+        guard let start = template.range(of: "# APP ASSIGNMENTS\n"),
+              let end = template.range(of: "# MONITOR ASSIGNMENTS\n", range: start.upperBound..<template.endIndex) else {
+            throw SetupError("Missing app assignment section in the source profile.")
         }
+        // Keep every source rule that is not a managed workspace-routing rule.
+        let originalRules = String(template[start.upperBound..<end.lowerBound])
+            .components(separatedBy: "[[on-window-detected]]").dropFirst()
+        let preservedRules = originalRules.filter { !$0.contains("move-node-to-workspace ") }
+            .map { "[[on-window-detected]]" + $0 }.joined()
+        let appSection = "# APP ASSIGNMENTS\n# ============================================================\n\n"
+            + preservedRules + rules + "\n# ============================================================\n"
+        result = try Self.replace(result, from: "# APP ASSIGNMENTS\n", to: "# MONITOR ASSIGNMENTS\n", with: appSection)
+        let table = "[workspace-to-monitor-force-assignment]"
+        guard let monitorStart = result.range(of: table) else {
+            throw SetupError("Missing monitor assignment section in the source profile.")
+        }
+        let suffix = monitorStart.upperBound..<result.endIndex
+        let next = result.range(of: "(?m)^\\[", options: .regularExpression, range: suffix)?.lowerBound ?? result.endIndex
+        let assignments = workspaces.filter { $0.resolvedMonitor != .automatic }
+            .map { "\($0.id) = '\($0.resolvedMonitor.rawValue)'" }.joined(separator: "\n")
+        result.replaceSubrange(monitorStart.lowerBound..<next, with: table + "\n\n" + assignments + "\n\n")
         try Self.verifyGeneratedBindings(result)
         return result
     }

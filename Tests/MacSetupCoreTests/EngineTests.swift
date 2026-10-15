@@ -114,6 +114,11 @@ final class FakeRunner: CommandRunning {
     }
 }
 
+func isolatedAppPath(_ name: String, _ home: URL) -> String? {
+    let path = home.appendingPathComponent("Applications/\(name).app").path
+    return FileManager.default.fileExists(atPath: path) ? path : nil
+}
+
 final class EngineTests: XCTestCase {
     var home: URL!
     var paths: Paths!
@@ -125,7 +130,7 @@ final class EngineTests: XCTestCase {
         try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
         paths = Paths(home: home)
         runner = FakeRunner()
-        engine = try Engine(paths: paths, runner: runner)
+        engine = try Engine(paths: paths, runner: runner, appResolver: isolatedAppPath)
     }
     override func tearDownWithError() throws { try FileManager.default.removeItem(at: home) }
 
@@ -172,13 +177,13 @@ final class EngineTests: XCTestCase {
         let task = try Catalog.task("startup-login")
         let transaction = try engine.apply(task)
         XCTAssertTrue(runner.loginItemPaths.isEmpty)
-        XCTAssertEqual(try engine.journal.transactions.first(where: { $0.id == transaction })?.changes.count, 0)
+        XCTAssertEqual(engine.journal.transactions.first(where: { $0.id == transaction })?.changes.count, 0)
     }
 
     func testInterruptedCaskIsReinstalledAndRerunIsIdempotent() throws {
         let task = try Catalog.task("karabiner")
         runner.managedPackages.insert("karabiner-elements")
-        engine = try Engine(paths: paths, runner: runner, tools: { $0 == "brew" ? "/fake/brew" : nil })
+        engine = try Engine(paths: paths, runner: runner, appResolver: isolatedAppPath, tools: { $0 == "brew" ? "/fake/brew" : nil })
 
         // Homebrew's cask registry can survive a failed privileged pkg installer.
         XCTAssertEqual(try engine.state(task), .ready)
@@ -202,7 +207,7 @@ final class EngineTests: XCTestCase {
     func testInstalledFormulaIsSkippedWhenReapplying() throws {
         let task = try Catalog.task("atuin")
         runner.managedPackages.insert("atuin")
-        engine = try Engine(paths: paths, runner: runner, tools: { $0 == "brew" ? "/fake/brew" : nil })
+        engine = try Engine(paths: paths, runner: runner, appResolver: isolatedAppPath, tools: { $0 == "brew" ? "/fake/brew" : nil })
         XCTAssertEqual(try engine.state(task), .done)
         _ = try engine.apply(task)
         XCTAssertFalse(runner.calls.contains {
@@ -247,7 +252,7 @@ final class EngineTests: XCTestCase {
         _ = try write("dot-files/aerospace/aerospace.toml", "portable settings")
         _ = try write("dot-files/alacritty/alacritty.toml", "portable settings")
         let old = try write(".config/aerospace/personal.toml", "old settings")
-        engine = try Engine(paths: paths, runner: runner, dotfilesSource: source)
+        engine = try Engine(paths: paths, runner: runner, appResolver: isolatedAppPath, dotfilesSource: source)
         XCTAssertEqual(try engine.state(Catalog.task("dotfiles-linked")), .done)
 
         _ = try engine.apply(Catalog.task("dotfiles-linked"))
@@ -343,7 +348,7 @@ final class EngineTests: XCTestCase {
 
     func testBooleanPreferencesRoundTripWithActualMacOSDefaults() throws {
         // Use a disposable domain rather than editing system or app preferences.
-        let domain = "org.macsetup.tests.bool-" + UUID().uuidString.lowercased()
+        let domain = home.appendingPathComponent("boolean-preferences").path
         let realRunner = ProcessRunner()
         defer { _ = try? realRunner.run("/usr/bin/defaults", ["delete", domain]) }
         try realRunner.checked("/usr/bin/defaults", ["write", domain, "enabled", "-bool", "true"])
@@ -673,14 +678,14 @@ final class EngineTests: XCTestCase {
         XCTAssertFalse(runner.calls.contains { $0[0].contains("tcc") || $0[0] == "/bin/launchctl" })
     }
     func testHomebrewUpdateDoesNotUpgradeAllPackages() throws {
-        engine = try Engine(paths: paths, runner: runner, tools: { $0 == "brew" ? "/fake/brew" : nil })
+        engine = try Engine(paths: paths, runner: runner, appResolver: isolatedAppPath, tools: { $0 == "brew" ? "/fake/brew" : nil })
         _ = try engine.upgrade(Catalog.task("homebrew"))
         XCTAssertTrue(runner.calls.contains(["/fake/brew", "update"]))
         XCTAssertFalse(runner.calls.contains { $0.contains("upgrade") })
     }
 
     func testPackageUpdatesTargetOnlySelectedManagedPackages() throws {
-        engine = try Engine(paths: paths, runner: runner, tools: { $0 == "brew" ? "/fake/brew" : nil })
+        engine = try Engine(paths: paths, runner: runner, appResolver: isolatedAppPath, tools: { $0 == "brew" ? "/fake/brew" : nil })
         runner.managedPackages = ["atuin", "alacritty"]
         _ = try engine.upgrade(Catalog.task("atuin"))
         _ = try engine.upgrade(Catalog.task("alacritty"))
@@ -690,13 +695,13 @@ final class EngineTests: XCTestCase {
     }
 
     func testUnmanagedAppsAreNotTakenOverForUpdates() throws {
-        engine = try Engine(paths: paths, runner: runner, tools: { $0 == "brew" ? "/fake/brew" : nil })
+        engine = try Engine(paths: paths, runner: runner, appResolver: isolatedAppPath, tools: { $0 == "brew" ? "/fake/brew" : nil })
         XCTAssertThrowsError(try engine.upgrade(Catalog.task("raycast")))
         XCTAssertFalse(runner.calls.contains { $0.contains("update") || $0.contains("upgrade") })
     }
 
     func testHomebrewInstallsAndShellInitializationCanBeRestored() throws {
-        engine = try Engine(paths: paths, runner: runner, tools: { [runner] name in name == "brew" && runner!.homebrewInstalled ? "/fake/brew" : nil })
+        engine = try Engine(paths: paths, runner: runner, appResolver: isolatedAppPath, tools: { [runner] name in name == "brew" && runner!.homebrewInstalled ? "/fake/brew" : nil })
         let profile = try write(".zprofile", "# existing config\n")
         let id = try engine.apply(Catalog.task("homebrew"))
         XCTAssertTrue(runner.homebrewInstalled)
@@ -710,7 +715,7 @@ final class EngineTests: XCTestCase {
     }
 
     func testExistingHomebrewIsNotDownloadedAgain() throws {
-        engine = try Engine(paths: paths, runner: runner, tools: { $0 == "brew" ? "/fake/brew" : nil })
+        engine = try Engine(paths: paths, runner: runner, appResolver: isolatedAppPath, tools: { $0 == "brew" ? "/fake/brew" : nil })
         _ = try engine.apply(Catalog.task("homebrew"))
         _ = try engine.apply(Catalog.task("homebrew"))
         XCTAssertFalse(runner.calls.contains { $0[0] == "/usr/bin/curl" || $0[0] == "/bin/bash" })

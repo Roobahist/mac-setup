@@ -6,7 +6,7 @@ export BASE_GRAY=0x30000000
 export BASE_WHITE=0xffffffff
 export HIGHLIGHT_COLOR=0xff7873B6
 
-# Match the source dotfiles palette and accept the current wallpaper accent.
+# Keep wallpaper-derived colors out of the tracked dotfiles checkout.
 ACCENT_FILE="${XDG_CACHE_HOME:-$HOME/.cache}/sketchybar/highlight-color"
 if [[ -r "$ACCENT_FILE" ]]; then
   IFS= read -r local_accent < "$ACCENT_FILE" || true
