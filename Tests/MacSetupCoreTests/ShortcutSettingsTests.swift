@@ -146,11 +146,56 @@ final class ShortcutSettingsTests: XCTestCase {
         settings.entries[raycast].shortcut = .init(key: "space", modifiers: ["cmd"])
         settings.migrateBundledDefaults(installedAlacritty: false)
         XCTAssertEqual(settings.raycastHotkey, "Command-49")
-        XCTAssertEqual(settings.configurationVersion, 3)
+        XCTAssertEqual(settings.configurationVersion, 4)
         var custom = settings
         custom.entries[raycast].shortcut = .init(key: "t", modifiers: ["cmd"])
         custom.migrateBundledDefaults(installedAlacritty: false)
         XCTAssertEqual(custom.raycastHotkey, "Command-17")
+    }
+
+    func testMessagingMigrationPreservesAssignmentsAndOnlyRunsOnce() throws {
+        var legacy = try settings()
+        legacy.entries.removeAll { ["karabiner:telegram", "karabiner:whatsapp"].contains($0.id) }
+        legacy.configurationVersion = 3
+        legacy.entries.append(.init(id: "custom", provider: .karabiner, action: "open:com.example.Custom",
+                                    shortcut: .init(key: "t", modifiers: ["alt"])))
+        legacy.migrateBundledDefaults(installedAlacritty: false)
+        XCTAssertEqual(legacy.entries.first { $0.id == "karabiner:telegram" }?.enabled, false)
+        XCTAssertEqual(legacy.entries.first { $0.id == "karabiner:whatsapp" }?.enabled, true)
+        try legacy.validate(workspaces: .defaultLayout, aerospaceTemplate: aerospaceTemplate())
+        let migrated = legacy
+        legacy.migrateBundledDefaults(installedAlacritty: false)
+        XCTAssertEqual(legacy, migrated)
+        legacy.entries.removeAll { $0.id == "karabiner:telegram" }
+        legacy.migrateBundledDefaults(installedAlacritty: false)
+        XCTAssertFalse(legacy.entries.contains { $0.id == "karabiner:telegram" })
+
+        var custom = migrated
+        custom.configurationVersion = 3
+        custom.entries.removeAll { $0.id == "karabiner:whatsapp" }
+        custom.entries.append(.init(id: "custom-whatsapp", provider: .karabiner, action: "open:net.whatsapp.WhatsApp",
+                                    shortcut: .init(key: "w", modifiers: ["ctrl"]), enabled: false))
+        let before = custom.entries
+        custom.migrateBundledDefaults(installedAlacritty: false)
+        XCTAssertEqual(custom.entries, before)
+    }
+
+    func testLoadingLegacyMessagingShortcutsRespectsWorkspaceChordsWithoutWriting() throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: home) }
+        let paths = Paths(home: home)
+        var legacy = try settings()
+        legacy.entries.removeAll { ["karabiner:telegram", "karabiner:whatsapp"].contains($0.id) }
+        legacy.configurationVersion = 3
+        try legacy.save(to: paths)
+        let original = try Data(contentsOf: ShortcutSettings.path(in: paths))
+        var layout = WorkspaceConfiguration.defaultLayout
+        layout.workspaces[0].shortcutKey = "w"
+        try layout.save(to: paths)
+        let loaded = try ShortcutSettings.load(from: paths, aerospaceTemplate: aerospaceTemplate())
+        XCTAssertEqual(loaded.entries.first { $0.id == "karabiner:telegram" }?.enabled, true)
+        XCTAssertEqual(loaded.entries.first { $0.id == "karabiner:whatsapp" }?.enabled, false)
+        XCTAssertEqual(try Data(contentsOf: ShortcutSettings.path(in: paths)), original)
     }
 
     func testShortcutPersistenceAndUnsupportedKarabinerAction() throws {

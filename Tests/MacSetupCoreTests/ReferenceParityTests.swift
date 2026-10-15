@@ -25,7 +25,28 @@ final class ReferenceParityTests: XCTestCase {
         XCTAssertTrue(NSDictionary(dictionary: try object(input)).isEqual(to: try object(output)),
                       "Untouched defaults must be semantically identical to the source JSON")
         XCTAssertEqual(try rules(output).compactMap { $0["description"] as? String },
-                       ["Chrome", "Alacritty", "Visual Studio Code", "Finder", "Example (disabled): right Command sends 5 then Z"])
+                       ["Chrome", "Alacritty", "Visual Studio Code", "Finder", "Telegram", "WhatsApp", "Example (disabled): right Command sends 5 then Z"])
+    }
+
+    func testMessagingAppsHaveSeparateEditableSourceOwnedRules() throws {
+        let input = try source("karabiner/karabiner.json")
+        var settings = try settings()
+        for (name, id, key, bundleID) in [("Telegram", "telegram", "t", "ru.keepcoder.Telegram"),
+                                         ("WhatsApp", "whatsapp", "w", "net.whatsapp.WhatsApp")] {
+            let index = try XCTUnwrap(settings.entries.firstIndex { $0.id == "karabiner:" + id })
+            XCTAssertEqual(settings.entries[index].action, name)
+            XCTAssertEqual(settings.entries[index].shortcut, .init(key: key, modifiers: ["alt"]))
+            XCTAssertTrue(settings.entries[index].enabled)
+            XCTAssertFalse(ShortcutSettings.bundledAdvancedKarabinerRules(from: input).contains { $0.id == name })
+            settings.entries[index].shortcut = .init(key: key, modifiers: ["ctrl", "alt"])
+            let rule = try XCTUnwrap(rules(settings.karabinerData(from: input)).first { $0["description"] as? String == name })
+            let manipulator = try XCTUnwrap((rule["manipulators"] as? [[String: Any]])?.first)
+            let command = ((manipulator["to"] as? [[String: Any]])?.first)?["shell_command"] as? String
+            XCTAssertEqual(command, "/usr/bin/open -b " + bundleID)
+            let from = try XCTUnwrap(manipulator["from"] as? [String: Any])
+            XCTAssertEqual((from["modifiers"] as? [String: Any])?["mandatory"] as? [String], ["control", "option"])
+        }
+        try settings.validate(workspaces: .defaultLayout, aerospaceTemplate: template())
     }
 
     func testEditingOneApplicationKeepsOtherRulesIntact() throws {

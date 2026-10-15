@@ -47,14 +47,24 @@ public struct ShortcutSettings: Codable, Equatable {
     public init(entries: [ManagedShortcut], advancedKarabiner: [AdvancedKarabinerRule]? = nil) {
         self.entries = entries
         self.advancedKarabiner = advancedKarabiner
-        self.configurationVersion = 3
+        self.configurationVersion = 4
     }
 
-    /// Mark the current settings format without replacing a user's assignments.
-    public mutating func migrateBundledDefaults(installedAlacritty: Bool) {
-        // Existing assignments are user choices, including Terminal and Command+Space.
-        // New installations use the source profile; upgrades never guess at intent.
-        configurationVersion = 3
+    /// Add new source defaults once without replacing a user's assignments.
+    public mutating func migrateBundledDefaults(installedAlacritty: Bool,
+                                               reservedBindings: Set<String> = []) {
+        if (configurationVersion ?? 0) < 4 {
+            let applications = [("telegram", "ru.keepcoder.Telegram"), ("whatsapp", "net.whatsapp.WhatsApp")]
+            for (id, bundleID) in applications {
+                guard var baseline = ReferenceProfile.bundled.karabinerShortcuts.first(where: { $0.id == "karabiner:" + id }),
+                      !entries.contains(where: { $0.provider == .karabiner &&
+                          ($0.id == baseline.id || $0.action == baseline.action || $0.action == "open:" + bundleID) }) else { continue }
+                baseline.enabled = !reservedBindings.contains(baseline.shortcut.binding) &&
+                    !entries.contains { $0.enabled && $0.shortcut.binding == baseline.shortcut.binding }
+                entries.append(baseline)
+            }
+        }
+        configurationVersion = 4
     }
 
     public mutating func updateAdvancedRule(_ rule: AdvancedKarabinerRule) {
@@ -83,7 +93,9 @@ public struct ShortcutSettings: Codable, Equatable {
     public static let scripts: [(name: String, shell: String)] = [
         ("Alacritty", "\"$HOME/.config/karabiner/scripts/alacritty/open_new_window.sh\""),
         ("Visual Studio Code", "\"$HOME/.config/karabiner/scripts/vscode/open_new_window.sh\""),
-        ("Finder", "\"$HOME/.config/karabiner/scripts/finder/open_window.sh\"")
+        ("Finder", "\"$HOME/.config/karabiner/scripts/finder/open_window.sh\""),
+        ("Telegram", "/usr/bin/open -b ru.keepcoder.Telegram"),
+        ("WhatsApp", "/usr/bin/open -b net.whatsapp.WhatsApp")
     ]
 
     /// Carbon virtual key codes used by the Raycast global hotkey preference.
@@ -148,7 +160,16 @@ public struct ShortcutSettings: Codable, Equatable {
         guard FileManager.default.fileExists(atPath: file.path) else {
             return defaults(aerospaceTemplate: aerospaceTemplate)
         }
-        return try JSONDecoder().decode(ShortcutSettings.self, from: Data(contentsOf: file))
+        var settings = try JSONDecoder().decode(ShortcutSettings.self, from: Data(contentsOf: file))
+        var reserved = Set<String>()
+        if let layout = try? WorkspaceConfiguration.load(from: paths) {
+            for index in layout.workspaces.indices {
+                let pair = layout.shortcuts(at: index)
+                reserved.formUnion([pair.switchTo, pair.moveWindow].compactMap { $0?.binding })
+            }
+        }
+        settings.migrateBundledDefaults(installedAlacritty: false, reservedBindings: reserved)
+        return settings
     }
 
     public func save(to paths: Paths) throws {
