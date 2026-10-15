@@ -210,7 +210,7 @@ public final class MacOSPreferenceService {
             let before = try old.before.map(plistValue)
             if equalPreference(live, last) {
                 if !equalPreference(live, before) {
-                    plan.changes.append(Change(domain: old.domain, key: old.key, value: before, restart: old.restart, title: "Restore \(old.id)"))
+                    plan.changes.append(Change(domain: old.domain, key: old.key, value: before, restart: old.restart, title: "Restore " + (profile.settings.first { $0.id == old.id }?.title ?? old.id)))
                     domains[old.domain]?[old.key] = before
                 }
             } else {
@@ -248,20 +248,30 @@ public final class MacOSPreferenceService {
         let planned = try plan(requested, taskID: taskID)
         var lines = ["Configuration: \(profileURL.path)", "macOS preferences: \(requested.enabled ? "on" : "off")"]
         lines += try planned.changes.map { change in
-            let value = try change.value.map { String(decoding: try JSONSerialization.data(withJSONObject: $0, options: [.fragmentsAllowed, .sortedKeys]), as: UTF8.self) } ?? "system default (remove override)"
-            return "\(change.title): \(change.domain) / \(change.key) → \(value)"
+            "\(change.title) → \(try Self.describe(change.value))"
         }
         if requested.enabled {
             for setting in requested.settings where setting.enabled && setting.minimumOS <= osMajor
                 && (taskID == nil || setting.tasks.contains(taskID!))
                 && !planned.changes.contains(where: { $0.domain == setting.domain && $0.key == setting.key }) {
-                lines.append("Already matches: \(setting.domain) / \(setting.key)")
+                lines.append("Already matches: \(setting.title)")
             }
         }
         if planned.changes.isEmpty { lines.append("No stored preference changes needed.") }
         lines += planned.notes
         lines.append("Previous values stay in private local backups. Some changes require logout or reopening apps; macOS does not watch this JSON file.")
         return lines
+    }
+
+    private static func describe(_ value: Any?) throws -> String {
+        guard let value else { return "Use system default" }
+        if value is [String: Any] { return "Update saved options; preserve unrelated preferences" }
+        if let list = value as? [Any] { return list.isEmpty ? "Empty list" : "\(list.count) items" }
+        if let text = value as? String { return text }
+        if let number = value as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID() {
+            return number.boolValue ? "On" : "Off"
+        }
+        return String(decoding: try JSONSerialization.data(withJSONObject: value, options: [.fragmentsAllowed]), as: UTF8.self)
     }
 
     public func matches(taskID: String? = nil) throws -> Bool {

@@ -5,7 +5,7 @@
     {
       "id": "spaces.order",
       "category": "Workspaces",
-      "title": "Keep Spaces in their current order",
+      "title": "Automatically rearrange Spaces",
       "enabled": true,
       "domain": "com.apple.dock",
       "key": "mru-spaces",
@@ -18,7 +18,7 @@
     {
       "id": "spaces.displays",
       "category": "Workspaces",
-      "title": "Separate Spaces for each display",
+      "title": "Span Spaces across displays",
       "enabled": true,
       "domain": "com.apple.spaces",
       "key": "spans-displays",

@@ -10,7 +10,7 @@
     "karabiner/scripts/chrome/open_profile.sh": "cf576bf41ec27aa272925354a3a2f96558a31080df0aae4cf06358227c948263",
     "karabiner/scripts/finder/open_window.sh": "2320eed855a3d18767e243b44e763d7d3840f1ff514e29dd5c1f36905569dee4",
     "karabiner/scripts/vscode/open_new_window.sh": "2de716bcdadf4b80191887c4b1e4ab854330fa71b25ee579391916af7fa1f49c",
-    "macos/preferences.json": "2cf39598f9e8ab7377ab637ae5a3499e87b7b947e3dbff2a54ced97353b2dc5b",
+    "macos/preferences.json": "8f179eb565171c8dda91971a9b39c2214ad8346ddaea281de3cab26cc029d489",
     "sketchybar/plugins/aerospace.sh": "44375bc4bbe6f71e44134048bc03d907ea103937c4813263bbf0f0b3e69ce105",
     "sketchybar/plugins/battery.sh": "883a701a58f14684246ed1353e70b9e3d275184e39d851230a4b334bc38cae5b",
     "sketchybar/plugins/clock.sh": "392157e65670cca3e12d4cc510d18f79397b63176b86b43be22c9d21cada6e92",
@@ -326,5 +326,5 @@
     ]
   },
   "repository": "https://github.com/Roobahist/dot-files.git",
-  "revision": "bf714e3093890f1e0df0037a6448b4c4eaa9f4a5"
+  "revision": "5307b4552dd404d5c824584b1930cfaa622f754b"
 }
