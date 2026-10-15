@@ -74,15 +74,44 @@ final class WorkspaceRuntimeVerificationTests: XCTestCase {
 
 private final class WorkspaceProbeRunner: CommandRunning {
     var replies: [String: CommandResult] = [:]
+    var calls: [String] = []
 
     func run(_ executable: String, _ arguments: [String], interactive: Bool,
              input: Data?) throws -> CommandResult {
-        replies[([executable] + arguments).joined(separator: " ")]
-            ?? CommandResult(status: 1, output: Data("Unavailable".utf8))
+        let call = ([executable] + arguments).joined(separator: " ")
+        calls.append(call)
+        return replies[call] ?? CommandResult(status: 1, output: Data("Unavailable".utf8))
     }
 }
 
 final class WorkspaceRuntimeIntegrationTests: XCTestCase {
+    func testProfileApplyDoesNotClaimSuccessWhenReloadLeavesStaleItems() throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: home) }
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+        let helper = home.appendingPathComponent("mac-setup-display")
+        try Data("#!/bin/sh\\nexit 0\\n".utf8).write(to: helper)
+        let paths = Paths(home: home)
+        let runner = WorkspaceProbeRunner()
+        runner.replies["/fake/sketchybar --query bar"] = CommandResult(
+            status: 0, output: Data(#"{"items":["space.old"]}"#.utf8))
+        runner.replies["/fake/sketchybar --reload"] = CommandResult(status: 0)
+        let engine = try Engine(paths: paths, runner: runner, displayHelper: helper, tools: {
+            $0 == "sketchybar" ? "/fake/sketchybar" : nil
+        })
+        engine.workspaceVerificationAttempts = 1
+        XCTAssertThrowsError(try engine.apply(Catalog.task("sketchybar-profile"))) { error in
+            XCTAssertTrue(String(describing: error).contains("reload was not verified"))
+        }
+        XCTAssertTrue(runner.calls.contains("/fake/sketchybar --reload"))
+        XCTAssertTrue(runner.calls.contains("/fake/sketchybar --query bar"))
+
+        let order = WorkspaceConfiguration.defaultLayout.workspaces.map { "space." + $0.id }
+        runner.replies["/fake/sketchybar --query bar"] = CommandResult(
+            status: 0, output: try JSONSerialization.data(withJSONObject: ["items": order]))
+        XCTAssertNoThrow(try engine.apply(Catalog.task("sketchybar-profile")))
+    }
+
     func testEngineQueriesRealServiceResponsesRatherThanAssumingGeneratedFilesAreActive() throws {
         let home = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: home) }
