@@ -250,6 +250,20 @@ public final class Engine {
                         let running = try runner.run(sketchybar, ["--query", "bar"])
                         if running.status == 0 {
                             try runner.checked(sketchybar, ["--reload"])
+                            // A zero exit code only confirms receipt of the reload request.
+                            // Wait for the active bar to expose the new item order.
+                            let expected = try WorkspaceConfiguration.load(from: paths).workspaces.map(\.id)
+                            var issue: String?
+                            for attempt in 0..<10 {
+                                let query = try runner.run(sketchybar, ["--query", "bar"])
+                                issue = query.status == 0
+                                    ? WorkspaceRuntimeVerification.sketchyBarOrderIssue(
+                                        query: query.output, expectedIDs: expected)
+                                    : "SketchyBar did not respond after reload."
+                                if issue == nil { break }
+                                if attempt < 9 { Thread.sleep(forTimeInterval: 0.2) }
+                            }
+                            if let issue { throw SetupError("SketchyBar reload was not verified: \(issue)") }
                         } else if (try? journal.serviceStarted()) == true {
                             throw SetupError("SketchyBar service is registered but its bar is unavailable. Restart SketchyBar and retry.")
                         }
