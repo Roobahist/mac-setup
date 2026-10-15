@@ -182,7 +182,9 @@ final class WorkspaceConfigurationTests: XCTestCase {
         XCTAssertEqual(loaded.draft.workspaces.map(\.name), corrupted.workspaces.map(\.name))
         XCTAssertEqual(loaded.draft.workspaces.map(\.apps), corrupted.workspaces.map(\.apps))
         XCTAssertEqual(loaded.draft.workspaces.map(\.icon), corrupted.workspaces.map(\.icon))
-        XCTAssertNotEqual(loaded.draft.workspaces[2].id, "music")
+        XCTAssertEqual(loaded.draft.workspaces[2].id, "music")
+        XCTAssertNotEqual(loaded.draft.workspaces[10].id, "music",
+                          "The later duplicate ID must be repaired")
         XCTAssertEqual(Set(loaded.draft.workspaces.map(\.id)).count, corrupted.workspaces.count)
         try loaded.draft.validate()
         XCTAssertEqual(try Data(contentsOf: WorkspaceConfiguration.path(in: paths)), original,
