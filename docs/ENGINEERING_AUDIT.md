@@ -7,7 +7,7 @@ Audit date: 2026-10-14. Target: SwiftUI control center, CLI, profile generation,
 | Priority | Finding and root cause | Location | Status |
 | --- | --- | --- | --- |
 | P0 | A successful profile copy and `sketchybar --reload` exit were presented as applied changes even when the active bar retained its old workspace order. | `Engine.apply(.profile)`, `SetupModel.advance` | **Addressed in code:** poll the live bar after reload; report mismatches. Requires physical Mac verification. |
-| P0 | Configuration JSON can be saved before all requested installation and runtime operations succeed. A failure can therefore leave persisted configuration ahead of actual system state; Journal restores installed files independently from the JSON draft. | `SetupModel.start`, `WorkspaceConfiguration.save`, `Journal.restore` | **Open architecture issue:** introduce one transaction boundary spanning workspace/shortcut drafts, profile writes, service reloads, and rollback. Do not treat this as solved by the runtime probe. |
+| P0 | Configuration JSON can be saved before all requested installation and runtime operations succeed. The JSON drafts are now backed up in their own journal transaction, but a partial task sequence can still leave persisted configuration ahead of active system state. Restoration of the configuration snapshot and successful profile transactions is not yet coordinated automatically. | `SetupModel.start`, `WorkspaceConfiguration.save`, `Journal.restore` | **Partially addressed:** drafts have independent journal recovery IDs. Still open: one transaction boundary spanning editor drafts, profile writes, service reloads, and automatic rollback. Do not treat this as solved by the runtime probe. |
 | P1 | An app-only full setup saved otherwise unrelated workspace and shortcut drafts. | `SetupModel.start` | **Fixed in code:** write only configuration associated with selected profile tasks. |
 | P1 | Workspace order was compared against generated files, not the active menu bar. AeroSpace's own `list-workspaces --all` can sort by workspace name rather than persistent-workspaces order. | `WorkspaceConfiguration.sketchybarShell`, `Engine` | **Addressed in code:** compare ordered `space.*` item names from SketchyBar's live `--query bar` JSON. Check AeroSpace membership and active config path separately. |
 | P1 | SketchyBar color/spacing/blur changes depended on literal bundled default values. Template updates could produce unchanged files and false success. | `WorkspaceBarStyle.colorsShell`, `WorkspaceConfiguration.sketchybarShell` | **Fixed in code:** replace assignment values irrespective of original defaults; reject absent or duplicate assignments. |
@@ -26,10 +26,11 @@ SketchyBar order is taken from the `items` array in `sketchybar --query bar`, fi
 
 ## Tests added in this branch
 
-- Strict SketchyBar profile template substitutions and refusal of stale/missing/duplicate assignments.
+- Strict, section-scoped SketchyBar profile substitutions and refusal of stale/missing/duplicate assignments.
 - Live SketchyBar JSON order checks, including missing and malformed results.
 - AeroSpace workspace membership independent of CLI enumeration ordering.
 - Engine integration with an injected fake process runner and controlled output for active config, order mismatch, and retry/failure after reload.
+- Journaled workspace and shortcut draft saves, isolation of app-only runs, and restoration of prior JSON or missing files.
 - Native workspace move controls have bounded destination indices through the existing `insertWorkspace` logic.
 
 Existing macOS CI continues to run all XCTest suites, CLI smoke tests, shell lint, public profile validation, terminal navigation tests, and package build. CI success is not a UI screenshot comparison or a physical live session.
