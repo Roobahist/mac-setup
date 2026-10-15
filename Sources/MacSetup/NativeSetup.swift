@@ -726,13 +726,13 @@ struct SetupView: View {
     private var workspaces: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Workspaces").font(SetupDesign.pageTitle)
-            Text("Drag the dotted grip to reorder. The bar preview updates immediately; review and apply to update your desktop.")
+            Text("Drag the dotted grip or right-click a workspace to move it. The preview updates immediately; review and apply to update the actual configuration.")
                 .font(.callout).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             menuBarPreview
 
             HStack(spacing: 12) {
-                Label(model.workspaceHasDraftChanges ? "Unapplied workspace changes" : "Workspace layout is saved",
+                Label(model.workspaceHasDraftChanges ? "Workspace changes need applying or verification" : "No local workspace edits",
                       systemImage: model.workspaceHasDraftChanges ? "square.and.pencil" : "checkmark.circle")
                     .foregroundStyle(model.workspaceHasDraftChanges ? Color.orange : Color.secondary)
                 Spacer()
@@ -765,6 +765,7 @@ struct SetupView: View {
             .padding(.top, 4)
 
             workspaceAppearance
+            DesktopAccentControls(engine: model.engine)
 
             if let error = model.configurationError(for: .workspaces) {
                 Label(error, systemImage: "exclamationmark.triangle")
@@ -781,7 +782,7 @@ struct SetupView: View {
     private var workspaceAppearance: some View {
         let style = model.layout.barStyle
         return VStack(alignment: .leading, spacing: 14) {
-            Text("SketchyBar appearance").font(.headline)
+            Text("SketchyBar layout and colors").font(.headline)
             Text("Adjust the bar background, blur, and occupied or empty workspaces that are not focused. Wallpaper highlighting of the focused workspace stays separate.")
                 .font(.callout).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
