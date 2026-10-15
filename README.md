@@ -224,3 +224,9 @@ keeping the draft for correction. Full setup saves each component's draft only
 when that profile task succeeds. Completed application installations remain
 installed if a later task fails. Runtime verification and its limitations are
 recorded in [the engineering audit](docs/ENGINEERING_AUDIT.md).
+
+Telegram (Option+T) and WhatsApp (Option+W) each use a separate Karabiner rule
+to open or focus the app.
+If you previously assigned these app hotkeys in Raycast, clear those assignments when
+migrating so the shortcut has one owner. Existing Mac Setup settings gain the
+new shortcuts once; each stays disabled if its chord is already assigned.

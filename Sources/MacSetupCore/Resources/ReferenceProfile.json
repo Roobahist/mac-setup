@@ -4,7 +4,7 @@
     "alacritty/alacritty.toml": "47bdf434fc1c3264db3eef866e5ccc782e8dcf59195f881673303d944b8d2a07",
     "alacritty/themes/themes/github_dark.toml": "a5ef98ad83693ba63158e1620890e58a803e2d23ef08f881f22f50bf70dae5d6",
     "atuin/config.toml": "6ee13f0e129d934f0f96e852e417edd59c880e774c2ec81cda7b82bf9bfd8aed",
-    "karabiner/karabiner.json": "a15bea7b2d0a005934ad1450750da51b4c64cb696a9401e91a99f1e6cea045f7",
+    "karabiner/karabiner.json": "d6d05dba5332ea05d4a80d59dc3013f86aba8c9471e4929832c8b23e5d10b82a",
     "karabiner/scripts/alacritty/open_new_window.sh": "7ce760fbbf8679781e45a838503b7cb4cdbbef12398f2347bbc7d76c45b6f48d",
     "karabiner/scripts/chrome/open_incognito.sh": "73baa0f5101b0920976c716d0eeed83eaddb612d201bb7979c0bd99aae3f2ef1",
     "karabiner/scripts/chrome/open_profile.sh": "cf576bf41ec27aa272925354a3a2f96558a31080df0aae4cf06358227c948263",
@@ -53,6 +53,30 @@
       "provider": "Karabiner",
       "shortcut": {
         "key": "e",
+        "modifiers": [
+          "alt"
+        ]
+      }
+    },
+    {
+      "action": "Telegram",
+      "enabled": true,
+      "id": "karabiner:telegram",
+      "provider": "Karabiner",
+      "shortcut": {
+        "key": "t",
+        "modifiers": [
+          "alt"
+        ]
+      }
+    },
+    {
+      "action": "WhatsApp",
+      "enabled": true,
+      "id": "karabiner:whatsapp",
+      "provider": "Karabiner",
+      "shortcut": {
+        "key": "w",
         "modifiers": [
           "alt"
         ]
@@ -301,5 +325,5 @@
     ]
   },
   "repository": "https://github.com/Roobahist/dot-files.git",
-  "revision": "1dcbe2f80805f0189444a1de57e173f3ea099972"
+  "revision": "3dae759061057924a23516f9f91fad82fa5f4034"
 }

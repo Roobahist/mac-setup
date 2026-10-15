@@ -94,16 +94,16 @@ def reference_profile(repository, paths, revision):
     shortcuts = []
     modifiers = {"command": "cmd", "control": "ctrl", "option": "alt", "shift": "shift"}
     for rule in profile["complex_modifications"]["rules"]:
-        if rule["description"] not in {"Alacritty", "Visual Studio Code", "Finder"}:
+        if rule["description"] not in {"Alacritty", "Visual Studio Code", "Finder", "Telegram", "WhatsApp"}:
             continue
         manipulator, = rule["manipulators"]
-        names = {"Alacritty": "alacritty", "Visual Studio Code": "vscode", "Finder": "finder"}
+        names = {"Alacritty": "alacritty", "Visual Studio Code": "vscode", "Finder": "finder", "Telegram": "telegram", "WhatsApp": "whatsapp"}
         key = manipulator["from"]["key_code"]
         shortcuts.append(dict(id="karabiner:" + names[rule["description"]], provider="Karabiner",
                               action=rule["description"], enabled=rule.get("enabled", True),
                               shortcut=dict(key="enter" if key == "return_or_enter" else key,
                                             modifiers=[modifiers[m] for m in manipulator["from"]["modifiers"]["mandatory"]])))
-    if len(shortcuts) != 3:
+    if len(shortcuts) != 5:
         raise ValueError("Missing reference application shortcuts")
     palette = (repository / "sketchybar/plugins/colors.sh").read_text()
     def setting(source, pattern):
