@@ -207,7 +207,7 @@ struct ControlCenterView: View {
             List(selection: $destination) {
                 Section {
                     ForEach(customization) { item in
-                        Label(item.title, systemImage: item.symbol).tag(item)
+                        sidebarNavigationLabel(item).tag(item)
                     }
                 } header: {
                     Text("Customize")
@@ -217,8 +217,7 @@ struct ControlCenterView: View {
 
                 Section {
                     Button(action: beginGuided) {
-                        Label(ControlDestination.guidedSetup.title,
-                              systemImage: ControlDestination.guidedSetup.symbol)
+                        sidebarNavigationLabel(.guidedSetup)
                             .foregroundStyle(guidedStep != nil
                                 ? Color.accentColor : Color.primary)
                     }
@@ -226,8 +225,7 @@ struct ControlCenterView: View {
                     .help("Walk through the existing customization sections")
                     .accessibilityLabel("Guided Setup")
 
-                    Label(ControlDestination.updates.title,
-                          systemImage: ControlDestination.updates.symbol)
+                    sidebarNavigationLabel(.updates)
                         .tag(ControlDestination.updates)
                 } header: {
                     Text("Mac Setup")
@@ -251,6 +249,19 @@ struct ControlCenterView: View {
             .padding(.bottom, 12)
             .opacity(compactSidebar ? 0 : 1)
         }
+    }
+
+    /// The same native Label is used in both widths. Its Text stays in the
+    /// layout (so the icon and List row geometry cannot shift), but is fully
+    /// transparent when the sidebar viewport is collapsed.
+    private func sidebarNavigationLabel(_ item: ControlDestination) -> some View {
+        Label {
+            Text(item.title)
+                .opacity(compactSidebar ? 0 : 1)
+        } icon: {
+            Image(systemName: item.symbol)
+        }
+        .accessibilityLabel(item.title)
     }
 
     private func selectDestination(_ item: ControlDestination) {
