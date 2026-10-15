@@ -54,8 +54,13 @@ final class SetupModel: ObservableObject {
         shortcuts.migrateBundledDefaults(
             installedAlacritty: ApplicationDiscovery.scan(home: engine.paths.home)
                 .contains { $0.name == "Alacritty" })
-        layout = try WorkspaceConfiguration.load(from: engine.paths)
-        appliedLayout = layout
+        let loadedWorkspaces = try WorkspaceConfiguration.loadForEditing(from: engine.paths)
+        layout = loadedWorkspaces.draft
+        appliedLayout = loadedWorkspaces.original
+        if !loadedWorkspaces.repairs.isEmpty {
+            message = "Stored workspace IDs were invalid. Proposed safe IDs in this draft. Review them, then apply to update the running desktop."
+            + "\n" + loadedWorkspaces.repairs.joined(separator: "\n")
+        }
         appliedShortcuts = shortcuts
         guideProgress = try GuideProgress.load(from: engine.paths)
         apps = ApplicationDiscovery.scan(home: engine.paths.home)
@@ -103,8 +108,22 @@ final class SetupModel: ObservableObject {
     func openEditor(_ selected: SetupScope) {
         pausedSetup = false
         scope = selected
-        message = ""
+        // Keep a pending ID-repair explanation until the repaired draft is
+        // applied; unrelated transient errors should not survive navigation.
+        if !message.hasPrefix("Stored workspace IDs were invalid.") { message = "" }
         page = selected == .workspaces ? .workspaces : .shortcuts
+    }
+
+    func repairWorkspaceIDs() {
+        let repairs = layout.repairWorkspaceIDs()
+        if !repairs.isEmpty {
+            message = "Proposed workspace ID repairs (not saved yet):\n" + repairs.joined(separator: "\n")
+        }
+    }
+
+    var hasInvalidWorkspaceIDs: Bool {
+        var draft = layout
+        return !draft.repairWorkspaceIDs().isEmpty
     }
 
     func review() {
@@ -677,10 +696,8 @@ struct SetupView: View {
             ShortcutStudio(settings: $model.shortcuts, layout: $model.layout,
                            apps: model.apps, aerospaceTemplate: model.aerospaceTemplate,
                            karabinerTemplate: model.karabinerTemplate)
-            if let error = model.workspaceError(in: model.layout) {
-                Label(error, systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.red).font(.callout)
-            }
+            // ShortcutStudio owns its inline validation. Do not show a
+            // second, identical error beneath the editor.
         }
     }
 
@@ -747,9 +764,12 @@ struct SetupView: View {
                       systemImage: model.workspaceHasDraftChanges ? "square.and.pencil" : "checkmark.circle")
                     .foregroundStyle(model.workspaceHasDraftChanges ? Color.orange : Color.secondary)
                 Spacer()
-                Button("Review & apply workspaces") { model.review() }
+                Button(model.workspaceHasDraftChanges ? "Review & apply workspaces" : "Reapply workspaces") {
+                    model.review()
+                }
                     .buttonStyle(.borderedProminent)
-                    .disabled(model.busy || !model.workspaceHasDraftChanges)
+                    .disabled(model.busy)
+                    .help("Regenerate AeroSpace and SketchyBar profiles and verify the running bar")
             }
             .font(.callout)
             .padding(.top, 5)
@@ -778,13 +798,23 @@ struct SetupView: View {
             workspaceAppearance
             DesktopAccentControls(engine: model.engine)
 
-            if let error = model.configurationError(for: .workspaces) {
-                Label(error, systemImage: "exclamationmark.triangle")
+            if model.hasInvalidWorkspaceIDs {
+                Button("Repair duplicate or invalid workspace IDs") {
+                    model.repairWorkspaceIDs()
+                }
+                .help("Propose unique, safe IDs without discarding workspaces or their assignments")
+            }
+            // Only one live validation message, never a repeated copy from
+            // the last unsuccessful Apply attempt.
+            let validationError = model.configurationError(for: .workspaces)
+            if let validationError {
+                Label(validationError, systemImage: "exclamationmark.triangle")
                     .font(.callout).foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            if !model.message.isEmpty {
+            if !model.message.isEmpty && model.message != validationError {
                 Text(model.message).font(.callout).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

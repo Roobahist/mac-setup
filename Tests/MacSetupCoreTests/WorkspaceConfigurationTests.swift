@@ -110,6 +110,15 @@ final class WorkspaceConfigurationTests: XCTestCase {
         }
     }
 
+    func testDroppingAWorkspaceOntoItselfDoesNotCreateDraftChanges() {
+        var layout = WorkspaceConfiguration.defaultLayout
+        let original = layout
+        layout.insertWorkspace(layout.workspaces[3].id, at: 3)
+        XCTAssertEqual(layout, original)
+        layout.insertWorkspace(layout.workspaces[3].id, at: 4)
+        XCTAssertEqual(layout, original)
+    }
+
     func testReorderingChangesGeneratedWorkspaceOrderBeforeSaving() throws {
         let original = WorkspaceConfiguration.defaultLayout
         var draft = original
@@ -159,6 +168,70 @@ final class WorkspaceConfigurationTests: XCTestCase {
         XCTAssertThrowsError(try config.validate())
         config.workspaces[1].apps = ["com.example.App'; rm -rf /"]
         XCTAssertThrowsError(try config.validate())
+    }
+
+    func testRepairInvalidAndDuplicateIDsPreservesWorkspaceContentAndOriginalFile() throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: home) }
+        let paths = Paths(home: home)
+        try FileManager.default.createDirectory(at: paths.state, withIntermediateDirectories: true)
+
+        var corrupted = WorkspaceConfiguration.defaultLayout
+        corrupted.workspaces[0].id = "bad name"
+        corrupted.workspaces[1].id = "bad name"
+        corrupted.workspaces[2].id = "music"
+        let original = try JSONEncoder().encode(corrupted)
+        try original.write(to: WorkspaceConfiguration.path(in: paths))
+        XCTAssertThrowsError(try WorkspaceConfiguration.load(from: paths))
+
+        let loaded = try WorkspaceConfiguration.loadForEditing(from: paths)
+        XCTAssertEqual(loaded.original, corrupted)
+        XCTAssertEqual(loaded.repairs.count, 3)
+        XCTAssertEqual(loaded.draft.workspaces.count, corrupted.workspaces.count)
+        XCTAssertEqual(loaded.draft.workspaces.map(\.name), corrupted.workspaces.map(\.name))
+        XCTAssertEqual(loaded.draft.workspaces.map(\.apps), corrupted.workspaces.map(\.apps))
+        XCTAssertEqual(loaded.draft.workspaces.map(\.icon), corrupted.workspaces.map(\.icon))
+        XCTAssertEqual(loaded.draft.workspaces[2].id, "music")
+        XCTAssertNotEqual(loaded.draft.workspaces[10].id, "music",
+                          "The later duplicate ID must be repaired")
+        XCTAssertEqual(Set(loaded.draft.workspaces.map(\.id)).count, corrupted.workspaces.count)
+        try loaded.draft.validate()
+        XCTAssertEqual(try Data(contentsOf: WorkspaceConfiguration.path(in: paths)), original,
+                       "Loading for editing must not silently change saved settings")
+
+        let repairedAgain = try WorkspaceConfiguration.loadForEditing(from: paths)
+        XCTAssertEqual(repairedAgain.draft, loaded.draft, "Repairs must be deterministic")
+        try loaded.draft.save(to: paths)
+        XCTAssertEqual(try WorkspaceConfiguration.load(from: paths), loaded.draft)
+    }
+
+    func testReorderThenSaveAndGenerateBothProfilesInSavedOrder() throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: home) }
+        let paths = Paths(home: home)
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+        var updated = WorkspaceConfiguration.defaultLayout
+        let original = updated.workspaces.map(\.id)
+        updated.insertWorkspace("notes", at: 2)
+        try updated.save(to: paths)
+        let helper = home.appendingPathComponent("mac-setup-display")
+        try Data("#!/bin/sh\\nexit 0\\n".utf8).write(to: helper)
+        let engine = try Engine(paths: paths, runner: FakeRunner(),
+                                displayHelper: helper, tools: { _ in nil })
+        _ = try engine.apply(Catalog.task("aerospace-profile"))
+        _ = try engine.apply(Catalog.task("sketchybar-profile"))
+        let persisted = try WorkspaceConfiguration.load(from: paths).workspaces.map(\.id)
+        XCTAssertNotEqual(persisted, original)
+        XCTAssertEqual(persisted[2], "notes")
+        let aerospace = try String(contentsOf:
+            paths.config.appendingPathComponent("aerospace/aerospace.toml"), encoding: .utf8)
+        let bar = try String(contentsOf:
+            paths.config.appendingPathComponent("sketchybar/sketchybarrc"), encoding: .utf8)
+        let expectedIDs = persisted.map { "    \"\($0)\"," }.joined(separator: "\n")
+        XCTAssertTrue(aerospace.contains("persistent-workspaces = [\n" + expectedIDs),
+                      "AeroSpace must use the complete saved order")
+        XCTAssertTrue(bar.contains("workspace_ids=(" + persisted.map { "'\($0)'" }.joined(separator: " ") + ")"),
+                      "SketchyBar must use the same saved order")
     }
 
     func testSaveAndLoadFromPrivateState() throws {

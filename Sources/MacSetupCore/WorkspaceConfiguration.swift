@@ -321,6 +321,57 @@ public struct WorkspaceConfiguration: Codable, Equatable {
         return config
     }
 
+    /// The editor can recover legacy or manually corrupted IDs without
+    /// overwriting the user's saved layout. The repaired draft is only saved
+    /// when the user explicitly applies it.
+    public static func loadForEditing(from paths: Paths) throws
+        -> (original: WorkspaceConfiguration, draft: WorkspaceConfiguration, repairs: [String]) {
+        let url = path(in: paths)
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            return (.defaultLayout, .defaultLayout, [])
+        }
+        let original = try JSONDecoder().decode(WorkspaceConfiguration.self, from: Data(contentsOf: url))
+        var draft = original
+        let repairs = draft.repairWorkspaceIDs()
+        try draft.validate()
+        return (original, draft, repairs)
+    }
+
+    /// Repairs only duplicate or shell-unsafe identifiers. Never changes
+    /// valid identifiers, workspace order, app assignments or shortcut keys.
+    /// Return messages describing each edit so the UI can explain it.
+    @discardableResult
+    public mutating func repairWorkspaceIDs() -> [String] {
+        let allowed = CharacterSet(charactersIn:
+            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-")
+        func valid(_ id: String) -> Bool {
+            !id.isEmpty && id.unicodeScalars.allSatisfy(allowed.contains)
+        }
+        // Reserve all existing valid IDs so a generated repair cannot steal one.
+        let reserved = Set(workspaces.map(\.id).filter(valid))
+        var used = Set<String>()
+        var repairs: [String] = []
+        for index in workspaces.indices {
+            let old = workspaces[index].id
+            if valid(old) && used.insert(old).inserted { continue }
+            let cleaned = old.unicodeScalars.map {
+                allowed.contains($0) ? String($0) : "-"
+            }.joined()
+            let base = cleaned.trimmingCharacters(in: CharacterSet(charactersIn: "-_"))
+            let root = base.isEmpty ? "workspace" : base
+            var candidate = root + "-" + String(index + 1)
+            var suffix = 2
+            while reserved.contains(candidate) || used.contains(candidate) {
+                candidate = root + "-" + String(index + 1) + "-" + String(suffix)
+                suffix += 1
+            }
+            workspaces[index].id = candidate
+            used.insert(candidate)
+            repairs.append("Workspace '\(workspaces[index].name)' had ID '\(old)'; proposed '\(candidate)'.")
+        }
+        return repairs
+    }
+
     public func save(to paths: Paths) throws {
         try validate()
         try FileManager.default.createDirectory(at: paths.state, withIntermediateDirectories: true)
@@ -346,6 +397,9 @@ public struct WorkspaceConfiguration: Codable, Equatable {
     public mutating func insertWorkspace(_ sourceID: String, at destination: Int) {
         guard let source = workspaces.firstIndex(where: { $0.id == sourceID }),
               (0...workspaces.count).contains(destination) else { return }
+        // Dropping on either boundary of the same row is not a move and must
+        // not materialize inherited keys or create phantom unsaved changes.
+        guard destination != source && destination != source + 1 else { return }
         // Materialize inherited keys before moving a workspace. Reordering
         // must not unexpectedly assign it a different keyboard shortcut.
         for index in workspaces.indices where workspaces[index].shortcutKey == nil
@@ -375,9 +429,11 @@ public struct WorkspaceConfiguration: Codable, Equatable {
         let allowedID = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-")
         let allowedApp = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-")
         for item in workspaces {
-            guard !item.id.isEmpty && item.id.unicodeScalars.allSatisfy(allowedID.contains),
-                  names.insert(item.id).inserted else {
-                throw SetupError("Workspace IDs must be unique and contain only letters, numbers, _ or -.")
+            guard !item.id.isEmpty && item.id.unicodeScalars.allSatisfy(allowedID.contains) else {
+                throw SetupError("Workspace '\(item.name)' has invalid ID '\(item.id)'. Use only letters, numbers, _ or -. Repair IDs in Workspaces.")
+            }
+            guard names.insert(item.id).inserted else {
+                throw SetupError("Workspace ID '\(item.id)' is used more than once. Repair IDs in Workspaces.")
             }
             guard !item.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                   !item.name.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else {
