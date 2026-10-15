@@ -134,7 +134,7 @@ struct ControlCenterView: View {
             case .workspaces, .shortcuts:
                 SetupView(model: model, embedded: true, onReturn: resetFeature)
             case .appearance:
-                scrollSettings("Appearance", category: "Appearance", includeAccent: true)
+                scrollSettings("Appearance", category: "Appearance")
             case .dock: scrollSettings("Dock", category: "Dock")
             case .menuBar: scrollSettings("Menu Bar & Clock", category: "Menu Bar")
             case .finder: scrollSettings("Finder", category: "Finder")
@@ -371,13 +371,12 @@ struct ControlCenterView: View {
         }
     }
 
-    private func scrollSettings(_ title: String, category: String, includeAccent: Bool = false) -> some View {
+    private func scrollSettings(_ title: String, category: String) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 Text(title).font(SetupDesign.pageTitle)
                 Text("Changes are applied individually and saved to the recovery journal.")
                     .foregroundStyle(.secondary).font(.callout)
-                if includeAccent { DesktopAccentControls(engine: model.engine) }
                 ForEach(TweakRegistry.filtered("", category: category)) { tweak in
                     TweakControl(tweak: tweak,
                         service: TweakService(journal: model.engine.journal,
