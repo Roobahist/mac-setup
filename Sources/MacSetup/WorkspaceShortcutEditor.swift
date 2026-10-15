@@ -99,15 +99,11 @@ private struct WorkspaceShortcutFields: View {
                     }
                 }
                 HStack {
-                    Picker("Key", selection: $shortcut.key) {
-                        ForEach(WorkspaceShortcut.keyGroups.indices, id: \.self) { i in
-                            Section(WorkspaceShortcut.keyGroups[i].name) {
-                                ForEach(WorkspaceShortcut.keyGroups[i].keys, id: \.self) { key in
-                                    Text(WorkspaceShortcut.keyLabel(key)).tag(key)
-                                }
-                            }
-                        }
-                    }.frame(width: 260).accessibilityLabel("\(title): key")
+                    Text("Key")
+                    SetupDropdown(title: "\(title): key", selection: $shortcut.key,
+                                  choices: WorkspaceShortcut.keyGroups.flatMap { group in
+                                      group.keys.map { .init(value: $0, title: WorkspaceShortcut.keyLabel($0), group: group.name) }
+                                  }).frame(width: 220)
                     Spacer()
                     Text(shortcut.display).font(.system(.body, design: .monospaced))
                 }

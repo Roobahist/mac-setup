@@ -136,29 +136,11 @@ struct ShortcutStudio: View {
         .setupCard()
     }
 
-    private func bundleIDForShortcut(_ entry: ManagedShortcut) -> String? {
-        switch entry.provider {
-        case .aerospace: return "bobko.aerospace"
-        case .raycast: return "com.raycast.macos"
-        case .karabiner:
-            if entry.action.hasPrefix("open:") {
-                return String(entry.action.dropFirst(5))
-            }
-            // Bundled Karabiner scripts refer to an app by its friendly name.
-            switch entry.action {
-            case "Finder": return "com.apple.finder"
-            case "Visual Studio Code": return "com.microsoft.VSCode"
-            case "Alacritty": return "org.alacritty"
-            default: return nil
-            }
-        }
-    }
-
     @ViewBuilder private func shortcutIcon(_ entry: ManagedShortcut) -> some View {
-        let bundleID = bundleIDForShortcut(entry)
+        let bundleID = entry.applicationBundleID
         let installed = apps.first { $0.bundleID == bundleID }
         let url = bundleID.flatMap { NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) }
-        let builtInFinder = entry.action == "Finder"
+        let builtInFinder = bundleID == "com.apple.finder"
             ? URL(fileURLWithPath: "/System/Library/CoreServices/Finder.app") : nil
         if let path = installed?.path ?? url?.path ?? builtInFinder?.path,
            FileManager.default.fileExists(atPath: path) {
@@ -166,23 +148,25 @@ struct ShortcutStudio: View {
                 .resizable().interpolation(.high)
                 .scaledToFit()
                 .frame(width: 24, height: 24)
-                .help("Application icon")
+                .accessibilityHidden(true)
         } else {
             let symbol: String = {
-                if entry.action == "Finder" { return "folder.fill" }
-                if entry.action == "Visual Studio Code" { return "chevron.left.forwardslash.chevron.right" }
-                if entry.action == "Alacritty" { return "terminal.fill" }
+                if bundleID == "com.apple.finder" { return "folder.fill" }
+                if bundleID == "com.microsoft.VSCode" { return "chevron.left.forwardslash.chevron.right" }
+                if bundleID == "org.alacritty" { return "terminal.fill" }
+                if bundleID == "ru.keepcoder.Telegram" { return "paperplane.fill" }
+                if bundleID == "net.whatsapp.WhatsApp" { return "phone.bubble.fill" }
                 switch entry.provider {
                 case .aerospace: return "rectangle.3.group"
                 case .raycast: return "magnifyingglass"
-                case .karabiner: return "app.fill"
+                case .karabiner: return "app"
                 }
             }()
             Image(systemName: symbol)
                 .font(.system(size: 17, weight: .medium))
                 .foregroundStyle(.secondary)
                 .frame(width: 24, height: 24)
-                .help("Shortcut action")
+                .accessibilityHidden(true)
         }
     }
 
@@ -208,16 +192,22 @@ struct ShortcutStudio: View {
                     settings.entries[i].enabled = enabled
                 }))
                 .labelsHidden().disabled(entry.provider == .raycast)
-            Button { editing = entry } label: { Image(systemName: "slider.horizontal.3") }
+            Button { editing = entry } label: {
+                Image(systemName: "slider.horizontal.3")
+                    .frame(width: 32, height: 32).contentShape(Rectangle())
+            }
+                .buttonStyle(.plain)
                 .help("Edit shortcut").accessibilityLabel("Edit \(entry.action)")
-                .frame(width: 32, height: 32)
             if entry.provider != .raycast {
                 Button {
                     settings.entries.removeAll { $0.id == entry.id }
-                } label: { Image(systemName: "xmark") }
+                } label: {
+                    Image(systemName: "xmark")
+                        .frame(width: 32, height: 32).contentShape(Rectangle())
+                }
+                    .buttonStyle(.plain)
                     .help("Remove shortcut")
                     .accessibilityLabel("Remove \(entry.action)")
-                    .frame(width: 32, height: 32)
             } else {
                 Color.clear.frame(width: 32, height: 32)
             }
@@ -266,30 +256,28 @@ private struct ShortcutItemEditor: View {
         VStack(alignment: .leading, spacing: 18) {
             Text("Edit \(draft.provider.rawValue) shortcut").font(SetupDesign.sheetTitle)
             if draft.provider == .aerospace {
-                Picker("Action", selection: $selectedAction) {
-                    ForEach(aerospaceActions.map { $0.action }, id: \.self) { action in
-                        Text(ShortcutSettings.actionTitle(action, provider: .aerospace)).tag(action)
-                    }
+                HStack {
+                    Text("Action")
+                    SetupDropdown(title: "Action", selection: $selectedAction,
+                                  choices: aerospaceActions.map { .init(value: $0.action, title: $0.title) })
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
             if draft.provider == .karabiner {
-                Picker("Action", selection: $selectedAction) {
-                    ForEach(ShortcutSettings.scripts.map { $0.name }, id: \.self) { name in
-                        Text("Open " + name).tag(name)
-                    }
-                    Text("Open application by bundle ID").tag("open-app")
+                HStack {
+                    Text("Action")
+                    SetupDropdown(title: "Action", selection: $selectedAction,
+                                  choices: ShortcutSettings.scripts.map { .init(value: $0.name, title: "Open " + $0.name) }
+                                      + [.init(value: "open-app", title: "Open application by bundle ID")])
                 }
                 if selectedAction == "open-app" {
-                    TextField("Application bundle ID", text: $bundleID)
-                        .textFieldStyle(.roundedBorder)
+                    TextField("Application bundle ID", text: $bundleID).textFieldStyle(.roundedBorder)
                     Text("Example: com.apple.Safari").font(SetupDesign.body).foregroundStyle(.secondary)
                     if !apps.isEmpty {
-                        Picker("Installed app", selection: $bundleID) {
-                            Text("Choose an installed app").tag("")
-                            ForEach(apps, id: \.bundleID) { app in
-                                Text(app.name).tag(app.bundleID)
-                            }
+                        HStack {
+                            Text("Installed app")
+                            SetupDropdown(title: "Installed app", selection: $bundleID,
+                                          choices: [.init(value: "", title: "Choose an installed app")]
+                                              + apps.map { .init(value: $0.bundleID, title: $0.name) })
                         }
                     }
                 }
@@ -298,16 +286,13 @@ private struct ShortcutItemEditor: View {
                 Text("Open Raycast").fontWeight(.medium)
             }
             Divider()
-            Picker("Key", selection: $draft.shortcut.key) {
-                ForEach(WorkspaceShortcut.keyGroups.indices, id: \.self) { group in
-                    Section(WorkspaceShortcut.keyGroups[group].name) {
-                        ForEach(WorkspaceShortcut.keyGroups[group].keys.filter { key in
-                            draft.provider != .raycast || ShortcutSettings.macKeyCodes[key] != nil
-                        }, id: \.self) { key in
-                            Text(WorkspaceShortcut.keyLabel(key)).tag(key)
-                        }
-                    }
-                }
+            HStack {
+                Text("Key")
+                SetupDropdown(title: "Key", selection: $draft.shortcut.key,
+                              choices: WorkspaceShortcut.keyGroups.flatMap { group in
+                                  group.keys.filter { draft.provider != .raycast || ShortcutSettings.macKeyCodes[$0] != nil }
+                                      .map { .init(value: $0, title: WorkspaceShortcut.keyLabel($0), group: group.name) }
+                              })
             }.frame(width: 320)
             Text("Modifiers").fontWeight(.medium)
             HStack(spacing: 18) {

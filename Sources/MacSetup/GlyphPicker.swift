@@ -90,7 +90,7 @@ struct GlyphPicker: View {
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(font.family).lineLimit(1)
                                 Text(font.style).font(.system(size: 12)).foregroundStyle(.secondary)
-                            }.frame(maxWidth: .infinity, alignment: .leading).padding(6)
+                            }.frame(maxWidth: .infinity, alignment: .leading).padding(6).contentShape(Rectangle())
                              .background(model.font?.id == font.id ? Color.accentColor.opacity(0.18) : .clear, in: RoundedRectangle(cornerRadius: 6))
                         }.buttonStyle(.plain).accessibilityLabel("Font: \(font.title)")
                     }
@@ -113,7 +113,7 @@ struct GlyphPicker: View {
                                             Text(glyph.symbol).font(.custom(glyph.selection.font.postScriptName, size: 28)).frame(height: 38)
                                             Text(glyph.name).font(.system(size: 12)).lineLimit(1)
                                             Text(glyph.id).font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
-                                        }.frame(maxWidth: .infinity).padding(8)
+                                        }.frame(maxWidth: .infinity).padding(8).contentShape(Rectangle())
                                          .background(model.selected?.id == glyph.id ? Color.accentColor.opacity(0.18) : Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
                                     }.buttonStyle(.plain).help("\(glyph.name) · \(glyph.id)\n\(glyph.unicodeName ?? "No Unicode name")")
                                      .accessibilityLabel("\(glyph.name), \(glyph.id)")

@@ -47,23 +47,13 @@ extension View {
 
     func workspaceControl() -> some View {
         frame(maxWidth: .infinity, minHeight: SetupDesign.controlHeight)
+            .contentShape(RoundedRectangle(cornerRadius: 6))
             .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
             .overlay(RoundedRectangle(cornerRadius: 6)
                 .strokeBorder(Color(nsColor: .separatorColor).opacity(0.4), lineWidth: 1))
     }
 
-    func workspaceDropdown() -> some View {
-        menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .padding(.leading, 8)
-            .padding(.trailing, 23)
-            .workspaceControl()
-            .overlay(alignment: .trailing) {
-                WorkspaceDisclosure(direction: "down")
-                    .padding(.trailing, 8)
-                    .allowsHitTesting(false)
-            }
-    }
+
 }
 
 struct WorkspaceDisclosure: View {
