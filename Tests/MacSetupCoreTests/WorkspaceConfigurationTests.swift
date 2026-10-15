@@ -110,6 +110,15 @@ final class WorkspaceConfigurationTests: XCTestCase {
         }
     }
 
+    func testDroppingAWorkspaceOntoItselfDoesNotCreateDraftChanges() {
+        var layout = WorkspaceConfiguration.defaultLayout
+        let original = layout
+        layout.insertWorkspace(layout.workspaces[3].id, at: 3)
+        XCTAssertEqual(layout, original)
+        layout.insertWorkspace(layout.workspaces[3].id, at: 4)
+        XCTAssertEqual(layout, original)
+    }
+
     func testReorderingChangesGeneratedWorkspaceOrderBeforeSaving() throws {
         let original = WorkspaceConfiguration.defaultLayout
         var draft = original
