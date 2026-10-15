@@ -139,19 +139,33 @@ public struct WorkspaceDefinition: Codable, Equatable {
 /// Replacing an entire line would lose the shell continuation after blur_radius.
 private enum WorkspaceTemplateSetting {
     static func replace(_ source: String, key: String, value: String,
-                        exported: Bool = false) throws -> String {
+                        exported: Bool = false,
+                        sectionStart: String? = nil, sectionEnd: String? = nil) throws -> String {
+        let area: Range<String.Index>
+        if let sectionStart, let sectionEnd {
+            guard let first = source.range(of: sectionStart),
+                  let last = source.range(of: sectionEnd,
+                                          range: first.upperBound..<source.endIndex) else {
+                throw SetupError("Unsupported SketchyBar profile: missing section for \(key).")
+            }
+            area = first.upperBound..<last.lowerBound
+        } else {
+            area = source.startIndex..<source.endIndex
+        }
+        let text = String(source[area])
         let prefix = exported ? "export[ \\t]+" : ""
         let expression = try NSRegularExpression(
             pattern: "(?m)^([ \\t]*" + prefix
                 + NSRegularExpression.escapedPattern(for: key)
                 + "=[ \\t]*)([^ \\t\\r\\n\\\\#]+)")
-        let range = NSRange(source.startIndex..<source.endIndex, in: source)
-        let matches = expression.matches(in: source, range: range)
+        let matches = expression.matches(in: text,
+                                         range: NSRange(text.startIndex..<text.endIndex, in: text))
         guard matches.count == 1,
-              let valueRange = Range(matches[0].range(at: 2), in: source) else {
+              let valueRange = Range(matches[0].range(at: 2), in: text) else {
             throw SetupError("Unsupported SketchyBar profile: expected one assignment for \(key).")
         }
-        return source.replacingCharacters(in: valueRange, with: value)
+        return source.replacingCharacters(in: area,
+            with: text.replacingCharacters(in: valueRange, with: value))
     }
 }
 
@@ -544,7 +558,8 @@ public struct WorkspaceConfiguration: Codable, Equatable {
                                     to: "# Create workspace items\n",
                                     with: "# Workspace order follows workspaces.json\nworkspace_ids=(\(orderedIDs))\n\n")
         rendered = try WorkspaceTemplateSetting.replace(
-            rendered, key: "label.width", value: String(barStyle.itemWidth))
+            rendered, key: "label.width", value: String(barStyle.itemWidth),
+            sectionStart: "# Create workspace items\n", sectionEnd: "##### Clock #####")
         rendered = try WorkspaceTemplateSetting.replace(
             rendered, key: "blur_radius", value: String(barStyle.blurRadius))
         return DisplayGeometry.barShell(rendered)
