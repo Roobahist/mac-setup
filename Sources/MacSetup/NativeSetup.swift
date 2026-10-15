@@ -37,6 +37,7 @@ final class SetupModel: ObservableObject {
     @Published var appSheet = false
     @Published var appSearch = ""
     @Published var runLog = ""
+    @Published private(set) var runtimeIssues: [String] = []
     var scope: SetupScope = .full
     private let worker = DispatchQueue(label: "mac-setup.native", qos: .userInitiated)
     private var setupLock: SetupLock?
@@ -161,8 +162,14 @@ final class SetupModel: ObservableObject {
             switch scope {
             case .full:
                 if let error = workspaceError(in: layout) { throw SetupError(error) }
-                try shortcuts.save(to: engine.paths)
-                try layout.save(to: engine.paths)
+                // An app-only run must not commit unrelated editor drafts.
+                let selected = Set(tasks.map(\.id))
+                if !selected.isDisjoint(with: ["aerospace-profile", "karabiner-profile", "raycast-profile"]) {
+                    try shortcuts.save(to: engine.paths)
+                }
+                if !selected.isDisjoint(with: ["aerospace-profile", "sketchybar-profile"]) {
+                    try layout.save(to: engine.paths)
+                }
             case .workspaces:
                 var chosen = layout
                 chosen.keymap = appliedLayout.keymap
@@ -178,12 +185,16 @@ final class SetupModel: ObservableObject {
             }
             engine.selectedWorkspaceTaskIDs = scope == .full ? picker.selected : nil
             pausedSetup = false
+            runtimeIssues = []
             index = 0; results = [:]; runLog = ""
             log("Starting \(scope) with \(tasks.count) selected tasks")
             log("Workspace order: \(layout.workspaces.map(\.id).joined(separator: ", "))")
             log("Switch modifiers: \(layout.keymap.switchModifiers.joined(separator: "+")); move modifiers: \(layout.keymap.moveModifiers.joined(separator: "+"))")
             advance()
-        } catch { message = String(describing: error) }
+        } catch {
+            setupLock = nil
+            message = String(describing: error)
+        }
     }
 
     func advance() {
@@ -199,13 +210,26 @@ final class SetupModel: ObservableObject {
             worker.async { [self] in
                 do {
                     try engine.finishRestarts()
+                    let ids = Set(tasks.map(\.id))
+                    let issues = engine.workspaceRuntimeIssues(
+                        checkAeroSpace: ids.contains("aerospace-profile"),
+                        checkSketchyBar: ids.contains("sketchybar-profile"))
                     let updatedLayout = try? WorkspaceConfiguration.load(from: engine.paths)
                     let updatedShortcuts = try? ShortcutSettings.load(
                         from: engine.paths, aerospaceTemplate: aerospaceTemplate)
                     DispatchQueue.main.async {
-                        self.log("Selected files verified and refresh requested. Confirm the live desktop reflects them.")
-                        if let updatedLayout { self.appliedLayout = updatedLayout }
-                        if let updatedShortcuts { self.appliedShortcuts = updatedShortcuts }
+                        self.runtimeIssues = issues
+                        self.log(issues.isEmpty
+                            ? "Selected files updated. Live workspace queries passed where applicable; verify actual shortcuts and desktop behavior."
+                            : "Selected files updated, but live workspace verification reported \(issues.count) issue(s).")
+                        if issues.isEmpty && !self.results.values.contains("Pending") {
+                            if let updatedLayout, ids.contains("aerospace-profile") || ids.contains("sketchybar-profile") {
+                                self.appliedLayout = updatedLayout
+                            }
+                            if let updatedShortcuts, !ids.isDisjoint(with: ["aerospace-profile", "karabiner-profile", "raycast-profile"]) {
+                                self.appliedShortcuts = updatedShortcuts
+                            }
+                        }
                         self.busy = false
                         self.page = .finished
                         self.setupLock = nil
@@ -271,6 +295,24 @@ final class SetupModel: ObservableObject {
                     self.log("\(task.id): FAILED: \(error)")
                     self.busy = false; self.message = Self.recoveryHint(task)
                     self.details = String(describing: error); self.page = .failed
+                }
+            }
+        }
+    }
+
+    func refreshRuntimeVerification() {
+        let ids = Set(tasks.map(\.id))
+        busy = true
+        worker.async { [self] in
+            let issues = engine.workspaceRuntimeIssues(
+                checkAeroSpace: ids.contains("aerospace-profile"),
+                checkSketchyBar: ids.contains("sketchybar-profile"))
+            let updated = try? WorkspaceConfiguration.load(from: engine.paths)
+            DispatchQueue.main.async {
+                self.runtimeIssues = issues
+                self.busy = false
+                if issues.isEmpty && !self.results.values.contains("Pending"), let updated {
+                    self.appliedLayout = updated
                 }
             }
         }
@@ -1054,6 +1096,20 @@ struct SetupView: View {
             Button { copyLog() } label: { Label("Copy apply log", systemImage: "doc.on.doc") }
             Text("Move the pointer to the bottom edge: the Dock should reveal promptly. The macOS menu bar should hide when the pointer leaves the top. Its reveal timing is controlled by macOS. If it still stays visible, set Automatically hide and show the menu bar to Always in System Settings, then log out and back in.")
             Text("Check the workspace highlight with your chosen modifiers and destination key, then use the move-window shortcut to send a window to another workspace.")
+            if !model.runtimeIssues.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("Live workspace verification needs attention", systemImage: "exclamationmark.triangle")
+                        .font(.headline)
+                    ForEach(model.runtimeIssues, id: \.self) { issue in
+                        Text(issue).font(.callout).textSelection(.enabled)
+                    }
+                    Button("Check running apps again") { model.refreshRuntimeVerification() }
+                        .disabled(model.busy)
+                }
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+            }
             ForEach(model.tasks, id: \.id) { task in
                 HStack { Text(task.title); Spacer(); Text(model.results[task.id] ?? "Pending").foregroundStyle(model.results[task.id] == "Pending" ? Color.orange : Color.secondary) }
             }
