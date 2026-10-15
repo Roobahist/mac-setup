@@ -7,6 +7,7 @@ VERSION="${2:-0.5.0}"
 case "$ARCH" in arm64|x86_64) ;; *) echo "Unsupported architecture: $ARCH" >&2; exit 1 ;; esac
 if [[ ! "$VERSION" =~ ^[a-zA-Z0-9._-]+$ ]]; then echo "Invalid version" >&2; exit 1; fi
 
+python3 scripts/sync-dotfiles.py --verify-bundled
 bash scripts/build.sh -c release --arch "$ARCH"
 BIN_DIR="$(bash scripts/build.sh -c release --arch "$ARCH" --show-bin-path)"
 PACKAGE="mac-setup-$VERSION-macos-$ARCH"

@@ -1,0 +1,423 @@
+{
+  "version": 1,
+  "enabled": true,
+  "settings": [
+    {
+      "id": "spaces.order",
+      "category": "Workspaces",
+      "title": "Keep Spaces in their current order",
+      "enabled": true,
+      "domain": "com.apple.dock",
+      "key": "mru-spaces",
+      "value": null,
+      "tasks": [
+        "mission-control"
+      ],
+      "restart": "Dock"
+    },
+    {
+      "id": "spaces.displays",
+      "category": "Workspaces",
+      "title": "Separate Spaces for each display",
+      "enabled": true,
+      "domain": "com.apple.spaces",
+      "key": "spans-displays",
+      "value": true,
+      "tasks": [
+        "mission-control"
+      ]
+    },
+    {
+      "id": "appearance.dark",
+      "category": "Appearance",
+      "title": "Dark appearance",
+      "enabled": true,
+      "domain": "NSGlobalDomain",
+      "key": "AppleInterfaceStyle",
+      "value": "Dark",
+      "tasks": [
+        "dark-mode"
+      ]
+    },
+    {
+      "id": "dock.autoHide",
+      "category": "Dock",
+      "title": "Automatically hide the Dock",
+      "enabled": true,
+      "domain": "com.apple.dock",
+      "key": "autohide",
+      "value": true,
+      "tasks": [
+        "dock-hide"
+      ],
+      "restart": "Dock"
+    },
+    {
+      "id": "dock.orientation",
+      "category": "Dock",
+      "title": "Dock position",
+      "enabled": true,
+      "domain": "com.apple.dock",
+      "key": "orientation",
+      "value": "bottom",
+      "tasks": [
+        "dock-hide"
+      ],
+      "restart": "Dock"
+    },
+    {
+      "id": "dock.animation",
+      "category": "Dock",
+      "title": "Dock animation duration",
+      "enabled": true,
+      "domain": "com.apple.dock",
+      "key": "autohide-time-modifier",
+      "value": null,
+      "tasks": [
+        "dock-hide"
+      ],
+      "restart": "Dock"
+    },
+    {
+      "id": "dock.hoverDelay",
+      "category": "Dock",
+      "title": "Dock reveal delay",
+      "enabled": true,
+      "domain": "com.apple.dock",
+      "key": "autohide-delay",
+      "value": null,
+      "tasks": [
+        "dock-hide"
+      ],
+      "restart": "Dock"
+    },
+    {
+      "id": "dock.recents",
+      "category": "Dock",
+      "title": "Show recent applications",
+      "enabled": true,
+      "domain": "com.apple.dock",
+      "key": "show-recents",
+      "value": false,
+      "tasks": [
+        "dock-hide",
+        "dock-minimal"
+      ],
+      "restart": "Dock"
+    },
+    {
+      "id": "dock.size",
+      "category": "Dock",
+      "title": "Dock icon size",
+      "enabled": true,
+      "domain": "com.apple.dock",
+      "key": "tilesize",
+      "value": 38.0,
+      "tasks": [],
+      "restart": "Dock"
+    },
+    {
+      "id": "dock.pinnedApps",
+      "category": "Dock",
+      "title": "Pinned Dock applications",
+      "enabled": true,
+      "domain": "com.apple.dock",
+      "key": "persistent-apps",
+      "value": [],
+      "tasks": [
+        "dock-minimal"
+      ],
+      "restart": "Dock"
+    },
+    {
+      "id": "dock.pinnedFolders",
+      "category": "Dock",
+      "title": "Pinned Dock folders",
+      "enabled": true,
+      "domain": "com.apple.dock",
+      "key": "persistent-others",
+      "value": [],
+      "tasks": [
+        "dock-minimal"
+      ],
+      "restart": "Dock"
+    },
+    {
+      "id": "desktop.icons",
+      "category": "Appearance",
+      "title": "Show files on the desktop",
+      "enabled": true,
+      "domain": "com.apple.finder",
+      "key": "CreateDesktop",
+      "value": true,
+      "tasks": [
+        "desktop-clean"
+      ],
+      "restart": "Finder"
+    },
+    {
+      "id": "finder.view",
+      "category": "Finder",
+      "title": "Preferred Finder view",
+      "enabled": true,
+      "domain": "com.apple.finder",
+      "key": "FXPreferredViewStyle",
+      "value": "Nlsv",
+      "tasks": [
+        "finder-list",
+        "finder-icons"
+      ],
+      "restart": "Finder"
+    },
+    {
+      "id": "finder.group",
+      "category": "Finder",
+      "title": "Finder grouping",
+      "enabled": true,
+      "domain": "com.apple.finder",
+      "key": "FXPreferredGroupBy",
+      "value": "None",
+      "tasks": [
+        "finder-icons"
+      ],
+      "restart": "Finder"
+    },
+    {
+      "id": "finder.tabs",
+      "category": "Finder",
+      "title": "Open folders in tabs",
+      "enabled": true,
+      "domain": "com.apple.finder",
+      "key": "FinderWindowTabs",
+      "value": null,
+      "tasks": [
+        "finder-tabs"
+      ],
+      "restart": "Finder"
+    },
+    {
+      "id": "finder.windowTabs",
+      "category": "Finder",
+      "title": "System window tab preference",
+      "enabled": true,
+      "domain": "NSGlobalDomain",
+      "key": "AppleWindowTabbingMode",
+      "value": null,
+      "tasks": [
+        "finder-tabs"
+      ]
+    },
+    {
+      "id": "finder.extensions",
+      "category": "Finder",
+      "title": "Show filename extensions",
+      "enabled": true,
+      "domain": "NSGlobalDomain",
+      "key": "AppleShowAllExtensions",
+      "value": true,
+      "tasks": [],
+      "restart": "Finder"
+    },
+    {
+      "id": "finder.hidden",
+      "category": "Finder",
+      "title": "Show hidden files",
+      "enabled": true,
+      "domain": "com.apple.finder",
+      "key": "AppleShowAllFiles",
+      "value": true,
+      "tasks": [],
+      "restart": "Finder"
+    },
+    {
+      "id": "finder.pathBar",
+      "category": "Finder",
+      "title": "Show path bar",
+      "enabled": true,
+      "domain": "com.apple.finder",
+      "key": "ShowPathbar",
+      "value": true,
+      "tasks": [],
+      "restart": "Finder"
+    },
+    {
+      "id": "finder.statusBar",
+      "category": "Finder",
+      "title": "Show status bar",
+      "enabled": true,
+      "domain": "com.apple.finder",
+      "key": "ShowStatusBar",
+      "value": true,
+      "tasks": [],
+      "restart": "Finder"
+    },
+    {
+      "id": "clock.24Hour",
+      "category": "Menu Bar",
+      "title": "24-hour clock",
+      "enabled": true,
+      "domain": "com.apple.menuextra.clock",
+      "key": "Show24Hour",
+      "value": null,
+      "tasks": []
+    },
+    {
+      "id": "clock.seconds",
+      "category": "Menu Bar",
+      "title": "Show clock seconds",
+      "enabled": true,
+      "domain": "com.apple.menuextra.clock",
+      "key": "ShowSeconds",
+      "value": null,
+      "tasks": []
+    },
+    {
+      "id": "clock.weekday",
+      "category": "Menu Bar",
+      "title": "Show clock weekday",
+      "enabled": true,
+      "domain": "com.apple.menuextra.clock",
+      "key": "ShowDayOfWeek",
+      "value": true,
+      "tasks": []
+    },
+    {
+      "id": "appearance.accent",
+      "category": "Appearance",
+      "title": "System accent color",
+      "enabled": true,
+      "domain": "NSGlobalDomain",
+      "key": "AppleAccentColor",
+      "value": 4,
+      "tasks": []
+    },
+    {
+      "id": "menubar.autoHide",
+      "category": "Menu Bar",
+      "title": "Automatically hide menu bar",
+      "enabled": true,
+      "domain": "NSGlobalDomain",
+      "key": "_HIHideMenuBar",
+      "value": true,
+      "tasks": [
+        "menu-bar"
+      ],
+      "restart": "SystemUIServer"
+    },
+    {
+      "id": "menubar.fullscreen",
+      "category": "Menu Bar",
+      "title": "Show menu bar in full screen",
+      "enabled": true,
+      "domain": "NSGlobalDomain",
+      "key": "AppleMenuBarVisibleInFullscreen",
+      "value": false,
+      "tasks": [
+        "menu-bar"
+      ],
+      "restart": "SystemUIServer"
+    },
+    {
+      "id": "menubar.desktop",
+      "category": "Menu Bar",
+      "title": "Show menu bar on desktop",
+      "enabled": true,
+      "domain": "NSGlobalDomain",
+      "key": "AppleMenuBarVisibleInDesktop",
+      "value": null,
+      "tasks": [
+        "menu-bar"
+      ],
+      "restart": "SystemUIServer"
+    },
+    {
+      "id": "trackpad.builtIn.secondary",
+      "category": "Trackpad",
+      "title": "Two-finger secondary click (builtIn)",
+      "enabled": true,
+      "domain": "com.apple.AppleMultitouchTrackpad",
+      "key": "TrackpadRightClick",
+      "value": true,
+      "tasks": [
+        "trackpad"
+      ]
+    },
+    {
+      "id": "trackpad.builtIn.corner",
+      "category": "Trackpad",
+      "title": "Corner secondary click (builtIn)",
+      "enabled": true,
+      "domain": "com.apple.AppleMultitouchTrackpad",
+      "key": "TrackpadCornerSecondaryClick",
+      "value": 0,
+      "tasks": [
+        "trackpad"
+      ]
+    },
+    {
+      "id": "trackpad.bluetooth.secondary",
+      "category": "Trackpad",
+      "title": "Two-finger secondary click (bluetooth)",
+      "enabled": true,
+      "domain": "com.apple.driver.AppleBluetoothMultitouch.trackpad",
+      "key": "TrackpadRightClick",
+      "value": true,
+      "tasks": [
+        "trackpad"
+      ]
+    },
+    {
+      "id": "trackpad.bluetooth.corner",
+      "category": "Trackpad",
+      "title": "Corner secondary click (bluetooth)",
+      "enabled": true,
+      "domain": "com.apple.driver.AppleBluetoothMultitouch.trackpad",
+      "key": "TrackpadCornerSecondaryClick",
+      "value": 0,
+      "tasks": [
+        "trackpad"
+      ]
+    },
+    {
+      "id": "desktop.widgets",
+      "category": "Appearance",
+      "title": "Hide desktop widgets",
+      "enabled": true,
+      "domain": "com.apple.WindowManager",
+      "key": "StandardHideWidgets",
+      "value": false,
+      "tasks": [
+        "desktop-widgets"
+      ],
+      "minimumOS": 14
+    },
+    {
+      "id": "finder.listOptions",
+      "category": "Finder",
+      "title": "Finder list view details",
+      "enabled": true,
+      "domain": "com.apple.finder",
+      "key": "StandardViewSettings",
+      "value": {
+        "iconSize": 32.0,
+        "textSize": 13.0,
+        "sortColumn": "dateModified",
+        "useRelativeDates": true,
+        "calculateAllSizes": false,
+        "showIconPreview": true,
+        "visibleColumns": [
+          "name",
+          "dateModified",
+          "size",
+          "kind"
+        ],
+        "sortAscending": false
+      },
+      "tasks": [
+        "finder-icons"
+      ],
+      "restart": "Finder",
+      "operation": "finder-list"
+    }
+  ]
+}

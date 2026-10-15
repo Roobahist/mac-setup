@@ -55,14 +55,11 @@ public enum Catalog {
         SetupTask("fonts", "Tools", "Interface and terminal fonts", "Install SF Pro for the reference workspace symbols, Hack Nerd Font, and JetBrains Mono.", dependencies: ["homebrew"], action: .install(packages: ["font-sf-pro", "font-hack-nerd-font", "font-jetbrains-mono"], cask: true, app: nil)),
         SetupTask("aerospace", "Window management", "AeroSpace", "Install the tiling window manager.", dependencies: ["homebrew"], action: .install(packages: ["nikitabobko/tap/aerospace"], cask: true, app: "AeroSpace")),
         SetupTask("aerospace-profile", "Window management", "AeroSpace configuration", "Apply workspace names, key bindings, app rules and SketchyBar integration. Replaces the AeroSpace config folder after backup.", dependencies: ["aerospace"], action: .profile(["aerospace"])),
-        SetupTask("mission-control", "Window management", "Mission Control workspace settings", "Keep Space order fixed and enable separate Spaces per display. Log out and back in for the display setting to take effect.", dependencies: ["aerospace-profile"], action: .preferences([
-            Preference("com.apple.dock", "mru-spaces", false),
-            Preference("com.apple.spaces", "spans-displays", false)
-        ], restart: "Dock")),
+        SetupTask("mission-control", "Window management", "Mission Control workspace settings", "Apply Spaces preferences from macos/preferences.json. Log out and back in for display-space changes.", dependencies: ["aerospace-profile"], action: .preferences([], restart: nil)),
         SetupTask("aerospace-access", "Window management", "AeroSpace access and launch", "Grant Accessibility, then verify that AeroSpace can list workspaces.", dependencies: ["aerospace-profile"], action: .guide(url: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility", app: "AeroSpace", instructions: [
             "In Privacy & Security > Accessibility, add AeroSpace.app if it is missing and enable it.",
             "Launch AeroSpace. Resolve any config errors in its own UI. The profile uses config-version 2 and requires a version supporting it.",
-            "The mission-control task applies Space order and separate-display preferences automatically. Log out and back in before testing if those preferences changed."
+            "The mission-control task applies the Spaces values in macos/preferences.json. Choose separate Spaces per display there if needed; log out and back in after changing that preference."
         ])),
         SetupTask("sketchybar", "Window management", "SketchyBar", "Install the custom menu bar.", dependencies: ["homebrew"], action: .install(packages: ["felixkratz/formulae/sketchybar"], cask: false, app: nil)),
         SetupTask("sketchybar-profile", "Window management", "SketchyBar configuration", "Apply the workspace bar, clock, fonts and colors. Replaces the SketchyBar config folder after backup.", dependencies: ["sketchybar", "aerospace-profile", "fonts"], action: .profile(["sketchybar"])),
@@ -112,19 +109,14 @@ public enum Catalog {
         SetupTask("atuin-profile", "Terminal", "Atuin preferences", "Apply Atuin configuration without history, encryption keys or session tokens.", dependencies: ["atuin"], action: .profile(["atuin"])),
         SetupTask("atuin-shell", "Terminal", "Enable Atuin in zsh", "Append one managed initialization block to .zshrc. Open a new shell afterwards.", dependencies: ["atuin-profile"], action: .atuinShell),
         SetupTask("git-ignore", "Terminal", "Global Git ignore", "Preserve existing rules and append standard macOS ignores. Save the previous Git setting.", action: .gitIgnore),
-        SetupTask("dark-mode", "Appearance", "Dark mode", "Set dark appearance. A logout may be needed for every app to refresh.", action: .preferences([Preference("NSGlobalDomain", "AppleInterfaceStyle", "Dark")], restart: nil)),
-        SetupTask("dock-hide", "Appearance", "Auto-hide Dock; reveal immediately", "Show the hidden Dock promptly when the pointer reaches its edge. macOS animation and edge-trigger behavior still apply.", action: .preferences([
-            Preference("com.apple.dock", "autohide", true), Preference("com.apple.dock", "orientation", "bottom"), Preference("com.apple.dock", "autohide-time-modifier", 0.15), Preference("com.apple.dock", "autohide-delay", 0.0), Preference("com.apple.dock", "show-recents", false)
-        ], restart: "Dock")),
-        SetupTask("dock-minimal", "Appearance", "Clear pinned Dock items", "Remove pinned app and folder tiles after backup. Running apps, Finder and Trash can still appear.", action: .preferences([
-            Preference("com.apple.dock", "persistent-apps", [String]()), Preference("com.apple.dock", "persistent-others", [String]()), Preference("com.apple.dock", "show-recents", false)
-        ], restart: "Dock")),
-        SetupTask("desktop-clean", "Appearance", "Hide desktop files", "Hide Finder's desktop icons without deleting or moving files. Desktop widgets are a separate task.", action: .preferences([Preference("com.apple.finder", "CreateDesktop", false)], restart: "Finder")),
-        SetupTask("finder-list", "Finder", "Default to list view", "Set the preferred Finder view to list. Existing folder view overrides may remain.", action: .preferences([Preference("com.apple.finder", "FXPreferredViewStyle", "Nlsv")], restart: "Finder")),
-        SetupTask("finder-tabs", "Finder", "Prefer windows over tabs", "Disable Finder's folder-tab preference and set the system tab preference to Never. Explicit tab commands remain available.", action: .preferences([
-            Preference("com.apple.finder", "FinderWindowTabs", false), Preference("NSGlobalDomain", "AppleWindowTabbingMode", "manual")
-        ], restart: "Finder")),
-        SetupTask("finder-icons", "Finder", "Finder list-view settings", "Match the reference: list view, no groups, Date Modified sorting, large icons, text 13, selected columns, relative dates and previews. Existing folder overrides may remain.", dependencies: ["finder-list"], action: .finderIcons),
+        SetupTask("macos-preferences", "Appearance", "Shared macOS preferences", "Apply every enabled setting from macos/preferences.json. Per-setting and whole-profile switches are respected; previous values are backed up locally.", action: .preferences([], restart: nil)),
+        SetupTask("dark-mode", "Appearance", "Dark mode", "Apply the appearance preference from macos/preferences.json. Reopen apps or log out if needed.", action: .preferences([], restart: nil)),
+        SetupTask("dock-hide", "Appearance", "Dock visibility and timing", "Apply Dock visibility, position and timing from the shared macOS preference file.", action: .preferences([], restart: nil)),
+        SetupTask("dock-minimal", "Appearance", "Clear pinned Dock items", "Remove pinned app and folder tiles after backup. Running apps, Finder and Trash can still appear.", action: .preferences([], restart: nil)),
+        SetupTask("desktop-clean", "Appearance", "Desktop file visibility", "Apply desktop file visibility from the shared macOS preference file without moving files.", action: .preferences([], restart: nil)),
+        SetupTask("finder-list", "Finder", "Preferred Finder view", "Apply the Finder view chosen in macos/preferences.json. Existing folder overrides may remain.", action: .preferences([], restart: nil)),
+        SetupTask("finder-tabs", "Finder", "Window and tab preferences", "Apply Finder and system tab preferences from the shared macOS preference file.", action: .preferences([], restart: nil)),
+        SetupTask("finder-icons", "Finder", "Finder list-view settings", "Apply Finder list options from macos/preferences.json while preserving unrelated view options. Existing folder overrides may remain.", dependencies: ["finder-list"], action: .finderIcons),
         SetupTask("finder-reset-views", "Finder", "Reset saved folder view overrides (optional)",
                   "Back up and clear .DS_Store view metadata in Desktop, Documents, Downloads, Movies, Music and Pictures. Resets folder icon positions and other per-folder customizations; excludes Library, hidden directories, packages and symlinks.",
                   dependencies: ["finder-icons"], action: .finderResetFolderViews),
@@ -142,26 +134,17 @@ public enum Catalog {
             "In Displays, select each display and choose Larger Text or a lower effective resolution that looks comfortable.",
             "Use a mode offered by this Mac. Do not copy a numeric resolution from a different monitor."
         ])),
-        SetupTask("menu-bar", "Appearance", "Hide the system menu bar", "Set menu-bar auto-hide to Always. Log out and back in if the visible menu bar has not refreshed.", action: .preferences([
-            Preference("NSGlobalDomain", "_HIHideMenuBar", true),
-            Preference("NSGlobalDomain", "AppleMenuBarVisibleInFullscreen", false),
-            Preference("NSGlobalDomain", "AppleMenuBarVisibleInDesktop", false)
-        ], restart: "SystemUIServer")),
+        SetupTask("menu-bar", "Appearance", "System menu bar visibility", "Apply menu-bar visibility from macos/preferences.json. Log out if the menu bar has not refreshed.", action: .preferences([], restart: nil)),
         SetupTask("menu-bar-background", "Appearance", "Native menu bar background",
                   "On macOS 26 and newer, make the system menu bar visually distinct from SketchyBar when revealed.",
                   dependencies: ["menu-bar"],
                   action: menuBarBackgroundAction(macOSMajorVersion:
                       ProcessInfo.processInfo.operatingSystemVersion.majorVersion)),
-        SetupTask("trackpad", "Appearance", "Two-finger secondary click", "Enable two-finger right-click and disable corner secondary clicks for built-in and Bluetooth trackpads. Tap-to-click is preserved; a logout may be needed.", action: .preferences([
-            Preference("com.apple.AppleMultitouchTrackpad", "TrackpadRightClick", true),
-            Preference("com.apple.AppleMultitouchTrackpad", "TrackpadCornerSecondaryClick", 0),
-            Preference("com.apple.driver.AppleBluetoothMultitouch.trackpad", "TrackpadRightClick", true),
-            Preference("com.apple.driver.AppleBluetoothMultitouch.trackpad", "TrackpadCornerSecondaryClick", 0)
-        ], restart: nil)),
+        SetupTask("trackpad", "Appearance", "Two-finger secondary click", "Enable two-finger right-click and disable corner secondary clicks for built-in and Bluetooth trackpads. Tap-to-click is preserved; a logout may be needed.", action: .preferences([], restart: nil)),
         SetupTask("appearance-details", "Appearance", "Default icon colors and Liquid Glass", "Use the default icon appearance and the most transparent available glass style.", action: .guide(url: "x-apple.systempreferences:com.apple.Appearance-Settings.extension", app: nil,
                          instructions: appearanceInstructions(macOSMajorVersion:
                              ProcessInfo.processInfo.operatingSystemVersion.majorVersion))),
-        SetupTask("desktop-widgets", "Appearance", "Hide desktop widgets", "Disable desktop widgets while preserving Stage Manager widget settings. Log out if widgets have not refreshed.", action: desktopWidgetAction(macOSMajorVersion: ProcessInfo.processInfo.operatingSystemVersion.majorVersion)),
+        SetupTask("desktop-widgets", "Appearance", "Desktop widget visibility", "Apply desktop widget visibility from the shared macOS preference file. Log out if widgets have not refreshed.", action: desktopWidgetAction(macOSMajorVersion: ProcessInfo.processInfo.operatingSystemVersion.majorVersion)),
         SetupTask("wallpaper-tools", "Appearance", "Wallpaper color dependencies", "Install Python and ImageMagick for local accent extraction.", dependencies: ["homebrew"], action: .install(packages: ["python", "imagemagick"], cask: false, app: nil)),
         SetupTask("wallpaper-colors", "Appearance", "Match SketchyBar accent to wallpaper", "Extract an accent locally from the current wallpaper and update SketchyBar. Run again after a wallpaper change.", dependencies: ["wallpaper-tools", "sketchybar-profile"], action: .accent),
         SetupTask("wallpaper-watcher", "Appearance", "Automatic wallpaper color updates", "Install the shared watcher and migrate any old standalone watcher startup entry.", dependencies: ["wallpaper-tools", "sketchybar-start"], action: .wallpaperWatcher),
@@ -207,7 +190,7 @@ public enum Catalog {
 
     public static func desktopWidgetAction(macOSMajorVersion: Int) -> TaskAction {
         if macOSMajorVersion >= 14 {
-            return .preferences([Preference("com.apple.WindowManager", "StandardHideWidgets", true)], restart: nil)
+            return .preferences([], restart: nil)
         }
         return .guide(url: nil, app: nil, instructions: ["Desktop widgets require macOS 14 or newer; this setting is unavailable on this Mac."])
     }

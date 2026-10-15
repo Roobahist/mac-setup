@@ -25,6 +25,7 @@ jobs:
         run: |
           swift run --build-system native mac-setup --version
           swift run --build-system native mac-setup profiles
+          swift run --build-system native mac-setup macos plan > /dev/null
           swift run --build-system native mac-setup plan --preset minimal > /dev/null
           swift run --build-system native mac-setup dotfiles status
       - name: Test keyboard-driven terminal navigation

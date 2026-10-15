@@ -46,10 +46,7 @@ public final class Engine {
         case .finderResetFolderViews:
             return .ready // This opt-in operation always requires an explicit run.
         case .finderIcons:
-            let views = try journal.preference("com.apple.finder", "StandardViewSettings") as? [String: Any] ?? [:]
-            let grouping = try journal.preference("com.apple.finder", "FXPreferredGroupBy")
-            let view = try journal.preference("com.apple.finder", "FXPreferredViewStyle")
-            return equalPlist(views, Self.finderListDefaults(views)) && equalPlist(grouping, "None") && equalPlist(view, "Nlsv") ? .done : .ready
+            return try macOSPreferences.matches(taskID: task.id == "macos-preferences" ? nil : task.id) ? .done : .ready
         case let .install(packages, cask, app):
             if let app, appResolver(app, paths.home) != nil { return .done }
             guard let brew = tools("brew") else { return .blocked }
@@ -94,6 +91,7 @@ public final class Engine {
                 return equalPlist(try journal.preference("com.raycast.macos", "raycastGlobalHotkey"),
                                   shortcuts.raycastHotkey) ? .done : .ready
             }
+            if preferences.isEmpty { return try macOSPreferences.matches(taskID: task.id == "macos-preferences" ? nil : task.id) ? .done : .ready }
             return try preferences.allSatisfy { equalPlist(try journal.preference($0.domain, $0.key), $0.value) } ? .done : .ready
         case .vorssaint:
             let stored = try journal.preferences("com.vorssaint.utils")
@@ -148,7 +146,7 @@ public final class Engine {
             lines.append("Opt-in reset for existing Finder per-folder view overrides under user folders. All removed .DS_Store files are backed up for restore.")
             lines.append("Also resets folder icon layout and other per-folder customizations. Hidden paths, packages, symlinks, system and Library folders are excluded.")
         case .finderIcons:
-            lines.append("Back up Finder view defaults. Apply list view, no grouping, Date Modified sorting, large icons, text size 13, Date Modified/Size/Kind columns, relative dates and previews. Preserve widths and unrelated settings. Restart Finder; finish active file operations first.")
+            lines += try macOSPreferences.preview(taskID: task.id == "macos-preferences" ? nil : task.id)
         case let .install(packages, cask, _):
             lines.append("Homebrew installs: " + packages.joined(separator: ", ") + (cask ? " (casks)" : " (formulae)"))
             lines.append("App installations can request administrator approval. Installed packages are not automatically uninstalled by restore.")
@@ -171,6 +169,8 @@ public final class Engine {
         case let .preferences(preferences, restart):
             if task.id == "raycast-profile" {
                 lines.append("com.raycast.macos / raycastGlobalHotkey: \(try shortcutSettings().raycastHotkey)")
+            } else if preferences.isEmpty {
+                lines += try macOSPreferences.preview(taskID: task.id == "macos-preferences" ? nil : task.id)
             } else {
                 lines += preferences.map { "\($0.domain) / \($0.key) → \($0.value)" }
             }
@@ -216,13 +216,9 @@ public final class Engine {
                 for file in files { try journal.remove(file, transaction: id) }
                 try restart("Finder")
             case .finderIcons:
-                var views = try journal.preference("com.apple.finder", "StandardViewSettings") as? [String: Any] ?? [:]
-                views = Self.finderListDefaults(views)
-                try journal.setPreference("com.apple.finder", "StandardViewSettings", views, transaction: id)
-                try journal.setPreference("com.apple.finder", "FXPreferredGroupBy", "None", transaction: id)
-                try journal.setPreference("com.apple.finder", "FXPreferredViewStyle", "Nlsv", transaction: id)
-                try restart("Finder")
-                guard try state(task) == .done else { throw SetupError("Finder icon size verification failed.") }
+                for process in try macOSPreferences.apply(macOSPreferences.profile(), transaction: id, taskID: task.id == "macos-preferences" ? nil : task.id) {
+                    try restart(process)
+                }
             case let .install(packages, cask, app):
                 guard let brew = tools("brew") else { throw SetupError("Install Homebrew first.") }
                 if task.id == "vorssaint" {
@@ -306,6 +302,10 @@ public final class Engine {
                     if shortcuts.usesSpotlightKey { try releaseSpotlightShortcut(transaction: id) }
                     try journal.setPreference("com.raycast.macos", "raycastGlobalHotkey",
                                               shortcuts.raycastHotkey, transaction: id)
+                } else if preferences.isEmpty {
+                    for process in try macOSPreferences.apply(macOSPreferences.profile(), transaction: id, taskID: task.id == "macos-preferences" ? nil : task.id) {
+                        try self.restart(process)
+                    }
                 } else {
                     for preference in preferences {
                         try journal.setPreference(preference.domain, preference.key, preference.value, transaction: id)
@@ -330,7 +330,7 @@ public final class Engine {
             try journal.finish(id)
             return id
         } catch {
-            if (draftLayout != nil || draftShortcuts != nil), isConfigurationTask(task) {
+            if isMacOSPreferenceTask(task) || ((draftLayout != nil || draftShortcuts != nil) && isConfigurationTask(task)) {
                 do {
                     try journal.restore(id)
                     if case let .profile(directories) = task.action {
@@ -352,6 +352,16 @@ public final class Engine {
     private func isConfigurationTask(_ task: SetupTask) -> Bool {
         if case .profile = task.action { return true }
         return task.id == "raycast-profile"
+    }
+
+    private func isMacOSPreferenceTask(_ task: SetupTask) -> Bool {
+        if case .finderIcons = task.action { return true }
+        if case let .preferences(values, _) = task.action { return values.isEmpty }
+        return false
+    }
+
+    public var macOSPreferences: MacOSPreferenceService {
+        MacOSPreferenceService(paths: paths, journal: journal, runner: runner)
     }
 
     private func persistReviewedConfiguration(for task: SetupTask, transaction: String) throws {
@@ -429,40 +439,13 @@ public final class Engine {
     }
 
     public static func finderListDefaults(_ original: [String: Any]) -> [String: Any] {
-        var views = original
-        let existing = ["ListViewSettings", "ExtendedListViewSettingsV2"].filter { views[$0] is [String: Any] }
-        let visible: Set<String> = ["name", "dateModified", "size", "kind"]
-        let identifiers = ["name", "dateModified", "size", "kind", "dateCreated", "dateLastOpened", "dateAdded", "version", "comments", "label", "ubiquity", "shareOwner", "shareLastEditor", "invitationStatus"]
-        for key in existing.isEmpty ? ["ListViewSettings"] : existing {
-            var list = views[key] as? [String: Any] ?? [:]
-            list["iconSize"] = 32.0; list["textSize"] = 13.0
-            list["sortColumn"] = "dateModified"
-            list["useRelativeDates"] = true; list["calculateAllSizes"] = false; list["showIconPreview"] = true
-            if var columns = list["columns"] as? [[String: Any]] {
-                for index in columns.indices {
-                    if let identifier = columns[index]["identifier"] as? String {
-                        columns[index]["visible"] = visible.contains(identifier)
-                        if identifier == "dateModified" { columns[index]["ascending"] = false }
-                    }
-                }
-                for identifier in identifiers where !columns.contains(where: { $0["identifier"] as? String == identifier }) {
-                    columns.append(["identifier": identifier, "visible": visible.contains(identifier), "ascending": identifier != "dateModified"])
-                }
-                list["columns"] = columns
-            } else {
-                var columns = list["columns"] as? [String: [String: Any]] ?? [:]
-                for (index, identifier) in identifiers.enumerated() {
-                    var column = columns[identifier] ?? ["index": index]
-                    column["visible"] = visible.contains(identifier)
-                    if identifier == "dateModified" { column["ascending"] = false }
-                    columns[identifier] = column
-                }
-                for identifier in Array(columns.keys) where !visible.contains(identifier) { columns[identifier]?["visible"] = false }
-                list["columns"] = columns
-            }
-            views[key] = list
+        // Compatibility entry point; all reference values live in the shared file.
+        let url = Paths().profile.appendingPathComponent("macos/preferences.json")
+        guard let profile = try? MacOSProfile(data: Data(contentsOf: url)),
+              let setting = profile.settings.first(where: { $0.operation == "finder-list" }) else {
+            preconditionFailure("Bundled macOS Finder settings are missing or invalid.")
         }
-        return views
+        return setting.resolvedValue(previous: original) as! [String: Any]
     }
 
     private func installHomebrew(transaction: String) throws {

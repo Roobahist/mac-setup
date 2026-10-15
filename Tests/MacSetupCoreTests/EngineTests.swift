@@ -379,6 +379,12 @@ final class EngineTests: XCTestCase {
     func testMissionControlWritesValidBooleanArgumentsAndCanRestore() throws {
         // The real defaults CLI accepts true/false, not NSNumber.stringValue's 0/1.
         let task = try Catalog.task("mission-control")
+        let service = engine.macOSPreferences
+        let explicit = try service.profile()
+            .updating(domain: "com.apple.dock", key: "mru-spaces", value: false)
+            .updating(domain: "com.apple.spaces", key: "spans-displays", value: false)
+        try FileManager.default.createDirectory(at: service.profileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try explicit.encoded().write(to: service.profileURL)
         let record = try engine.apply(task)
         let writes = runner.calls.filter {
             $0.first == "/usr/bin/defaults" && $0.count >= 6 &&
@@ -416,7 +422,7 @@ final class EngineTests: XCTestCase {
         XCTAssertThrowsError(try engine.apply(Catalog.task("dark-mode")))
         let record = try XCTUnwrap(engine.journal.transactions.last)
         XCTAssertFalse(record.complete)
-        XCTAssertEqual(record.changes.count, 1)
+        XCTAssertEqual(record.changes.filter { $0.kind == .preference }.count, 1)
         runner.failWrites = false
         try engine.journal.restore(record.id)
         XCTAssertNil(runner.preferences["NSGlobalDomain"]?["AppleInterfaceStyle"])
@@ -523,7 +529,7 @@ final class EngineTests: XCTestCase {
     func testReadOnlyPlanInputsDoNotCreateState() throws {
         _ = try Catalog.tasks.map { try engine.preview($0) }
         XCTAssertFalse(Journal.exists(paths.state))
-        XCTAssertTrue(runner.calls.isEmpty)
+        XCTAssertTrue(runner.calls.allSatisfy { $0.first == "/usr/bin/defaults" && $0[1] == "export" })
     }
 
     func testLockRefusesConcurrentMutation() throws {

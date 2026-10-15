@@ -15,7 +15,7 @@ import tomllib
 ROOT = Path(__file__).resolve().parents[1]
 PROFILE = ROOT / "Sources/MacSetupCore/Resources/Profile"
 SOURCE_URL = "https://github.com/Roobahist/dot-files.git"
-SHARED_DIRS = {"aerospace", "alacritty", "atuin", "karabiner", "sketchybar", "unsplash"}
+SHARED_DIRS = {"aerospace", "alacritty", "atuin", "karabiner", "sketchybar", "unsplash", "macos"}
 REFERENCE = ROOT / "Sources/MacSetupCore/Resources/ReferenceProfile.json"
 
 

@@ -69,6 +69,7 @@ struct TweakControl: View {
         }
         .setupCard()
         .onAppear(perform: load)
+        .onReceive(NotificationCenter.default.publisher(for: MacOSPreferenceService.groupDidChange).receive(on: RunLoop.main)) { _ in load() }
     }
 
     private func load() {

@@ -127,11 +127,11 @@ public final class Journal {
         try FileManager.default.removeItem(at: target)
     }
 
-    public func write(_ target: URL, data: Data, transaction: String, executable: Bool = false) throws {
+    public func write(_ target: URL, data: Data, transaction: String, executable: Bool = false, permissions: Int? = nil) throws {
         let temp = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try data.write(to: temp)
         defer { try? FileManager.default.removeItem(at: temp) }
-        try FileManager.default.setAttributes([.posixPermissions: executable ? 0o755 : 0o644], ofItemAtPath: temp.path)
+        try FileManager.default.setAttributes([.posixPermissions: permissions ?? (executable ? 0o755 : 0o644)], ofItemAtPath: temp.path)
         try replace(target, with: temp, transaction: transaction)
     }
 

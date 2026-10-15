@@ -364,7 +364,8 @@ struct ControlCenterView: View {
     private func scrollSettings(_ title: String, category: String) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: SetupDesign.pageSpacing) {
-                SetupPageHeader(title, subtitle: "Changes are applied individually and saved to the recovery journal.")
+                SetupPageHeader(title, subtitle: "Changes update the shared macOS preference file and are saved to the recovery journal.")
+                if category == "Appearance" { MacOSPreferencesControl(engine: model.engine) }
                 ForEach(TweakRegistry.filtered("", category: category)) { tweak in
                     TweakControl(tweak: tweak,
                         service: TweakService(journal: model.engine.journal,
