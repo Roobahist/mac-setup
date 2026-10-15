@@ -911,6 +911,18 @@ struct SetupView: View {
         }
         .frame(maxWidth: 720)
         .frame(maxWidth: .infinity)
+        .contextMenu {
+            Button("Move up") { moveWorkspace(item.id, by: -1) }
+                .disabled(index == 0)
+            Button("Move down") { moveWorkspace(item.id, by: 1) }
+                .disabled(index == model.layout.workspaces.count - 1)
+        }
+        .accessibilityAction(named: Text("Move workspace up")) {
+            moveWorkspace(item.id, by: -1)
+        }
+        .accessibilityAction(named: Text("Move workspace down")) {
+            moveWorkspace(item.id, by: 1)
+        }
         .dropDestination(for: String.self) { dragged, location in
             let prefix = "mac-setup-workspace:\(workspaceDragSession):"
             guard dragged.count == 1, let raw = dragged.first, raw.hasPrefix(prefix) else { return false }
@@ -924,6 +936,14 @@ struct SetupView: View {
         } isTargeted: { hovering in
             if hovering { dropTargetWorkspaceID = item.id }
             else if dropTargetWorkspaceID == item.id { dropTargetWorkspaceID = nil }
+        }
+    }
+
+    private func moveWorkspace(_ id: String, by offset: Int) {
+        guard let index = model.layout.workspaces.firstIndex(where: { $0.id == id }),
+              model.layout.workspaces.indices.contains(index + offset) else { return }
+        withAnimation(.easeInOut(duration: 0.16)) {
+            model.layout.insertWorkspace(id, at: offset < 0 ? index - 1 : index + 2)
         }
     }
 
@@ -1092,7 +1112,10 @@ struct SetupView: View {
 
     private var finished: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text(model.results.values.contains("Pending") ? "Setup saved; some tasks still need attention" : "Setup complete").font(.title2.bold())
+            Text(model.results.values.contains("Pending")
+                 ? "Setup saved; some tasks still need attention"
+                 : (model.runtimeIssues.isEmpty ? "Setup tasks finished" : "Files updated; live checks need attention"))
+                .font(.title2.bold())
             Button { copyLog() } label: { Label("Copy apply log", systemImage: "doc.on.doc") }
             Text("Move the pointer to the bottom edge: the Dock should reveal promptly. The macOS menu bar should hide when the pointer leaves the top. Its reveal timing is controlled by macOS. If it still stays visible, set Automatically hide and show the menu bar to Always in System Settings, then log out and back in.")
             Text("Check the workspace highlight with your chosen modifiers and destination key, then use the move-window shortcut to send a window to another workspace.")
@@ -1125,8 +1148,8 @@ struct SetupView: View {
             switch model.page {
             case .workspaces, .shortcuts:
                 Text(model.page == .workspaces
-                     ? (model.workspaceHasDraftChanges ? "Draft changes are not yet active." : "Workspace order is saved.")
-                     : (model.shortcutsHaveDraftChanges ? "Shortcut changes are not yet active." : "Shortcuts are saved."))
+                     ? (model.workspaceHasDraftChanges ? "Workspace edits are not confirmed active." : "No local workspace edits.")
+                     : (model.shortcutsHaveDraftChanges ? "Shortcut edits are not confirmed active." : "No local shortcut edits."))
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button(model.page == .workspaces ? "Review & apply workspaces" : "Review & apply shortcuts") {
