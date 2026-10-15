@@ -86,7 +86,7 @@ struct WorkspacePickerUI {
                             index += 1
                         }
                         layout.workspaces.insert(
-                            WorkspaceDefinition(id: id, name: "New Workspace", glyph: "terminal"),
+                            WorkspaceDefinition(id: id, name: "New Workspace", glyph: "terminal", shortcutKey: ""),
                             at: selected + 1)
                         selected += 1
                         message = "Choose R to rename the workspace ID, N for its label, or G for a glyph."
@@ -107,12 +107,12 @@ struct WorkspacePickerUI {
                         page = .apps; query = ""; resultCursor = 0
                     case "[":
                         if selected > 0 {
-                            layout.workspaces.swapAt(selected, selected - 1)
+                            layout.insertWorkspace(layout.workspaces[selected].id, at: selected - 1)
                             selected -= 1
                         }
                     case "]":
                         if selected < layout.workspaces.count - 1 {
-                            layout.workspaces.swapAt(selected, selected + 1)
+                            layout.insertWorkspace(layout.workspaces[selected].id, at: selected + 2)
                             selected += 1
                         }
                     default: break
@@ -136,7 +136,7 @@ struct WorkspacePickerUI {
                     guard layout.workspaces.count > 1 else {
                         message = "At least one workspace is required."; page = .workspaces; break
                     }
-                    layout.workspaces.remove(at: selected)
+                    layout.removeWorkspace(layout.workspaces[selected].id)
                     selected = min(selected, layout.workspaces.count - 1)
                     page = .workspaces
                 case .character("n"), .escape: page = .workspaces
@@ -222,8 +222,10 @@ struct WorkspacePickerUI {
                         } else { page = .workspaces }
                     } else if page == .editName {
                         guard !candidate.isEmpty else { message = "Name cannot be empty."; break }
-                        layout.workspaces[selected].name = candidate
-                        page = .workspaces
+                        do {
+                            try layout.renameWorkspace(layout.workspaces[selected].id, to: candidate)
+                            page = .workspaces
+                        } catch { message = String(describing: error) }
                     } else {
                         guard !candidate.isEmpty else { message = "Enter an app bundle ID."; break }
                         let previous = layout

@@ -94,7 +94,7 @@ public enum Catalog {
             "In Raycast Settings > General, enable Launch Raycast at login. Press the chosen launcher shortcut and confirm that Raycast opens."
         ])),
         SetupTask("karabiner", "Apps", "Karabiner-Elements", "Install the keyboard remapping tool.", dependencies: ["homebrew"], action: .install(packages: ["karabiner-elements"], cask: true, app: "Karabiner-Elements")),
-        SetupTask("karabiner-profile", "Apps", "Karabiner configuration", "Render editable application hotkeys into Karabiner's Portable profile, preserving existing advanced rules. Back up the configuration first.", dependencies: ["karabiner"], action: .profile(["karabiner"])),
+        SetupTask("karabiner-profile", "Apps", "Karabiner configuration", "Apply and select the reference Portable profile with separate application rules. Keep other installed profiles and back up the previous configuration.", dependencies: ["karabiner"], action: .profile(["karabiner"])),
         SetupTask("karabiner-access", "Apps", "Karabiner permissions", "Use Karabiner's own setup assistant for its helper permissions and driver approval.", dependencies: ["karabiner-profile"], action: .guide(url: "x-apple.systempreferences:com.apple.LoginItems-Settings.extension", app: "Karabiner-Elements", instructions: [
             "Background services: in System Settings > General > Login Items & Extensions, allow the Karabiner background services shown by its assistant. Keep the privileged core service and the user agent enabled.",
             "Driver Extension: in General > Login Items & Extensions > Driver Extensions, allow org.pqrs.Karabiner-DriverKit-VirtualHIDDevice. This is required even after installing Karabiner; without it the remappings do not work.",

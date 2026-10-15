@@ -1,54 +1,73 @@
-# mac-setup engineering audit
+# Reference fidelity and application audit
 
-Audit date: 2026-10-14. Target: SwiftUI control center, CLI, profile generation, system application, recovery, and package tests.
+Audit started 2026-10-14; verification completed 2026-10-15 (America/Edmonton).
 
-## Priority and evidence
+## Outcome
 
-| Priority | Finding and root cause | Location | Status |
-| --- | --- | --- | --- |
-| P0 | A successful profile copy and `sketchybar --reload` exit were presented as applied changes even when the active bar retained its old workspace order. | `Engine.apply(.profile)`, `SetupModel.advance` | **Addressed in code:** poll the live bar after reload; report mismatches. Requires physical Mac verification. |
-| P0 | Configuration JSON can be saved before all requested installation and runtime operations succeed. The JSON drafts are now backed up in their own journal transaction, but a partial task sequence can still leave persisted configuration ahead of active system state. Restoration of the configuration snapshot and successful profile transactions is not yet coordinated automatically. | `SetupModel.start`, `WorkspaceConfiguration.save`, `Journal.restore` | **Partially addressed:** drafts have independent journal recovery IDs. Still open: one transaction boundary spanning editor drafts, profile writes, service reloads, and automatic rollback. Do not treat this as solved by the runtime probe. |
-| P1 | An app-only full setup saved otherwise unrelated workspace and shortcut drafts. | `SetupModel.start` | **Fixed in code:** write only configuration associated with selected profile tasks. |
-| P1 | Workspace order was compared against generated files, not the active menu bar. AeroSpace's own `list-workspaces --all` can sort by workspace name rather than persistent-workspaces order. | `WorkspaceConfiguration.sketchybarShell`, `Engine` | **Addressed in code:** compare ordered `space.*` item names from SketchyBar's live `--query bar` JSON. Check AeroSpace membership and active config path separately. |
-| P1 | SketchyBar color/spacing/blur changes depended on literal bundled default values. Template updates could produce unchanged files and false success. | `WorkspaceBarStyle.colorsShell`, `WorkspaceConfiguration.sketchybarShell` | **Fixed in code:** replace assignment values irrespective of original defaults; reject absent or duplicate assignments. |
-| P1 | Related SketchyBar controls were divided between Workspaces and Appearance while Appearance also controls native macOS colors. | `NativeSetup.swift`, `ControlCenter.swift` | **Fixed in code:** workspace/bar styling and wallpaper accent watcher live together in Workspaces. Native appearance remains separate. |
-| P1 | Reordering depended on precision dragging, with no equivalent context-menu or accessibility move action. | `NativeSetup.workspaceCard` | **Addressed in code:** Move up/down actions, while preserving existing drag/drop and shortcuts. |
-| P1 | One native `ControlCenter` uses `SetupView` for shortcut/workspace editing, but feature choosing and page layout are still implemented in both `ControlCenter` and standalone `SetupView`. | `ControlCenter.swift`, `NativeSetup.swift` | **Open:** extract reusable feature picker and a view-independent coordinator instead of copying another set of controls. |
-| P1 | Saved, draft and truly active configuration are not consistently modeled as separate states. `appliedLayout` was refreshed from persisted JSON without querying runtime. | `SetupModel` | **Partially addressed:** a failed runtime probe keeps the last checked layout; a full state-machine refactor remains open. |
-| P2 | No automated pixel/screenshot baselines or full UI interaction tests; existing Python sidebar test checks source structure rather than rendering. | `scripts/test-native-sidebar.py`, CI | **Open:** add macOS UI harness and versioned snapshots on each supported SDK/window size. |
-| P2 | Settings that macOS may cache or change across OS releases need physical user-session confirmation, not solely `defaults` reads. | `TweakService`, preference tasks, system restart paths | **Open for manual verification** on clean test accounts for each target macOS version. |
+Mac Setup's default behavior now comes from the portable files it ships. The source revision and SHA-256 for each allowlisted file are recorded in `ReferenceProfile.json`. Workspace order, destination keys, modifier sets, app routing, display assignments, glyphs, fonts and bar palette are compiled from those files by `sync-dotfiles.py`. The build and release workflows verify the snapshots and the generated defaults together.
 
-## Verification contract
+The app preserves separate Karabiner application rules. Customization changes the selected rule, instead of flattening the source into a replacement rule containing several applications. Existing user choices are retained on upgrade; new installations use the reference Alacritty action rather than a silent Terminal substitution.
 
-The app should distinguish four things: editor draft, saved configuration, installed profile files, and running desktop state. The new runtime probe covers the last distinction for workspace presence and SketchyBar order. It does **not** prove that actual keyboard shortcuts navigate and move windows, that wallpaper notifications propagate, or that every control is visible and clickable.
+## Scope and evidence
 
-SketchyBar order is taken from the `items` array in `sketchybar --query bar`, filtering `space.` items. A matching file on disk is not proof of a matching bar. AeroSpace `list-workspaces --all` is used to check *membership*, not order. When the bar or AeroSpace cannot be queried, validation is explicitly unresolved.
+Reviewed the app's core, native and terminal interfaces, profile resources, task catalog and presets, installation/update scripts, recovery journal, startup services, permission guides, synchronization and packaging. Compared the public source, bundled snapshots and the author's active local configuration. Karabiner's CLI confirmed the active local profile. No setup changes were applied to the author's desktop during this audit.
 
-## Tests added in this branch
+The initial 154-test suite had 12 failures on this development machine. Several tests accidentally consulted globally installed applications, and one real preference integration test lacked the required sandbox access. App discovery is now injectable; the preference round-trip uses a disposable file domain.
 
-- Strict, section-scoped SketchyBar profile substitutions and refusal of stale/missing/duplicate assignments.
-- Live SketchyBar JSON order checks, including missing and malformed results.
-- AeroSpace workspace membership independent of CLI enumeration ordering.
-- Engine integration with an injected fake process runner and controlled output for active config, order mismatch, and retry/failure after reload.
-- Journaled workspace and shortcut draft saves, isolation of app-only runs, and restoration of prior JSON or missing files.
-- Native workspace move controls have bounded destination indices through the existing `insertWorkspace` logic.
+## Findings and repairs
 
-Existing macOS CI continues to run all XCTest suites, CLI smoke tests, shell lint, public profile validation, terminal navigation tests, and package build. CI success is not a UI screenshot comparison or a physical live session.
+| Priority | Finding | Repair and regression evidence |
+| --- | --- | --- |
+| P1 | The renderer deleted separate Alacritty, VS Code and Finder rules and generated one `Mac Setup: Custom shortcuts` rule. | Retain source rule order, descriptions, manipulators and action data. Each custom launch action has its own rule. Semantic equality test for untouched Karabiner JSON; one-rule edit regression. |
+| P1 | Fresh defaults changed the terminal action from Alacritty to Terminal; upgrade migration could also change a user's launcher. | Derive new app-launch defaults from source. Format migration retains existing terminal and Raycast assignments. |
+| P1 | Optimized validators passed `CharacterSet.contains` as a bound method predicate, producing false failures for valid IDs on the tested toolchain. | Reproduced outside the app: `ai` and `chatgpt` fail the optimized bound predicate and pass an explicit closure. Replace bound predicates in ID, bundle and font validation; run optimized tests and validate the packaged reference. |
+| P1 | `AI` was a display label attached to the old `chatgpt` runtime identity. There was no explicit identity migration. | Source and new defaults use `ai`. Known old `chatgpt` + `AI` entries get an explained draft migration. Custom names and existing `ai` identities are protected. |
+| P1 | Renaming changed only an editor label; hidden runtime IDs survived. | Native and terminal rename update the runtime identity; show the ID. Regenerate shortcuts, routes, bar entries and display assignments from that identity. |
+| P1 | Removing a workspace shifted inherited number-row shortcuts; terminal reorder used a different policy from native reorder. | Materialize keys before structural edits. Both reorder paths use the same insertion operation. Additions start unbound. |
+| P1 | Routing rules were silently removed based on installed apps and optional installer choices. | Keep all saved routes, including Telegram, Spotify, Obsidian and Tomito. Missing applications can be installed later without another profile edit. |
+| P1 | Native app assignment editing hid saved applications that were not installed and relied on a mutable array index. | Identify the selected workspace by ID; show saved missing apps, search bundle IDs, and allow explicit bundle ID assignment. |
+| P1 | Default workspace data was independently hardcoded in Swift and could disagree with source snapshots. | Generate reference metadata from the TOML, Karabiner JSON and restricted shell icon/font declarations. Reject unsupported source changes rather than executing shell or guessing. |
+| P1 | The bundled AeroSpace/SketchyBar/wallpaper files differed from the public source. Blind synchronization also removed app-only runtime fixes. | Reconcile source fixes first, then synchronize. Promote bounded wallpaper processing, portable ImageMagick lookup and workspace refresh fixes to dot-files. Hash-check all 20 shared files. |
+| P1 | A changed bar palette counted as verified merely because the file contained `HIGHLIGHT_COLOR=`. | Compare the rendered palette; wallpaper accent changes remain in their independent cache. Regression changes an installed bar color and requires Ready, not Verified. |
+| P1 | Full setup saved editor JSON before profile prerequisites and writes succeeded. Resume could save unrelated drafts and skip already-completed profiles after inputs changed. | Keep reviewed drafts in memory. Persist only the component whose profile task succeeded, in that task's journal transaction. Resolve selection once for review/apply/resume and invalidate affected completed profiles after edits. |
+| P1 | Dedicated editor applies could leave JSON and earlier profile writes ahead of a failed later task. | Coordinated recovery restores changed profiles and saved JSON in reverse order; retain the draft. Retry restarts the editor operation. Report restore or reload failures explicitly. |
+| P1 | Workspace behavior, global workspace modifiers, bar styling and wallpaper automation were divided inconsistently. | Workspaces owns destinations, routing, display selection and shared workspace modifiers. Workspace Bar owns SketchyBar visuals and explicit accent controls. Keyboard Shortcuts owns other provider actions. Each apply saves its selected scope. |
+| P1 | Generator key names were valid for AeroSpace but invalid for many Karabiner keys. Invalid modifier/duplicate data could trap during generation. | Map physical key names explicitly and validate before constructing rules; reject duplicate IDs without dictionary or forced-modifier crashes. |
+| P1 | Advanced disabled examples were shown enabled, and enabling them retained their JSON `enabled: false` flag. | Respect the source flag in the editor and reconcile it on generation. Keep disabled rules visible and structurally intact. |
+| P1 | Applying the reference Karabiner profile overwrote other installed profiles. Script paths also ignored a custom configuration directory. | Preserve other profiles and global preferences; explicitly select Portable. Adapt script paths only in generated local files. Retain source actions when only keys change. |
+| P1 | The wallpaper migration depended on the literal wording of a source comment. | Locate the cache loader by its assignment, so a harmless comment edit does not break migration. |
+| P1 | Productivity included the optional Finder folder-metadata reset. | Exclude the reset from every preset; retain it as an explicit opt-in action. Regression covers every preset. |
+| P2 | `dotfiles update --dry-run` could still pull; editor commands accepted an ineffective dry-run flag. | Preview the pull without writing; reject dry-run for interactive editor commands and direct users to `plan`. |
+| P2 | Synchronization lacked a source/defaults parity gate and could race another local synchronization. | Verify recorded hashes and regenerated defaults in CI/releases; reject dirty source snapshots; serialize synchronization; stage metadata before replacing profiles. Test source glyph/color changes, dynamic shell rejection and allowlist path boundaries. |
 
-## Manual macOS validation checklist
+## Local configuration compared with public source
 
-Use a disposable macOS user account with AeroSpace and SketchyBar installed. Back up the configuration before proceeding. Validate on a current supported macOS release and at least one older supported release, using narrow and wide windows.
+- **Karabiner:** the active local profile has Chrome, Alacritty, Visual Studio Code and Finder as separate enabled rules. Their portable versions retain that structure and behavior after personal script paths are replaced with quoted runtime paths. Private disabled workflow rules are deliberately excluded; one generic disabled example remains. Public profile name `Portable` is an intentional distribution adaptation.
+- **Telegram:** the inspected active local Karabiner JSON and its scripts contain no separate Telegram launch mapping. AeroSpace routes Telegram to Messages, and Option+0 switches to Messages. Both are retained and checked. The audit does not invent an unobserved Telegram launch chord.
+- **AeroSpace:** local `chatgpt` naming is a legacy runtime ID. The requested public identity is now `ai` throughout persistent workspaces, destinations and routing. Tiling rules remain source-owned, including additional non-routing rules added later.
+- **SketchyBar:** the source used SF Pro private-use symbols with incompatible font selection in some workspaces. The public font mapping and app defaults now use SF Pro for those symbols, with Hack Nerd Font for numbers. Recipient-specific display geometry remains an explicit app adaptation; it is not baked into the portable source.
+- **Wallpaper:** local color changes remain local. Source files support a validated cache override; no wallpaper image or personal path is published. Large images are normalized once, extraction stages time out, and ImageMagick is located portably rather than hardcoded to an Apple silicon Homebrew path.
+- **Other preferences:** Vorssaint's portable export remains independently bundled. Raycast's global Option+R launcher matches the inspected local preference. Private extension databases, account settings and usage history are outside the portable profile.
 
-1. Launch the control center, navigate every sidebar section with the sidebar expanded and collapsed, and confirm icons, selection highlights, search, focus, and labels remain aligned. Capture comparable screenshots at minimum and expanded window sizes.
-2. In Workspaces, reorder by drag/drop and by context-menu Move up/down; rename a card, edit its glyph, edit app assignments, and edit the bar palette, blur, and spacing. Review without applying, close/reopen, confirm draft behavior, then apply.
-3. Inspect `aerospace config --config-path` and `aerospace list-workspaces --all`. Inspect the `items` array from `sketchybar --query bar` and confirm that its `space.*` entries follow the saved order. Confirm visible order on every active display.
-4. Intentionally stop SketchyBar, apply the selected profile, restart SketchyBar, then use “Check running apps again.” Confirm no false success when live state is unavailable or stale.
-5. Trigger a bad SketchyBar configuration and check the recovery record, Retry, Undo, and later reapplication. Confirm user settings and unrelated dotfiles remain intact.
-6. Change shortcut mappings, apply them, switch and move real windows using AeroSpace, and confirm Karabiner/Raycast bindings work with their required permissions. Repeat after relaunch and reboot.
-7. Toggle the wallpaper watcher **only after explicit user action**, change the wallpaper, apply manual color, and verify neither setting silently activates the other. Check startup state after reboot.
-8. Test Dock, Finder, system clock, macOS accent, installed apps, and startup tasks on the real machine. For each, compare before/after settings, UI behavior, return codes, persistence, and Undo/Reset/Refresh.
-9. Test failures (missing dependency, bad config syntax, process unavailable, denied permissions, conflicting saved files) and check each error is shown once with a usable recovery path.
+The reported invalid-ID error was reproduced in the optimized build. The debug validator accepted `chatgpt`, but the release validator's bound character-set predicate rejected valid IDs. A minimal optimized executable reproduced the difference between the bound predicate and an explicit closure. Packaged UI validation also exposed a font predicate failure missed by the original debug-only suite. The validators now use explicit closures; release-mode regression tests and packaged reference validation guard against recurrence. The stale AI identity was a separate defect and is migrated explicitly.
 
-## Remaining release gates
+## Verification and limits
 
-This branch is **not** an audited release of the entire app. The cross-system transaction/rollback model, all-setting functional smoke tests, independent SwiftUI snapshot tests, and physical macOS verification must be completed before calling the overhaul validated or merging its PR.
+The regression suite covers source rule parity, customization, persistence, provider conflicts, workspace identity/order/keys, palette drift, live response parsing, installed-app isolation, preference round-trip, startup registration, watcher behavior, journal restore and injected apply failures. Python checks cover the portable public allowlist, wallpaper pipeline, source-derived defaults, sidebar structure and installer isolation. Packaging checks the reference resource from inside the actual app bundle.
+
+Local verification results:
+
+- Apple Swift 6.4 / Xcode 27 on Apple silicon: **175 debug tests and 175 optimized release tests pass**.
+- Native packaged UI: moved AI down and back without an invalid-ID error; renamed AI to Research and verified `research`; restored the original draft; workspace review lists AeroSpace plus SketchyBar; Workspace Bar review lists only SketchyBar. No Apply action was invoked.
+- Public dot-files privacy/allowlist and wallpaper checks pass, including GitHub CI on the paired source pull request.
+- App source parity/default generation, wallpaper, sidebar, installer isolation and shell checks pass.
+- Interactive terminal navigation is exercised through a pseudo-terminal, with setup cancelled before applying changes.
+- Packaged app validates its bundled reference and wallpaper helper from inside the `.app`.
+
+A saved file, a successful reload request and verified running behavior remain distinct. Runtime queries check AeroSpace membership/config path and SketchyBar item order. Missing applications or stale runtime responses remain visible as verification issues. Automated checks do not prove physical keyboard permission behavior, monitor hot-plug behavior, every macOS preference's visible effect, or every supported macOS version.
+
+Full setup is intentionally incremental: successfully installed applications and completed tasks remain when a later task fails. Each successful profile's saved inputs are journaled with its files; an unfinished profile cannot publish its draft as saved configuration. Dedicated editor configuration batches roll back on failure. Restore still protects later external edits and reports conflicts rather than force-overwriting them.
+
+## Review and release
+
+Review the paired dot-files change before merging this app change, so source synchronization cannot propose reverting the updated reference. The app change pins the reviewed source commit. No production release or installation is performed by this audit. Before shipping broadly, exercise physical switch/move shortcuts, app launch actions, permissions, multiple displays and login behavior on a disposable account and supported macOS versions.

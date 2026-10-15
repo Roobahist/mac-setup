@@ -11,6 +11,10 @@ public final class Engine {
     /// Optional task choices captured from the setup checklist. A nil value
     /// retains all saved workspaces for standalone profile reapplication.
     public var selectedWorkspaceTaskIDs: Set<String>?
+    /// A full setup renders reviewed drafts in memory. Each profile task journals
+    /// its own matching settings only after its file write and reload succeed.
+    public var draftLayout: WorkspaceConfiguration?
+    public var draftShortcuts: ShortcutSettings?
     public var deferRestarts = false
     /// Tunable for headless integration tests and slower desktop reloads.
     public var workspaceVerificationAttempts = 10
@@ -18,10 +22,11 @@ public final class Engine {
     public private(set) var pendingRestarts = Set<String>()
     private let displayHelper: URL?
     private var brewRefreshed = false
+    private let appResolver: (String, URL) -> String?
     private let tools: (String) -> String?
 
-    public init(paths: Paths = Paths(), runner: CommandRunning = ProcessRunner(), dotfilesSource: DotfilesSource? = nil, displayHelper: URL? = AppResources.displayHelperURL, tools: @escaping (String) -> String? = executable) throws {
-        self.paths = paths; self.runner = runner; self.tools = tools; self.displayHelper = displayHelper
+    public init(paths: Paths = Paths(), runner: CommandRunning = ProcessRunner(), appResolver: @escaping (String, URL) -> String? = appPath, dotfilesSource: DotfilesSource? = nil, displayHelper: URL? = AppResources.displayHelperURL, tools: @escaping (String) -> String? = executable) throws {
+        self.paths = paths; self.runner = runner; self.tools = tools; self.appResolver = appResolver; self.displayHelper = displayHelper
         let record = try Journal(paths: paths, runner: runner)
         journal = record
         dotfiles = LinkedDotfiles(paths: paths, runner: runner, journal: record, source: dotfilesSource)
@@ -38,7 +43,7 @@ public final class Engine {
             let view = try journal.preference("com.apple.finder", "FXPreferredViewStyle")
             return equalPlist(views, Self.finderListDefaults(views)) && equalPlist(grouping, "None") && equalPlist(view, "Nlsv") ? .done : .ready
         case let .install(packages, cask, app):
-            if let app, appPath(app, home: paths.home) != nil { return .done }
+            if let app, appResolver(app, paths.home) != nil { return .done }
             guard let brew = tools("brew") else { return .blocked }
             // A failed cask pkg install can leave a Homebrew registration behind,
             // even though the application itself was never installed.
@@ -48,7 +53,7 @@ public final class Engine {
                 return result.status == 0 && !result.text.isEmpty
             } ? .done : .ready
         case let .appStore(app, _):
-            return appPath(app, home: paths.home) != nil ? .done : .guided
+            return appResolver(app, paths.home) != nil ? .done : .guided
         case .linkedDotfiles:
             return dotfiles.status()
         case let .profile(directories):
@@ -104,7 +109,7 @@ public final class Engine {
         case let .loginItems(names):
             // Inspect only our own journal during initial inventory, never
             // prompt System Events just to draw the feature-selection screen.
-            let apps = StartupLoginItems.installedPaths(names: names, home: paths.home)
+            let apps = StartupLoginItems.installedPaths(names: names, home: paths.home, resolve: appResolver)
             guard !apps.isEmpty else { return .ready }
             return journal.transactions.contains { record in
                 record.task == task.id && record.complete &&
@@ -167,7 +172,7 @@ public final class Engine {
         case .accent:
             lines.append("Read the current wallpaper locally and write a validated accent into the local cache, without editing tracked dotfiles. No background watcher is installed.")
         case let .loginItems(names):
-            let installed = StartupLoginItems.installedPaths(names: names, home: paths.home)
+            let installed = StartupLoginItems.installedPaths(names: names, home: paths.home, resolve: appResolver)
             lines.append("Register installed apps in System Settings > General > Login Items & Extensions > Open at Login, preserving other items.")
             lines += installed.map { "Add at login if missing: \($0)" }
             lines.append("System Events may request macOS Automation approval. SketchyBar starts through Homebrew and the shared wallpaper watcher through its LaunchAgent; no duplicate entries are created for those background jobs.")
@@ -212,12 +217,12 @@ public final class Engine {
                     #endif
                     guard ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 14 else { throw SetupError("Vorssaint requires macOS 14 or later.") }
                 }
-                if app == nil || appPath(app!, home: paths.home) == nil {
+                if app == nil || appResolver(app!, paths.home) == nil {
                     for package in packages {
                         let installed = try runner.run(brew, ["list", cask ? "--cask" : "--formula", "--versions", package])
                         if installed.status != 0 || installed.text.isEmpty {
                             try runner.checked(brew, ["install"] + (cask ? ["--cask"] : []) + [package], interactive: true)
-                        } else if cask, let app, appPath(app, home: paths.home) == nil {
+                        } else if cask, let app, appResolver(app, paths.home) == nil {
                             // Resume a partially installed cask without disturbing
                             // packages whose installed application is already present.
                             try runner.checked(brew, ["reinstall", "--cask", package], interactive: true)
@@ -255,7 +260,7 @@ public final class Engine {
                             try runner.checked(sketchybar, ["--reload"])
                             // A zero exit code only confirms receipt of the reload request.
                             // Wait for the active bar to expose the new item order.
-                            let expected = try WorkspaceConfiguration.load(from: paths).workspaces.map(\.id)
+                            let expected = try workspaceConfiguration().workspaces.map(\.id)
                             var issue: String?
                             let attempts = max(1, workspaceVerificationAttempts)
                             for attempt in 0..<attempts {
@@ -301,15 +306,110 @@ public final class Engine {
             case .accent: try applyAccent(transaction: id, image: image)
             case .wallpaperWatcher: try installWallpaperWatcher(transaction: id, image: image)
             case let .loginItems(names):
-                for path in StartupLoginItems.installedPaths(names: names, home: paths.home) {
+                for path in StartupLoginItems.installedPaths(names: names, home: paths.home, resolve: appResolver) {
                     try journal.registerLoginItem(path, transaction: id)
                 }
             case .guide: break
             }
+            try persistReviewedConfiguration(for: task, transaction: id)
             try journal.finish(id)
             return id
         } catch {
+            if (draftLayout != nil || draftShortcuts != nil), isConfigurationTask(task) {
+                do {
+                    try journal.restore(id)
+                    if case let .profile(directories) = task.action {
+                        for (name, query, reload) in [("aerospace", ["list-workspaces", "--all"], ["reload-config"]),
+                                                      ("sketchybar", ["--query", "bar"], ["--reload"])] {
+                            guard directories.contains(name), let tool = tools(name),
+                                  (try? runner.run(tool, query).status) == 0 else { continue }
+                            try runner.checked(tool, reload)
+                        }
+                    }
+                }
+                catch { throw SetupError("Profile failed and recovery needs attention: \(error). Recovery record: \(id)") }
+                throw SetupError("Profile was not applied; its previous files and saved settings were restored. \(error)")
+            }
             throw SetupError("\(error)\nRecovery record: \(id). Run mac-setup restore \(id) to undo recorded changes; installed apps remain installed.")
+        }
+    }
+
+    private func isConfigurationTask(_ task: SetupTask) -> Bool {
+        if case .profile = task.action { return true }
+        return task.id == "raycast-profile"
+    }
+
+    private func persistReviewedConfiguration(for task: SetupTask, transaction: String) throws {
+        guard (draftLayout != nil || draftShortcuts != nil), isConfigurationTask(task) else { return }
+        let template = try String(contentsOf: paths.profile.appendingPathComponent("aerospace/aerospace.toml"), encoding: .utf8)
+        let savedLayout = try WorkspaceConfiguration.loadForEditing(from: paths).original
+        let savedShortcuts = try ShortcutSettings.load(from: paths, aerospaceTemplate: template)
+        let selected = SelectedConfiguration(taskIDs: [task.id], draftLayout: draftLayout ?? savedLayout,
+            draftShortcuts: draftShortcuts ?? savedShortcuts, savedLayout: savedLayout, savedShortcuts: savedShortcuts)
+        if let layout = selected.layout {
+            try journal.write(WorkspaceConfiguration.path(in: paths), data: JSONEncoder().encode(layout), transaction: transaction)
+        }
+        if let shortcuts = selected.shortcuts {
+            try journal.write(ShortcutSettings.path(in: paths), data: JSONEncoder().encode(shortcuts), transaction: transaction)
+        }
+    }
+
+    /// Apply editor changes as one recoverable operation. Call while holding SetupLock.
+    /// On failure, restore generated profiles first and saved editor settings last.
+    @discardableResult
+    public func applyConfiguration(layout: WorkspaceConfiguration? = nil,
+                                   shortcuts: ShortcutSettings? = nil,
+                                   tasks: [SetupTask]) throws -> [String] {
+        guard draftLayout == nil && draftShortcuts == nil else {
+            throw SetupError("Finish or leave the full setup before starting an editor apply.")
+        }
+        guard tasks.allSatisfy({ task in
+            if case .profile = task.action { return true }
+            return task.id == "raycast-profile"
+        }) else { throw SetupError("Only configuration tasks belong to an editor apply.") }
+        let template = try String(contentsOf: paths.profile.appendingPathComponent("aerospace/aerospace.toml"), encoding: .utf8)
+        let pendingLayout = try layout ?? WorkspaceConfiguration.load(from: paths)
+        let pendingShortcuts = try shortcuts ?? shortcutSettings()
+        if tasks.contains(where: { ["karabiner-profile", "raycast-profile"].contains($0.id) }) {
+            try pendingShortcuts.validate(workspaces: pendingLayout, aerospaceTemplate: template)
+        } else if tasks.contains(where: { $0.id == "aerospace-profile" }) {
+            try pendingShortcuts.validateWorkspaceBindings(pendingLayout, aerospaceTemplate: template)
+        } else { try pendingLayout.validate() }
+        let runningServices = [("aerospace", "aerospace-profile", ["list-workspaces", "--all"], ["reload-config"]),
+                               ("sketchybar", "sketchybar-profile", ["--query", "bar"], ["--reload"])]
+            .filter { name, taskID, query, _ in
+                guard tasks.contains(where: { $0.id == taskID }), let tool = tools(name) else { return false }
+                return (try? runner.run(tool, query).status) == 0
+            }
+        // Start a marker to refresh the journal before capturing this operation's boundary.
+        let marker = try journal.begin("editor-apply")
+        let previousIDs = Set(journal.transactions.map(\.id))
+        do {
+            try SetupConfigurationWriter(journal: journal).save(layout: layout, shortcuts: shortcuts)
+            for task in tasks { _ = try apply(task) }
+            try finishRestarts()
+            try journal.finish(marker)
+            let ids = Set(tasks.map(\.id))
+            return workspaceRuntimeIssues(checkAeroSpace: ids.contains("aerospace-profile"),
+                                          checkSketchyBar: ids.contains("sketchybar-profile"))
+        } catch {
+            let original = error
+            let records = journal.transactions.filter { !previousIDs.contains($0.id) }.map(\.id).reversed()
+            var failures: [String] = []
+            for id in records {
+                do { try journal.restore(id) }
+                catch { failures.append("\(id): \(error)") }
+            }
+            // Re-read the restored files in running services, without changing service registration.
+            for (name, _, _, arguments) in runningServices {
+                guard let tool = tools(name) else { continue }
+                do { try runner.checked(tool, arguments) }
+                catch { failures.append("Could not reload restored \(name): \(error)") }
+            }
+            if failures.isEmpty {
+                throw SetupError("Configuration was not applied. Previous files and saved settings were restored. \(original)")
+            }
+            throw SetupError("Configuration failed: \(original)\nRecovery needs attention: " + failures.joined(separator: "\n"))
         }
     }
 
@@ -550,12 +650,16 @@ public final class Engine {
             if name == "aerospace", relative == "aerospace.toml" {
                 return DisplayGeometry.stableConfiguration(actual) == DisplayGeometry.stableConfiguration(try materialized(file))
             }
-            if relative == "plugins/colors.sh" { return String(decoding: actual, as: UTF8.self).contains("HIGHLIGHT_COLOR=") }
             return actual == (try materialized(file))
         }
     }
 
+    private func workspaceConfiguration() throws -> WorkspaceConfiguration {
+        try draftLayout ?? WorkspaceConfiguration.load(from: paths)
+    }
+
     private func shortcutSettings() throws -> ShortcutSettings {
+        if let draftShortcuts { return draftShortcuts }
         let template = try String(contentsOf: paths.profile.appendingPathComponent("aerospace/aerospace.toml"), encoding: .utf8)
         return try ShortcutSettings.load(from: paths, aerospaceTemplate: template)
     }
@@ -564,27 +668,26 @@ public final class Engine {
         let original = try String(contentsOf: file, encoding: .utf8)
         if file.lastPathComponent == "karabiner.json",
            file.deletingLastPathComponent().lastPathComponent == "karabiner" {
-            return try shortcutSettings().karabinerData(from: Data(original.utf8))
+            let installed = paths.config.appendingPathComponent("karabiner/karabiner.json")
+            let existing = Journal.exists(installed) ? try Data(contentsOf: installed) : nil
+            return try shortcutSettings().karabinerData(from: Data(original.utf8), preserving: existing,
+                                                        configDirectory: paths.config)
         }
         if file.lastPathComponent == "colors.sh",
            file.deletingLastPathComponent().lastPathComponent == "plugins",
            file.deletingLastPathComponent().deletingLastPathComponent().lastPathComponent == "sketchybar" {
-            let style = try WorkspaceConfiguration.load(from: paths).barStyle
+            let style = try workspaceConfiguration().barStyle
             return Data(try style.colorsShell(from: original).utf8)
         }
         // Render user-specific workspace settings without writing into public dotfiles.
         if file.lastPathComponent == "aerospace.toml",
            file.deletingLastPathComponent().lastPathComponent == "aerospace" {
-            return Data(try WorkspaceConfiguration.load(from: paths)
-                .forSelectedTasks(selectedWorkspaceTaskIDs,
-                                  installedBundleIDs: Set(ApplicationDiscovery.scan(home: paths.home).map(\.bundleID)))
+            return Data(try workspaceConfiguration()
                 .aerospaceTOML(from: try shortcutSettings().aerospaceTemplateApplying(to: original)).utf8)
         }
         if file.lastPathComponent == "sketchybarrc",
            file.deletingLastPathComponent().lastPathComponent == "sketchybar" {
-            return Data(try WorkspaceConfiguration.load(from: paths)
-                .forSelectedTasks(selectedWorkspaceTaskIDs,
-                                  installedBundleIDs: Set(ApplicationDiscovery.scan(home: paths.home).map(\.bundleID)))
+            return Data(try workspaceConfiguration()
                 .sketchybarShell(from: original).utf8)
         }
         if file.lastPathComponent == "geometry.sh" {
@@ -781,7 +884,7 @@ public final class Engine {
             let existing = try String(contentsOf: colors, encoding: .utf8)
             if !existing.contains("sketchybar/highlight-color") {
                 let profile = try String(contentsOf: paths.profile.appendingPathComponent("sketchybar/plugins/colors.sh"), encoding: .utf8)
-                guard let loader = profile.range(of: "# Match the source dotfiles palette and accept the current wallpaper accent.") else {
+                guard let loader = profile.range(of: "(?m)^ACCENT_FILE=", options: .regularExpression) else {
                     throw SetupError("The packaged wallpaper accent cache loader is missing. Reinstall Mac Setup.")
                 }
                 cacheUpdate = Data((existing + "\n" + profile[loader.lowerBound...]).utf8)

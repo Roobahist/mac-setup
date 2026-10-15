@@ -31,7 +31,7 @@ final class ShortcutSettingsTests: XCTestCase {
         XCTAssertTrue(settings.entries.contains { $0.provider == .raycast && $0.action == "launcher" })
         XCTAssertEqual(settings.raycastHotkey, "Option-15")
         XCTAssertTrue(settings.entries.contains {
-            $0.provider == .karabiner && $0.action == "open:com.apple.Terminal"
+            $0.provider == .karabiner && $0.action == "Alacritty"
         })
         XCTAssertGreaterThan(settings.entries.filter { $0.provider == .aerospace }.count, 10)
         try settings.validate(workspaces: .defaultLayout, aerospaceTemplate: aerospaceTemplate())
@@ -92,9 +92,11 @@ final class ShortcutSettingsTests: XCTestCase {
         let rules = try XCTUnwrap(modifications["rules"] as? [[String: Any]])
         XCTAssertTrue(rules.contains { ($0["description"] as? String) == "Chrome" })
         XCTAssertTrue(rules.contains { ($0["description"] as? String)?.contains("Example (disabled)") == true })
-        let custom = try XCTUnwrap(rules.first { ($0["description"] as? String) == "Mac Setup: Custom shortcuts" })
-        let manipulators = try XCTUnwrap(custom["manipulators"] as? [[String: Any]])
-        XCTAssertEqual(manipulators.count, 4)
+        XCTAssertFalse(rules.contains { ($0["description"] as? String) == "Mac Setup: Custom shortcuts" })
+        for name in ["Alacritty", "Visual Studio Code", "Finder", "Open com.apple.Safari"] {
+            let rule = try XCTUnwrap(rules.first { ($0["description"] as? String) == name })
+            XCTAssertEqual((rule["manipulators"] as? [[String: Any]])?.count, 1)
+        }
         let encoded = String(decoding: output, as: UTF8.self)
         XCTAssertTrue(encoded.contains("com.apple.Safari"))
         XCTAssertTrue(encoded.contains("open_new_window.sh"))
@@ -124,7 +126,8 @@ final class ShortcutSettingsTests: XCTestCase {
         try settings.validate(workspaces: .defaultLayout, aerospaceTemplate: aerospaceTemplate())
         let suppressed = try settings.karabinerData(from: data)
         let suppressedText = String(decoding: suppressed, as: UTF8.self)
-        XCTAssertFalse(suppressedText.contains("\"description\" : \"Chrome\""))
+        XCTAssertTrue(suppressedText.contains("\"description\" : \"Chrome\""))
+        XCTAssertTrue(suppressedText.contains("\"enabled\" : false"))
 
         var invalid = original
         invalid.json = "{\"description\":\"Chrome\",\"manipulators\":[]}"
@@ -142,8 +145,8 @@ final class ShortcutSettingsTests: XCTestCase {
         let raycast = try XCTUnwrap(settings.entries.firstIndex(where: { $0.id == "raycast:launcher" }))
         settings.entries[raycast].shortcut = .init(key: "space", modifiers: ["cmd"])
         settings.migrateBundledDefaults(installedAlacritty: false)
-        XCTAssertEqual(settings.raycastHotkey, "Option-15")
-        XCTAssertEqual(settings.configurationVersion, 2)
+        XCTAssertEqual(settings.raycastHotkey, "Command-49")
+        XCTAssertEqual(settings.configurationVersion, 3)
         var custom = settings
         custom.entries[raycast].shortcut = .init(key: "t", modifiers: ["cmd"])
         custom.migrateBundledDefaults(installedAlacritty: false)

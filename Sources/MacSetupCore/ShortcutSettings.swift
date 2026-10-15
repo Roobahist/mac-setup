@@ -47,22 +47,14 @@ public struct ShortcutSettings: Codable, Equatable {
     public init(entries: [ManagedShortcut], advancedKarabiner: [AdvancedKarabinerRule]? = nil) {
         self.entries = entries
         self.advancedKarabiner = advancedKarabiner
-        self.configurationVersion = 2
+        self.configurationVersion = 3
     }
 
-    /// Migrate only the known legacy defaults, not arbitrary user assignments.
+    /// Mark the current settings format without replacing a user's assignments.
     public mutating func migrateBundledDefaults(installedAlacritty: Bool) {
-        guard configurationVersion == nil else { return }
-        if let index = entries.firstIndex(where: { $0.id == "raycast:launcher" }),
-           entries[index].shortcut == WorkspaceShortcut(key: "space", modifiers: ["cmd"]) {
-            entries[index].shortcut = .init(key: "r", modifiers: ["alt"])
-        }
-        if !installedAlacritty,
-           let index = entries.firstIndex(where: { $0.id == "karabiner:alacritty" }),
-           entries[index].action == "Alacritty" {
-            entries[index].action = "open:com.apple.Terminal"
-        }
-        configurationVersion = 2
+        // Existing assignments are user choices, including Terminal and Command+Space.
+        // New installations use the source profile; upgrades never guess at intent.
+        configurationVersion = 3
     }
 
     public mutating func updateAdvancedRule(_ rule: AdvancedKarabinerRule) {
@@ -83,7 +75,8 @@ public struct ShortcutSettings: Codable, Equatable {
             guard let description = rule["description"] as? String,
                   !simple.contains(description),
                   let data = try? JSONSerialization.data(withJSONObject: rule, options: [.prettyPrinted, .sortedKeys]) else { return nil }
-            return .init(id: description, json: String(decoding: data, as: UTF8.self))
+            return .init(id: description, json: String(decoding: data, as: UTF8.self),
+                         enabled: rule["enabled"] as? Bool ?? true)
         }
     }
 
@@ -139,14 +132,7 @@ public struct ShortcutSettings: Codable, Equatable {
             ManagedShortcut(id: "aerospace:\(shortcut.binding)", provider: .aerospace,
                             action: action, shortcut: shortcut)
         }
-        let karabiner: [ManagedShortcut] = [
-            .init(id: "karabiner:alacritty", provider: .karabiner,
-                  action: "open:com.apple.Terminal", shortcut: .init(key: "enter", modifiers: ["alt"])),
-            .init(id: "karabiner:vscode", provider: .karabiner,
-                  action: "Visual Studio Code", shortcut: .init(key: "v", modifiers: ["alt"])),
-            .init(id: "karabiner:finder", provider: .karabiner,
-                  action: "Finder", shortcut: .init(key: "e", modifiers: ["alt"]))
-        ]
+        let karabiner = ReferenceProfile.bundled.karabinerShortcuts
         return .init(entries: aerospace + karabiner + [
             .init(id: "raycast:launcher", provider: .raycast, action: "launcher",
                   shortcut: .init(key: "r", modifiers: ["alt"]))
@@ -231,7 +217,7 @@ public struct ShortcutSettings: Codable, Equatable {
                 if entry.action.hasPrefix("open:") {
                     let bundleID = String(entry.action.dropFirst(5))
                     let permitted = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-")
-                    guard !bundleID.isEmpty && bundleID.unicodeScalars.allSatisfy(permitted.contains) else {
+                    guard !bundleID.isEmpty && bundleID.unicodeScalars.allSatisfy({ permitted.contains($0) }) else {
                         throw SetupError("Enter a valid application bundle ID for Karabiner.")
                     }
                 } else if !Self.scripts.contains(where: { $0.name == entry.action }) {
@@ -311,7 +297,8 @@ public struct ShortcutSettings: Codable, Equatable {
         return output.joined(separator: "\n")
     }
 
-    public func karabinerData(from source: Data) throws -> Data {
+    public func karabinerData(from source: Data, preserving existing: Data? = nil,
+                              configDirectory: URL? = nil) throws -> Data {
         guard var root = try JSONSerialization.jsonObject(with: source) as? [String: Any],
               var profiles = root["profiles"] as? [[String: Any]],
               let index = profiles.firstIndex(where: { ($0["name"] as? String) == "Portable" }),
@@ -321,70 +308,143 @@ public struct ShortcutSettings: Codable, Equatable {
         }
 
         var profile = profiles[index]
-        let scriptNames = Set(Self.scripts.map { $0.name })
-        rules.removeAll { scriptNames.contains($0["description"] as? String ?? "") ||
-            ($0["description"] as? String) == "Mac Setup: Custom shortcuts" }
-        let overridesByName = Dictionary(uniqueKeysWithValues: (advancedKarabiner ?? []).map { ($0.id, $0) })
-        rules = try rules.compactMap { original -> [String: Any]? in
-            guard let name = original["description"] as? String,
-                  let override = overridesByName[name] else { return original }
-            guard override.enabled else { return nil }
-            guard let data = override.json.data(using: .utf8),
-                  let replacement = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  replacement["description"] as? String == name,
-                  replacement["manipulators"] is [[String: Any]] else {
-                throw SetupError("Invalid advanced Karabiner rule: \(name)")
-            }
-            return replacement
+        guard Set(entries.map(\.id)).count == entries.count,
+              Set((advancedKarabiner ?? []).map(\.id)).count == (advancedKarabiner ?? []).count else {
+            throw SetupError("Shortcut and advanced rule IDs must be unique.")
         }
-        let manipulators: [[String: Any]] = try entries.filter {
-            $0.provider == .karabiner && $0.enabled
-        }.map { entry in
-            let command: String
-            if let script = Self.scripts.first(where: { $0.name == entry.action }) {
-                command = script.shell
+        let defaults = ReferenceProfile.bundled.karabinerShortcuts
+        let sourceNames = Set(defaults.map(\.action))
+        let overrides = Dictionary(uniqueKeysWithValues: (advancedKarabiner ?? []).map { ($0.id, $0) })
+        var emitted = Set<String>()
+        var generated: [[String: Any]] = []
+        for original in rules {
+            let name = original["description"] as? String ?? ""
+            if let baseline = defaults.first(where: { $0.action == name }) {
+                guard let entry = entries.first(where: { $0.id == baseline.id && $0.provider == .karabiner }) else { continue }
+                emitted.insert(entry.id)
+                if entry == baseline {
+                    generated.append(original)
+                } else {
+                    generated.append(try karabinerRule(entry, description: name, original: original))
+                }
+            } else if let override = overrides[name] {
+                generated.append(try Self.advancedRule(override))
             } else {
-                let id = String(entry.action.dropFirst(5))
-                command = "/usr/bin/open -b " + id
+                generated.append(original)
             }
-            let karabinerKey: String
-            switch entry.shortcut.key {
-            case "enter": karabinerKey = "return_or_enter"
-            case "backtick": karabinerKey = "grave_accent_and_tilde"
-            case "minus": karabinerKey = "hyphen"
-            case "equal": karabinerKey = "equal_sign"
-            case "space": karabinerKey = "spacebar"
-            default: karabinerKey = entry.shortcut.key
-            }
-            let mapped = entry.shortcut.modifiers.map { modifier in
-                ["cmd": "command", "ctrl": "control", "alt": "option", "shift": "shift"][modifier]!
-            }
-            return [
-                "type": "basic",
-                "description": Self.actionTitle(entry.action, provider: entry.provider),
-                "from": [
-                    "key_code": karabinerKey,
-                    "modifiers": ["mandatory": mapped, "optional": ["caps_lock"]]
-                ],
-                "to": [["shell_command": command]]
-            ]
         }
-        if !manipulators.isEmpty {
-            rules.append(["description": "Mac Setup: Custom shortcuts", "manipulators": manipulators])
+        for entry in entries where entry.provider == .karabiner && !emitted.contains(entry.id) {
+            generated.append(try karabinerRule(entry, description: Self.actionTitle(entry.action, provider: .karabiner)))
         }
+        let existingNames = Set(rules.compactMap { $0["description"] as? String })
+        for override in advancedKarabiner ?? [] where !existingNames.contains(override.id) {
+            guard !sourceNames.contains(override.id) else {
+                throw SetupError("Edit the application shortcut instead of overriding its rule: \(override.id)")
+            }
+            generated.append(try Self.advancedRule(override))
+        }
+        rules = generated
         modifications["rules"] = rules
         profile["complex_modifications"] = modifications
         profiles[index] = profile
         root["profiles"] = profiles
+        if let existing {
+            guard var installed = try JSONSerialization.jsonObject(with: existing) as? [String: Any],
+                  let installedProfiles = installed["profiles"] as? [[String: Any]] else {
+                throw SetupError("The existing Karabiner configuration is malformed. Inspect it before applying.")
+            }
+            var inserted = false
+            var merged: [[String: Any]] = []
+            for var item in installedProfiles {
+                if item["name"] as? String == "Portable" {
+                    if !inserted { merged.append(profile); inserted = true }
+                } else {
+                    item["selected"] = false
+                    merged.append(item)
+                }
+            }
+            if !inserted { merged.append(profile) }
+            installed["profiles"] = merged
+            root = installed
+        }
+        if let configDirectory {
+            // Shell-command paths are host adaptations, confined to generated local files.
+            let base = configDirectory.appendingPathComponent("karabiner").path
+                .replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "\"", with: "\\\"")
+                .replacingOccurrences(of: "$", with: "\\$")
+                .replacingOccurrences(of: "`", with: "\\`")
+            func commands(_ value: Any) -> Any {
+                if var object = value as? [String: Any] {
+                    for (key, child) in object {
+                        if key == "shell_command", let command = child as? String {
+                            object[key] = command.replacingOccurrences(of: "$HOME/.config/karabiner", with: base)
+                        } else { object[key] = commands(child) }
+                    }
+                    return object
+                }
+                if let array = value as? [Any] { return array.map { commands($0) } }
+                return value
+            }
+            // Relocate only our Portable profile; other installed profiles are preserved verbatim.
+            if var values = root["profiles"] as? [[String: Any]] {
+                for i in values.indices where values[i]["name"] as? String == "Portable" {
+                    if let relocated = commands(values[i]) as? [String: Any] { values[i] = relocated }
+                }
+                root["profiles"] = values
+            }
+        }
         return try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys])
+    }
+
+    private static func advancedRule(_ rule: AdvancedKarabinerRule) throws -> [String: Any] {
+        guard let data = rule.json.data(using: .utf8),
+              var parsed = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              parsed["description"] as? String == rule.id,
+              let manipulators = parsed["manipulators"] as? [[String: Any]], !manipulators.isEmpty else {
+            throw SetupError("Invalid advanced Karabiner rule: \(rule.id)")
+        }
+        if rule.enabled { parsed.removeValue(forKey: "enabled") }
+        else { parsed["enabled"] = false }
+        return parsed
+    }
+
+    private func karabinerRule(_ entry: ManagedShortcut, description: String,
+                               original: [String: Any]? = nil) throws -> [String: Any] {
+        try entry.shortcut.validate()
+        let command: String
+        if let script = Self.scripts.first(where: { $0.name == entry.action }) {
+            command = script.shell
+        } else if entry.action.hasPrefix("open:") {
+            let bundle = String(entry.action.dropFirst(5))
+            let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-")
+            guard !bundle.isEmpty, bundle.unicodeScalars.allSatisfy({ allowed.contains($0) }) else {
+                throw SetupError("Enter a valid application bundle ID for Karabiner.")
+            }
+            command = "/usr/bin/open -b " + bundle
+        } else { throw SetupError("Unknown Karabiner action: \(entry.action)") }
+        let modifierNames = ["cmd": "command", "ctrl": "control", "alt": "option", "shift": "shift"]
+        var rule = original ?? [:]
+        rule["description"] = description
+        if entry.enabled { rule.removeValue(forKey: "enabled") } else { rule["enabled"] = false }
+        var manipulator = (original?["manipulators"] as? [[String: Any]])?.first ?? ["type": "basic"]
+        manipulator["from"] = ["key_code": entry.shortcut.karabinerKeyCode,
+                               "modifiers": ["mandatory": entry.shortcut.modifiers.compactMap { modifierNames[$0] },
+                                             "optional": ["caps_lock"]]]
+        if original?["description"] as? String != entry.action {
+            manipulator["to"] = [["shell_command": command]]
+        }
+        rule["manipulators"] = [manipulator]
+        return rule
     }
 
     public var raycastHotkey: String {
         let item = entries.first { $0.provider == .raycast }
+        guard let item, item.enabled else { return "" }
         let modifierMap = ["cmd": "Command", "ctrl": "Control", "alt": "Option", "shift": "Shift"]
-        let parts = WorkspaceShortcut.modifierNames.filter { item?.shortcut.modifiers.contains($0) == true }
+        let parts = WorkspaceShortcut.modifierNames.filter { item.shortcut.modifiers.contains($0) }
             .compactMap { modifierMap[$0] }
-        return (parts + [String(Self.macKeyCodes[item?.shortcut.key ?? "space"] ?? 49)]).joined(separator: "-")
+        return (parts + [String(Self.macKeyCodes[item.shortcut.key] ?? 49)]).joined(separator: "-")
     }
 
     public var usesSpotlightKey: Bool {

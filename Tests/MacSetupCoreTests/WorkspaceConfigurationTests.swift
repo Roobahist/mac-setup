@@ -66,24 +66,13 @@ final class WorkspaceConfigurationTests: XCTestCase {
         try config.validate()
         XCTAssertEqual(config.workspaces.count, 13)
         let chosen: Set<String> = ["aerospace-profile", "sketchybar-profile"]
-        let missing = config.forSelectedTasks(chosen, installedBundleIDs: [])
-        XCTAssertEqual(missing.workspaces.count, config.workspaces.count)
-        for id in ["timer", "notes", "music"] {
-            XCTAssertTrue(missing.workspaces.contains { $0.id == id && $0.apps.isEmpty })
-        }
-        let toml = try missing.aerospaceTOML(from: template("aerospace/aerospace.toml"))
-        XCTAssertTrue(toml.contains("workspace timer"))
-        XCTAssertFalse(toml.contains("com.tomito.tomito"))
-        XCTAssertFalse(toml.contains("md.obsidian"))
-        XCTAssertFalse(toml.contains("com.spotify.client"))
-        let requested = config.forSelectedTasks(chosen.union(["tomito", "obsidian"]),
-                                                installedBundleIDs: [])
-        XCTAssertTrue(requested.workspaces.contains { $0.id == "timer" && $0.apps == ["com.tomito.tomito"] })
-        XCTAssertTrue(requested.workspaces.contains { $0.id == "notes" && $0.apps == ["md.obsidian"] })
+        XCTAssertEqual(config.forSelectedTasks(chosen, installedBundleIDs: []), config)
         XCTAssertEqual(config.forSelectedTasks(nil), config)
-        XCTAssertEqual(config.forSelectedTasks(chosen, installedBundleIDs: [
-            "com.tomito.tomito", "md.obsidian", "com.spotify.client"
-        ]), config)
+        let toml = try config.forSelectedTasks(chosen, installedBundleIDs: [])
+            .aerospaceTOML(from: template("aerospace/aerospace.toml"))
+        for app in ["com.tomito.tomito", "md.obsidian", "com.spotify.client", "ru.keepcoder.Telegram"] {
+            XCTAssertTrue(toml.contains(app), "Saved app routing must not depend on this Mac's installed apps")
+        }
     }
 
     func testEditingDoesNotDuplicateOptionalWorkspaces() throws {
@@ -143,17 +132,17 @@ final class WorkspaceConfigurationTests: XCTestCase {
         try config.validate()
 
         let toml = try config.aerospaceTOML(from: template("aerospace/aerospace.toml"))
-        XCTAssertTrue(toml.contains("alt-backtick = 'workspace 1'"))
-        XCTAssertTrue(toml.contains("alt-1 = 'workspace research'"))
+        XCTAssertTrue(toml.contains("alt-1 = 'workspace 1'"))
+        XCTAssertTrue(toml.contains("alt-backtick = 'workspace research'"))
         XCTAssertTrue(toml.contains("move-node-to-workspace research"))
         XCTAssertTrue(toml.contains("com.example.Research"))
-        XCTAssertFalse(toml.contains("workspace chatgpt"))
+        XCTAssertFalse(toml.contains("workspace ai"))
         XCTAssertFalse(toml.contains("workspace music"))
         XCTAssertFalse(toml.contains("com.spotify.client"))
         let bar = try config.sketchybarShell(from: template("sketchybar/sketchybarrc"))
         XCTAssertTrue(bar.contains("research) printf"))
         XCTAssertTrue(bar.contains("Hack Nerd Font:Bold:14.5"))
-        XCTAssertFalse(bar.contains("    chatgpt) echo"))
+        XCTAssertFalse(bar.contains("    ai) echo"))
     }
 
     func testInvalidIDsDuplicateAppAndUnknownGlyphAreRejected() throws {
@@ -278,11 +267,11 @@ final class WorkspaceConfigurationTests: XCTestCase {
         let file = paths.config.appendingPathComponent("aerospace/aerospace.toml")
         let withoutTomito = try String(contentsOf: file, encoding: .utf8)
         XCTAssertTrue(withoutTomito.contains("workspace timer"))
-        XCTAssertFalse(withoutTomito.contains("com.tomito.tomito"))
+        XCTAssertTrue(withoutTomito.contains("com.tomito.tomito"))
         XCTAssertTrue(withoutTomito.contains("alt-equal = 'workspace timer'"))
 
         engine.selectedWorkspaceTaskIDs = ["tomito", "aerospace-profile", "sketchybar-profile"]
-        XCTAssertEqual(try engine.state(Catalog.task("aerospace-profile")), .ready)
+        XCTAssertEqual(try engine.state(Catalog.task("aerospace-profile")), .done)
         let second = try engine.apply(Catalog.task("aerospace-profile"))
         let withTomito = try String(contentsOf: file, encoding: .utf8)
         XCTAssertTrue(withTomito.contains("workspace timer"))
@@ -311,11 +300,11 @@ final class WorkspaceConfigurationTests: XCTestCase {
         let updated = try String(contentsOf:
             paths.config.appendingPathComponent("aerospace/aerospace.toml"), encoding: .utf8)
         XCTAssertTrue(updated.contains("workspace assistant"))
-        XCTAssertFalse(updated.contains("workspace chatgpt"))
+        XCTAssertFalse(updated.contains("workspace ai"))
         try engine.journal.restore(second)
         let restored = try String(contentsOf:
             paths.config.appendingPathComponent("aerospace/aerospace.toml"), encoding: .utf8)
-        XCTAssertTrue(restored.contains("workspace chatgpt"))
+        XCTAssertTrue(restored.contains("workspace ai"))
         try engine.journal.restore(first)
     }
 }

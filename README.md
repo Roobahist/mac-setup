@@ -56,7 +56,7 @@ Installing a task does not imply that an app can be uninstalled safely. Mac Setu
 
 Choose **Guided Setup** in the sidebar, or run `mac-setup setup`, to walk through the **same controls you can use at any time**. There is no second setup wizard or separate edit-shortcuts/edit-workspaces route.
 
-The guide starts in **Apps & Features**, then moves through **Keyboard Shortcuts**, **Workspaces**, **Appearance**, **Dock**, **Menu Bar & Clock**, **Finder**, and **Updates**, matching the sidebar order. The first step offers setup presets, whole-category selection, all features including optional components, and individual controls. Select several features and use **Review & apply selected features** to inspect one dependency-aware batch. Each section includes a short explanation of what it changes and how to use the controls already on that page. **Back**, **Next**, and **Skip step** move through the sections; **End guide** returns the page to normal customization. Sidebar navigation also ends the tour.
+The guide starts in **Apps & Features**, then moves through **Keyboard Shortcuts**, **Workspaces**, **Workspace Bar**, **Appearance**, **Dock**, **Menu Bar & Clock**, **Finder**, and **Updates**, matching the sidebar order. The first step offers setup presets, whole-category selection, all features including optional components, and individual controls. Select several features and use **Review & apply selected features** to inspect one dependency-aware batch. Each section includes a short explanation of what it changes and how to use the controls already on that page. **Back**, **Next**, and **Skip step** move through the sections; **End guide** returns the page to normal customization. Sidebar navigation also ends the tour.
 
 If you start the guide with an explicit `--preset`, `--all`, or task selection, Apps & Features shows a **Review selected setup** action. You can inspect those preselected tasks and confirm whether to apply them, without opening a second wizard.
 
@@ -87,7 +87,7 @@ Workspace editing validates workspace names, glyphs and key collisions, but **do
 
 ### Workspace cards and shortcut readability
 
-Workspaces are edited as compact, individually bordered rows. The grip icon at the left indicates that the entire row can be dragged to insert it at a different position. Workspace icon, application assignment, destination key, and removal controls are compact and have descriptive accessibility labels and hover help.
+Workspaces are edited as compact, individually bordered rows. Drag the grip at the left to insert a workspace at another position, or use its Move up/down actions. Workspace icon, application assignment, destination key, and removal controls are compact and have descriptive accessibility labels and hover help.
 
 Keyboard shortcuts have larger key-combination chips; the editor shows installed app icons for application shortcuts and provider icons otherwise. AeroSpace bindings are canonicalized before generation, so modifier-order permutations such as `alt-ctrl-down` and `ctrl-alt-down` cannot both be emitted. Generated bindings are checked for duplicates before writing the configuration.
 
@@ -97,7 +97,7 @@ Vorssaint floating-point settings use a small numeric tolerance when verifying m
 
 Our full, productivity and repair setups include **Start essential apps at login**. When selected, Mac Setup registers installed AeroSpace, Karabiner-Elements and Raycast under **System Settings > General > Login Items & Extensions > Open at Login**, without removing existing items or duplicating an already registered app. macOS may require permission for Mac Setup to automate System Events. Restoring the setup transaction removes only the login items created by that run.
 
-SketchyBar continues to start through its existing Homebrew user service. The wallpaper watcher only receives a LaunchAgent when the user explicitly enables automatic wallpaper colors in Appearance, Guided Setup, or the CLI. An already-running watcher is never restarted by installing or updating Mac Setup; its current enabled/disabled state is preserved. Only one service is active, and neither belongs in the regular **Open at Login** application list. Karabiner's drivers and helper services also retain their own system-managed startup and permission requirements. We never replace these with duplicate boot processes.
+SketchyBar continues to start through its existing Homebrew user service. The wallpaper watcher only receives a LaunchAgent when the user explicitly enables automatic wallpaper colors in Workspace Bar, Guided Setup, or the CLI. An already-running watcher is never restarted by installing or updating Mac Setup; its current enabled/disabled state is preserved. Only one service is active, and neither belongs in the regular **Open at Login** application list. Karabiner's drivers and helper services also retain their own system-managed startup and permission requirements. We never replace these with duplicate boot processes.
 
 On macOS 26 and later, setup includes the **Native menu bar background** check. In **System Settings > Menu Bar**, enable **Show menu bar background** so the auto-hidden native menu bar has its own blurred surface when it appears over SketchyBar. Apple has not documented a stable command-line preference for this switch, so Mac Setup links to the real system setting rather than writing an unverified key. This does not globally enable Reduce Transparency or change SketchyBar's palette.
 
@@ -111,7 +111,7 @@ The shortcut editor checks for duplicate combinations across all three providers
 
 
 
-The default number-row workspace shortcuts are **Option + key** for switching and **Option + Shift + key** for moving windows. Raycast opens with **Option + R** by default. **Option + Return** launches macOS Terminal unless you select another installed terminal in the Karabiner shortcuts editor. Change these global modifier sets in the shortcut step. Each workspace card only controls the key itself. If no key is assigned, that workspace still appears in SketchyBar. Conflicting keys and reserved AeroSpace bindings are rejected.
+The default number-row workspace shortcuts are **Option + key** for switching and **Option + Shift + key** for moving windows. Raycast opens with **Option + R** by default. **Option + Return** follows the reference Alacritty script on new installations. Choose another terminal explicitly in Keyboard Shortcuts if you prefer. Existing terminal assignments are retained on upgrade. Change the shared workspace modifier sets in Workspaces. Each workspace card only controls the key itself. If no key is assigned, that workspace still appears in SketchyBar. Conflicting keys and reserved AeroSpace bindings are rejected.
 
 Earlier saved layouts are decoded and retain their chosen destination key; existing per-workspace modifier choices are normalized to the global modifier sets. Workspace configuration is saved in `~/Library/Application Support/mac-setup/workspaces.json`.
 
@@ -197,3 +197,30 @@ The `TweakService` reads current values using the existing `Journal` and applies
 For updates, push code changes to `main`, then publish a version tag that runs the release workflow. An update is offered only when a newer packaged release is published. This intentionally avoids executing unreviewed source or pulling arbitrary changes directly from the UI. The packaged app gets its version from the release tag.
 
 The dashboard source is `Sources/MacSetup/ControlCenter.swift`. The original native setup engine and editor remain in `NativeSetup.swift` for the guided route and embedded workspace or keyboard shortcut panels. The CLI remains available for scripting.
+
+
+## Reference fidelity and customization
+
+The portable baseline comes from [dot-files](https://github.com/Roobahist/dot-files).
+Each build records its source commit and file hashes; `mac-setup reference` shows
+the bundled revision. Synchronization also compiles editor defaults from the same
+files, and CI rejects snapshot/default drift. Existing user shortcut assignments
+are retained on upgrade.
+
+Workspaces contains workspace names and runtime IDs, destination keys, shared
+switch/move modifiers, application routing, glyphs and display assignments.
+Workspace Bar contains SketchyBar colors, spacing, blur and explicit wallpaper
+accent controls. Keyboard Shortcuts contains other AeroSpace, Karabiner and Raycast
+actions. Renaming a workspace updates the runtime identity; reordering or removing
+another workspace preserves its key. Missing applications keep their routes.
+
+Karabiner keeps separate reference application rules and preserves other installed
+profiles. Applying its configuration selects Portable. Private reference automations
+are excluded from the public baseline. The known old AI workspace identity is
+proposed as a draft migration from `chatgpt` to `ai`.
+
+Editor applies restore generated files and saved configuration on failure, while
+keeping the draft for correction. Full setup saves each component's draft only
+when that profile task succeeds. Completed application installations remain
+installed if a later task fails. Runtime verification and its limitations are
+recorded in [the engineering audit](docs/ENGINEERING_AUDIT.md).

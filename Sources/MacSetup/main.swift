@@ -14,8 +14,9 @@ Usage:
   mac-setup setup --all          Walk through all tasks (including unfinished)
   mac-setup setup --preset minimal    Run a curated selection
   mac-setup profiles             Show available selection presets
+  mac-setup reference            Show the bundled dot-files source revision
   mac-setup workspaces           Edit only workspace layout and app routing
-  mac-setup shortcuts            Edit only shared workspace shortcuts
+  mac-setup shortcuts            Edit application and window shortcuts
   mac-setup dotfiles status      Inspect local public dotfiles checkout
   mac-setup dotfiles update      Pull new dotfiles using Git fast-forward
   mac-setup update              Reapply previously installed bundled profiles
@@ -58,7 +59,7 @@ struct Options {
         if args.contains("--help") || args.first == "help" { command = "help"; return }
         if args.contains("--version") { command = "version"; return }
         if let first = args.first, !first.hasPrefix("--") { command = args.removeFirst() }
-        let commands = ["menu", "gui", "terminal", "list", "status", "plan", "setup", "update", "backups", "restore", "profiles", "workspaces", "shortcuts", "dotfiles", "watch", "watcher-status", "watcher-stop", "watcher-disable", "watcher-enable"]
+        let commands = ["menu", "gui", "terminal", "list", "status", "plan", "setup", "update", "backups", "restore", "profiles", "reference", "workspaces", "shortcuts", "dotfiles", "watch", "watcher-status", "watcher-stop", "watcher-disable", "watcher-enable"]
         guard commands.contains(command) else { throw SetupError("Unknown command '\(command)'. Run mac-setup --help.") }
         while !args.isEmpty {
             let value = args.removeFirst()
@@ -81,6 +82,9 @@ struct Options {
                 ids.append(value)
             }
         }
+        if dryRun && ["menu", "gui", "terminal", "workspaces", "shortcuts"].contains(command) {
+            throw SetupError("--dry-run is for task commands. Use plan to preview configuration without opening an editor.")
+        }
         if force && command != "restore" { throw SetupError("--force is only valid with restore.") }
         if all && !["setup", "plan"].contains(command) { throw SetupError("--all is only valid with setup or plan.") }
         if all && !ids.isEmpty { throw SetupError("Use --all or task IDs, not both.") }
@@ -91,7 +95,7 @@ struct Options {
             throw SetupError("--preset applies only to setup or plan.")
         }
         if image != nil && !["setup", "plan", "watch"].contains(command) { throw SetupError("--image is only valid with setup, plan or watch.") }
-        if ["status", "list", "backups", "menu", "profiles", "workspaces", "shortcuts", "watch", "watcher-status", "watcher-stop", "watcher-disable", "watcher-enable"].contains(command) && !ids.isEmpty { throw SetupError("\(command) takes no task IDs.") }
+        if ["status", "list", "backups", "menu", "profiles", "reference", "workspaces", "shortcuts", "watch", "watcher-status", "watcher-stop", "watcher-disable", "watcher-enable"].contains(command) && !ids.isEmpty { throw SetupError("\(command) takes no task IDs.") }
         if once && command != "watch" { throw SetupError("--once is only valid with watch.") }
         if command == "watch" && (dryRun || yes) { throw SetupError("Use plan wallpaper-watcher to preview; watch runs directly.") }
         if command == "restore" && ids.count > 1 { throw SetupError("Restore one backup at a time, newest first.") }
@@ -225,6 +229,15 @@ do {
     if options.command == "help" { print(help); exit(0) }
     if options.command == "version" { print(MacSetupVersion.installed); exit(0) }
     guard getuid() != 0 else { throw SetupError("Run mac-setup as your normal user, not with sudo. Individual installers request privileges themselves.") }
+    if options.command == "reference" {
+        let reference = ReferenceProfile.bundled
+        try reference.layout.validate()
+        print("Source: \(reference.repository)")
+        print("Revision: \(reference.revision)")
+        print("Portable files: \(reference.files.count)")
+        print("Workspaces: \(reference.layout.workspaces.map(\.id).joined(separator: ", "))")
+        exit(0)
+    }
     let engine = try Engine()
     if options.command == "menu" || options.command == "gui" || (options.command == "setup" && !options.yes && !options.dryRun) {
         let ids = options.all ? Catalog.tasks.map(\.id) : (options.ids.isEmpty ? nil : options.ids)
@@ -323,6 +336,7 @@ do {
                 print("  \(name): \(connected ? "linked" : "not linked")")
             }
         } else {
+            if options.dryRun { print("Would update the public dot-files checkout using git pull --ff-only. No files changed."); break }
             guard options.yes || (isatty(STDIN_FILENO) != 0 &&
                 ask("Pull the public dot-files checkout (fast-forward only)?")) else {
                 print("Cancelled."); break

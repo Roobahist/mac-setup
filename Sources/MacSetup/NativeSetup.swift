@@ -2,8 +2,8 @@ import AppKit
 import SwiftUI
 import MacSetupCore
 
-enum SetupPage: Hashable { case features, shortcuts, workspaces, review, running, guide, failed, finished }
-enum SetupScope { case full, workspaces, shortcuts, feature }
+enum SetupPage: Hashable { case features, shortcuts, workspaces, workspaceBar, review, running, guide, failed, finished }
+enum SetupScope { case full, workspaces, workspaceBar, shortcuts, feature }
 
 final class SetupModel: ObservableObject {
     @Published var page: SetupPage = .features
@@ -14,9 +14,10 @@ final class SetupModel: ObservableObject {
     @Published private(set) var appliedLayout = WorkspaceConfiguration.defaultLayout
     @Published private(set) var appliedShortcuts = ShortcutSettings(entries: [])
     var workspaceHasDraftChanges: Bool {
-        layout.workspaces != appliedLayout.workspaces || layout.barStyle != appliedLayout.barStyle
+        layout.workspaces != appliedLayout.workspaces || layout.keymap != appliedLayout.keymap
     }
-    var shortcutsHaveDraftChanges: Bool { shortcuts != appliedShortcuts || layout.keymap != appliedLayout.keymap }
+    var barHasDraftChanges: Bool { layout.barStyle != appliedLayout.barStyle }
+    var shortcutsHaveDraftChanges: Bool { shortcuts != appliedShortcuts }
     @Published var pausedSetup = false
     let aerospaceTemplate: String
     let karabinerTemplate: Data
@@ -33,9 +34,10 @@ final class SetupModel: ObservableObject {
     @Published var checkReady = false
     @Published var busy = false
     @Published var search = ""
-    @Published var selectedWorkspace = 0
+    @Published var selectedWorkspaceID: String?
     @Published var appSheet = false
     @Published var appSearch = ""
+    @Published var manualAppID = ""
     @Published var runLog = ""
     @Published private(set) var runtimeIssues: [String] = []
     var scope: SetupScope = .full
@@ -58,7 +60,7 @@ final class SetupModel: ObservableObject {
         layout = loadedWorkspaces.draft
         appliedLayout = loadedWorkspaces.original
         if !loadedWorkspaces.repairs.isEmpty {
-            message = "Stored workspace IDs were invalid. Proposed safe IDs in this draft. Review them, then apply to update the running desktop."
+            message = "Workspace identity updates are proposed in this draft. Review them, then apply to update the running desktop."
             + "\n" + loadedWorkspaces.repairs.joined(separator: "\n")
         }
         appliedShortcuts = shortcuts
@@ -110,8 +112,8 @@ final class SetupModel: ObservableObject {
         scope = selected
         // Keep a pending ID-repair explanation until the repaired draft is
         // applied; unrelated transient errors should not survive navigation.
-        if !message.hasPrefix("Stored workspace IDs were invalid.") { message = "" }
-        page = selected == .workspaces ? .workspaces : .shortcuts
+        if !message.hasPrefix("Workspace identity updates are proposed") { message = "" }
+        page = selected == .workspaces ? .workspaces : selected == .workspaceBar ? .workspaceBar : .shortcuts
     }
 
     func repairWorkspaceIDs() {
@@ -133,6 +135,7 @@ final class SetupModel: ObservableObject {
             switch scope {
             case .full: chosen = picker.orderedSelection
             case .workspaces: chosen = ["aerospace-profile", "sketchybar-profile"]
+            case .workspaceBar: chosen = ["sketchybar-profile"]
             case .shortcuts: chosen = ["aerospace-profile", "karabiner-profile", "raycast-profile"]
             case .feature: chosen = tasks.map(\.id)
             }
@@ -159,63 +162,55 @@ final class SetupModel: ObservableObject {
         do {
             switch selected {
             case .full:
-                let selected = Set(picker.orderedSelection)
-                if !selected.isDisjoint(with: ["aerospace-profile", "sketchybar-profile",
-                                             "karabiner-profile", "raycast-profile"]) {
-                    let pendingLayout = selected.isDisjoint(with: ["aerospace-profile", "sketchybar-profile"])
-                        ? appliedLayout : layout
-                    let pendingShortcuts = selected.isDisjoint(with: ["aerospace-profile", "karabiner-profile", "raycast-profile"])
-                        ? appliedShortcuts : shortcuts
-                    try pendingShortcuts.validate(workspaces: pendingLayout, aerospaceTemplate: aerospaceTemplate)
+                let selected = try selectedConfiguration(taskIDs: Set(picker.orderedSelection))
+                if selected.layout != nil || selected.shortcuts != nil {
+                    try (selected.shortcuts ?? appliedShortcuts).validate(
+                        workspaces: selected.layout ?? appliedLayout, aerospaceTemplate: aerospaceTemplate)
                 }
             case .workspaces:
                 var pending = layout
-                pending.keymap = appliedLayout.keymap
+                pending.barStyle = appliedLayout.barStyle
                 try appliedShortcuts.validateWorkspaceBindings(pending, aerospaceTemplate: aerospaceTemplate)
+            case .workspaceBar:
+                try layout.barStyle.validate()
             case .shortcuts:
-                var pending = appliedLayout
-                pending.keymap = layout.keymap
-                try shortcuts.validate(workspaces: pending, aerospaceTemplate: aerospaceTemplate)
+                try shortcuts.validate(workspaces: appliedLayout, aerospaceTemplate: aerospaceTemplate)
             case .feature: break
             }
             return nil
         } catch { return String(describing: error) }
     }
 
+    private func selectedConfiguration(taskIDs: Set<String>) throws -> SelectedConfiguration {
+        SelectedConfiguration(taskIDs: taskIDs, draftLayout: layout, draftShortcuts: shortcuts,
+                              savedLayout: try WorkspaceConfiguration.loadForEditing(from: engine.paths).original,
+                              savedShortcuts: try ShortcutSettings.load(from: engine.paths, aerospaceTemplate: aerospaceTemplate))
+    }
+
     func start() {
+        if scope == .workspaces || scope == .workspaceBar || scope == .shortcuts {
+            startEditorConfiguration()
+            return
+        }
         do {
             setupLock = try SetupLock(paths: engine.paths)
-            // Record a recoverable snapshot of only the selected editor sections.
-            let writer = SetupConfigurationWriter(journal: engine.journal)
-            let configurationRecovery: String?
             switch scope {
             case .full:
                 if let error = configurationError(for: .full) { throw SetupError(error) }
-                let selected = Set(tasks.map(\.id))
-                configurationRecovery = try writer.save(
-                    layout: selected.isDisjoint(with: ["aerospace-profile", "sketchybar-profile"]) ? nil : layout,
-                    shortcuts: selected.isDisjoint(with: ["aerospace-profile", "karabiner-profile", "raycast-profile"]) ? nil : shortcuts)
-            case .workspaces:
-                var chosen = layout
-                chosen.keymap = appliedLayout.keymap
-                try appliedShortcuts.validateWorkspaceBindings(chosen, aerospaceTemplate: aerospaceTemplate)
-                configurationRecovery = try writer.save(layout: chosen)
-            case .shortcuts:
-                var chosen = appliedLayout
-                chosen.keymap = layout.keymap
-                try shortcuts.validate(workspaces: chosen, aerospaceTemplate: aerospaceTemplate)
-                configurationRecovery = try writer.save(layout: chosen, shortcuts: shortcuts)
+                let selected = try selectedConfiguration(taskIDs: Set(tasks.map(\.id)))
+                engine.draftLayout = selected.layout
+                engine.draftShortcuts = selected.shortcuts
             case .feature:
-                configurationRecovery = nil
+                engine.draftLayout = nil
+                engine.draftShortcuts = nil
+            case .workspaces, .workspaceBar, .shortcuts: return
             }
             engine.selectedWorkspaceTaskIDs = scope == .full ? picker.selected : nil
             pausedSetup = false
             runtimeIssues = []
             index = 0; results = [:]; runLog = ""
             log("Starting \(scope) with \(tasks.count) selected tasks")
-            if let configurationRecovery {
-                log("Saved editor configuration recovery record: \(configurationRecovery). Restore it only after reversing later profile changes.")
-            }
+            log("Reviewed configuration stays in memory until its profile task succeeds.")
             log("Workspace order: \(layout.workspaces.map(\.id).joined(separator: ", "))")
             log("Switch modifiers: \(layout.keymap.switchModifiers.joined(separator: "+")); move modifiers: \(layout.keymap.moveModifiers.joined(separator: "+"))")
             advance()
@@ -223,6 +218,61 @@ final class SetupModel: ObservableObject {
             setupLock = nil
             message = String(describing: error)
         }
+    }
+
+    func retry() {
+        if scope == .workspaces || scope == .workspaceBar || scope == .shortcuts { start() }
+        else { advance() }
+    }
+
+    private func startEditorConfiguration() {
+        do {
+            setupLock = try SetupLock(paths: engine.paths)
+            engine.draftLayout = nil
+            engine.draftShortcuts = nil
+            let saved = try WorkspaceConfiguration.loadForEditing(from: engine.paths).original
+            var chosen = saved
+            let chosenShortcuts: ShortcutSettings?
+            switch scope {
+            case .workspaces:
+                chosen.workspaces = layout.workspaces
+                chosen.keymap = layout.keymap
+                chosenShortcuts = nil
+            case .workspaceBar:
+                chosen.barStyle = layout.barStyle
+                chosenShortcuts = nil
+            case .shortcuts:
+                chosenShortcuts = shortcuts
+            default: return
+            }
+            let chosenLayout = scope == .shortcuts ? nil : chosen
+            let selectedTasks = tasks
+            busy = true; page = .running; results = [:]; message = ""; details = ""; runtimeIssues = []
+            runLog = ""; log("Applying \(scope) with coordinated recovery")
+            worker.async { [self] in
+                do {
+                    let issues = try engine.applyConfiguration(layout: chosenLayout, shortcuts: chosenShortcuts,
+                                                               tasks: selectedTasks)
+                    DispatchQueue.main.async {
+                        self.results = Dictionary(uniqueKeysWithValues: selectedTasks.map { ($0.id, "Complete") })
+                        self.runtimeIssues = issues
+                        // These are the saved baseline. Live checks remain separately visible.
+                        self.appliedLayout = chosen
+                        if let chosenShortcuts { self.appliedShortcuts = chosenShortcuts }
+                        self.log(issues.isEmpty ? "Selected configuration applied." : issues.joined(separator: "\n"))
+                        self.busy = false; self.page = .finished; self.setupLock = nil
+                        self.refreshInventory()
+                    }
+                } catch {
+                    DispatchQueue.main.async {
+                        self.log("Configuration failed: \(error)")
+                        self.busy = false; self.page = .failed; self.setupLock = nil
+                        self.message = "Your draft is still available. Review the recovery result below, then retry."
+                        self.details = String(describing: error)
+                    }
+                }
+            }
+        } catch { setupLock = nil; message = String(describing: error) }
     }
 
     func advance() {
@@ -261,6 +311,8 @@ final class SetupModel: ObservableObject {
                         self.busy = false
                         self.page = .finished
                         self.setupLock = nil
+                        self.engine.draftLayout = nil
+                        self.engine.draftShortcuts = nil
                         self.refreshInventory()
                     }
                 } catch {
@@ -310,6 +362,8 @@ final class SetupModel: ObservableObject {
                     && ["aerospace-profile", "sketchybar-profile"].contains(task.id)
                     || scope == .shortcuts
                     && ["aerospace-profile", "karabiner-profile"].contains(task.id)
+                    || scope == .full && (engine.draftLayout != nil || engine.draftShortcuts != nil)
+                    && ["aerospace-profile", "sketchybar-profile", "karabiner-profile", "raycast-profile"].contains(task.id)
                 let already = state == .done
                     && task.id != "sketchybar-start" && !refreshEditedProfile
                 if !already { _ = try engine.apply(task) }
@@ -461,7 +515,7 @@ final class SetupModel: ObservableObject {
     func resumeAfterEdits() {
         guard pausedSetup, !busy else { return }
         do {
-            if let error = workspaceError(in: layout) { throw SetupError(error) }
+            if let error = configurationError(for: .full) { throw SetupError(error) }
             let changed = try Catalog.ordered(picker.orderedSelection, includingDependencies: false)
             let selectedIDs = Set(changed.map(\.id))
             let previousID = current?.id
@@ -470,10 +524,18 @@ final class SetupModel: ObservableObject {
             if let previousID, !selectedIDs.contains(previousID) {
                 log("Removed interrupted task \(previousID) from this run")
             }
-            if let id = try SetupConfigurationWriter(journal: engine.journal).save(
-                layout: layout, shortcuts: shortcuts) {
-                log("Updated editor configuration recovery record: \(id)")
+            let selected = try selectedConfiguration(taskIDs: selectedIDs)
+            let previousLayout = try WorkspaceConfiguration.load(from: engine.paths)
+            let previousShortcuts = try ShortcutSettings.load(from: engine.paths, aerospaceTemplate: aerospaceTemplate)
+            // Re-run profile tasks whose inputs changed while setup was paused.
+            if let next = selected.layout, next != previousLayout {
+                for id in ["aerospace-profile", "sketchybar-profile", "sketchybar-start"] { results.removeValue(forKey: id) }
             }
+            if let next = selected.shortcuts, next != previousShortcuts {
+                for id in ["aerospace-profile", "karabiner-profile", "raycast-profile"] { results.removeValue(forKey: id) }
+            }
+            engine.draftLayout = selected.layout
+            engine.draftShortcuts = selected.shortcuts
             engine.selectedWorkspaceTaskIDs = picker.selected
             index = 0
             pausedSetup = false
@@ -485,6 +547,8 @@ final class SetupModel: ObservableObject {
     }
 
     func returnToFeatures() {
+        engine.draftLayout = nil
+        engine.draftShortcuts = nil
         setupLock = nil
         pausedSetup = false
         scope = .full
@@ -565,6 +629,7 @@ struct SetupView: View {
                     case .features: features
                     case .shortcuts: shortcuts
                     case .workspaces: workspaces
+                    case .workspaceBar: workspaceBar
                     case .review: review
                     case .running: running
                     case .guide: guide
@@ -708,7 +773,8 @@ struct SetupView: View {
     /// This is an editable SketchyBar mock, not a material app card.
     /// The menu bar itself is drawn as the thin black strip users actually see.
     private var menuBarPreview: some View {
-        let style = model.layout.barStyle
+        let style = model.page == .workspaceBar ? model.layout.barStyle : model.appliedLayout.barStyle
+        let workspaces = model.page == .workspaceBar ? model.appliedLayout.workspaces : model.layout.workspaces
         return VStack(alignment: .leading, spacing: 7) {
             HStack {
                 Text("SKETCHYBAR PREVIEW")
@@ -718,7 +784,7 @@ struct SetupView: View {
                     .font(.caption2).foregroundStyle(.secondary)
             }
             HStack(spacing: 2) {
-                ForEach(model.layout.workspaces, id: \.id) { workspace in
+                ForEach(workspaces, id: \.id) { workspace in
                     Text(workspace.resolvedIcon.symbol)
                         .font(.custom(workspace.resolvedIcon.font.postScriptName, size: 15))
                         .frame(width: CGFloat(style.itemWidth), height: 30)
@@ -764,7 +830,7 @@ struct SetupView: View {
                       systemImage: model.workspaceHasDraftChanges ? "square.and.pencil" : "checkmark.circle")
                     .foregroundStyle(model.workspaceHasDraftChanges ? Color.orange : Color.secondary)
                 Spacer()
-                Button(model.workspaceHasDraftChanges ? "Review & apply workspaces" : "Reapply workspaces") {
+                Button(model.scope == .full ? "Review selected setup" : model.workspaceHasDraftChanges ? "Review & apply workspaces" : "Reapply workspaces") {
                     model.review()
                 }
                     .buttonStyle(.borderedProminent)
@@ -784,19 +850,13 @@ struct SetupView: View {
             }
             .animation(.easeInOut(duration: 0.16), value: visibleWorkspaceIDs)
             Button {
-                var number = 1
-                while model.layout.workspaces.contains(where: { $0.id == "custom\(number)" }) {
-                    number += 1
-                }
-                model.layout.workspaces.append(.init(id: "custom\(number)",
-                    name: "Workspace \(number)", glyph: "star", shortcutKey: ""))
+                model.layout.addWorkspace()
             } label: {
                 Label("Add workspace", systemImage: "plus")
             }
             .padding(.top, 4)
 
-            workspaceAppearance
-            DesktopAccentControls(engine: model.engine)
+            WorkspaceModifierControls(keymap: $model.layout.keymap)
 
             if model.hasInvalidWorkspaceIDs {
                 Button("Repair duplicate or invalid workspace IDs") {
@@ -818,6 +878,21 @@ struct SetupView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var workspaceBar: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text("Workspace bar").font(SetupDesign.pageTitle)
+            Text("Customize SketchyBar's appearance. Workspace names, order, app routing and keys are configured in Workspaces.")
+                .foregroundStyle(.secondary)
+            menuBarPreview
+            workspaceAppearance
+            DesktopAccentControls(engine: model.engine)
+            if let error = model.configurationError(for: .workspaceBar) {
+                Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
+            }
+            if !model.message.isEmpty { Text(model.message).foregroundStyle(.orange) }
+        }
     }
 
     private var workspaceAppearance: some View {
@@ -907,12 +982,23 @@ struct SetupView: View {
             .buttonStyle(.plain)
             .help("Click to change glyph for \(item.name)")
 
-            TextField("Workspace name", text: $model.layout.workspaces[index].name)
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 216)
+            VStack(alignment: .leading, spacing: 5) {
+                WorkspaceNameField(name: item.name, runtimeID: item.id) { name in
+                    do { try model.layout.renameWorkspace(item.id, to: name) }
+                    catch { model.message = String(describing: error) }
+                }
+                Picker("Display", selection: Binding(get: { item.resolvedMonitor }, set: {
+                    model.layout.workspaces[index].monitor = $0
+                })) {
+                    Text("Automatic").tag(WorkspaceMonitor.automatic)
+                    Text("Main display").tag(WorkspaceMonitor.main)
+                    Text("Secondary display").tag(WorkspaceMonitor.secondary)
+                }.font(.caption).accessibilityLabel("Display for \(item.name)")
+            }
+            .frame(width: 216)
 
             Button {
-                model.selectedWorkspace = index
+                model.selectedWorkspaceID = item.id
                 model.appSheet = true
             } label: {
                 HStack(spacing: 5) {
@@ -931,7 +1017,7 @@ struct SetupView: View {
             .help("Click to edit assigned applications")
 
             workspaceShortcutKey(at: index)
-            Button { model.layout.workspaces.remove(at: index) } label: {
+            Button { model.layout.removeWorkspace(item.id) } label: {
                 Image(systemName: "trash").font(.system(size: 14))
                     .frame(width: 30, height: 34)
                     .contentShape(Rectangle())
@@ -971,7 +1057,7 @@ struct SetupView: View {
             let source = String(raw.dropFirst(prefix.count))
             guard visibleWorkspaceIDs.contains(source) else { return false }
             withAnimation(.easeInOut(duration: 0.16)) {
-                model.layout.insertWorkspace(source, at: location.y > 22 ? index + 1 : index)
+                model.layout.insertWorkspace(source, at: location.y > 40 ? index + 1 : index)
             }
             dropTargetWorkspaceID = nil
             return true
@@ -1017,19 +1103,48 @@ struct SetupView: View {
         .accessibilityLabel("Change shortcut for \(item.name)")
     }
 
-    private var appAssignments: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Apps for \(model.layout.workspaces[model.selectedWorkspace].name)").font(.title2.bold())
-            Text("New windows from these apps will open in this workspace. Selecting an app moves its assignment here.")
-            TextField("Find an installed app", text: $model.appSearch).textFieldStyle(.roundedBorder)
-            List(model.apps.filter { model.appSearch.isEmpty || $0.name.localizedCaseInsensitiveContains(model.appSearch) }, id: \.bundleID) { app in
-                Toggle(app.name, isOn: Binding(get: { model.layout.workspaces[model.selectedWorkspace].apps.contains(app.bundleID) }, set: { enabled in
-                    for i in model.layout.workspaces.indices { model.layout.workspaces[i].apps.removeAll { $0 == app.bundleID } }
-                    if enabled { model.layout.workspaces[model.selectedWorkspace].apps.append(app.bundleID) }
-                })).toggleStyle(.checkbox)
+    @ViewBuilder private var appAssignments: some View {
+        if let id = model.selectedWorkspaceID,
+           let index = model.layout.workspaces.firstIndex(where: { $0.id == id }) {
+            let savedIDs = Set(model.layout.workspaces.flatMap(\.apps))
+            let installedIDs = Set(model.apps.map(\.bundleID))
+            let missing = savedIDs.subtracting(installedIDs).map {
+                InstalledApplication(name: $0, bundleID: $0, path: "")
             }
-            HStack { Spacer(); Button("Done") { model.appSheet = false }.keyboardShortcut(.defaultAction) }
-        }.padding(24).frame(width: 540, height: 520)
+            let apps = (model.apps + missing).sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Apps for \(model.layout.workspaces[index].name)").font(.title2.bold())
+                Text("New windows open in their assigned workspace. Assignments stay available when an app is not installed.")
+                    .font(.callout).foregroundStyle(.secondary)
+                TextField("Find an app or bundle ID", text: $model.appSearch).textFieldStyle(.roundedBorder)
+                List(apps.filter { model.appSearch.isEmpty || $0.name.localizedCaseInsensitiveContains(model.appSearch)
+                    || $0.bundleID.localizedCaseInsensitiveContains(model.appSearch) }, id: \.bundleID) { app in
+                    Toggle(isOn: Binding(get: { model.layout.workspaces[index].apps.contains(app.bundleID) }, set: { enabled in
+                        for i in model.layout.workspaces.indices { model.layout.workspaces[i].apps.removeAll { $0 == app.bundleID } }
+                        if enabled { model.layout.workspaces[index].apps.append(app.bundleID) }
+                    })) {
+                        VStack(alignment: .leading) {
+                            Text(app.name)
+                            Text(app.path.isEmpty ? "Not installed · " + app.bundleID : app.bundleID)
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }.toggleStyle(.checkbox)
+                }
+                HStack {
+                    TextField("Application bundle ID", text: $model.manualAppID).textFieldStyle(.roundedBorder)
+                    Button("Assign") {
+                        let bundle = model.manualAppID.trimmingCharacters(in: .whitespacesAndNewlines)
+                        var pending = model.layout
+                        for i in pending.workspaces.indices { pending.workspaces[i].apps.removeAll { $0 == bundle } }
+                        pending.workspaces[index].apps.append(bundle)
+                        do { try pending.validate(); model.layout = pending; model.manualAppID = "" }
+                        catch { model.message = String(describing: error) }
+                    }.disabled(model.manualAppID.isEmpty)
+                }
+                if !model.message.isEmpty { Text(model.message).font(.caption).foregroundStyle(.orange) }
+                HStack { Spacer(); Button("Done") { model.appSheet = false }.keyboardShortcut(.defaultAction) }
+            }.padding(24).frame(width: 540, height: 560)
+        }
     }
 
     private var review: some View {
@@ -1188,21 +1303,24 @@ struct SetupView: View {
     @ViewBuilder private var embeddedFooter: some View {
         HStack {
             switch model.page {
-            case .workspaces, .shortcuts:
+            case .workspaces, .workspaceBar, .shortcuts:
                 Text(model.page == .workspaces
                      ? (model.workspaceHasDraftChanges ? "Workspace edits are not confirmed active." : "No local workspace edits.")
+                     : model.page == .workspaceBar
+                     ? (model.barHasDraftChanges ? "Bar appearance has unapplied edits." : "No local bar appearance edits.")
                      : (model.shortcutsHaveDraftChanges ? "Shortcut edits are not confirmed active." : "No local shortcut edits."))
                     .foregroundStyle(.secondary)
                 Spacer()
-                Button(model.page == .workspaces ? "Review & apply workspaces" : "Review & apply shortcuts") {
+                Button(model.page == .workspaces ? "Review & apply workspaces" : model.page == .workspaceBar ? "Review & apply bar" : "Review & apply shortcuts") {
                     model.review()
                 }
                 .disabled(model.busy || model.configurationError(for: model.scope) != nil)
                 .keyboardShortcut(.defaultAction)
             case .review:
                 Button(model.scope == .workspaces ? "Back to workspaces" :
-                       (model.scope == .shortcuts ? "Back to shortcuts" : "Back to features")) {
+                       (model.scope == .workspaceBar ? "Back to bar appearance" : model.scope == .shortcuts ? "Back to shortcuts" : "Back to features")) {
                     if model.scope == .workspaces { model.openEditor(.workspaces) }
+                    else if model.scope == .workspaceBar { model.openEditor(.workspaceBar) }
                     else if model.scope == .shortcuts { model.openEditor(.shortcuts) }
                     else { onReturn?() }
                 }
@@ -1224,13 +1342,14 @@ struct SetupView: View {
                     Button("Leave pending") { model.skip() }
                 }
                 Spacer()
-                Button("Retry") { model.advance() }.disabled(model.busy)
+                Button("Retry") { model.retry() }.disabled(model.busy)
             case .finished:
                 Text("Configuration saved. Desktop reload requested. Check SketchyBar and AeroSpace to confirm the live result.")
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button("Continue customizing") {
                     if model.scope == .workspaces { model.openEditor(.workspaces) }
+                    else if model.scope == .workspaceBar { model.openEditor(.workspaceBar) }
                     else if model.scope == .shortcuts { model.openEditor(.shortcuts) }
                     else { onReturn?() }
                 }.keyboardShortcut(.defaultAction)
@@ -1268,7 +1387,7 @@ struct SetupView: View {
                     else { model.review() }
                 }.disabled(model.workspaceError(in: model.layout) != nil)
                     .keyboardShortcut(.defaultAction)
-            case .workspaces:
+            case .workspaces, .workspaceBar:
                 Button("Back") {
                     if model.scope == .full { model.page = .shortcuts }
                     else { model.returnToFeatures() }
@@ -1285,7 +1404,7 @@ struct SetupView: View {
             case .failed:
                 Button("Change selection") { model.pauseForEdits() }
                 if model.current != nil { Button("Leave pending & continue") { model.skip() } }
-                Spacer(); Button("Retry this task") { model.advance() }.keyboardShortcut(.defaultAction)
+                Spacer(); Button("Retry this task") { model.retry() }.keyboardShortcut(.defaultAction)
             case .running:
                 Text("Keep this window open while the installer finishes.").foregroundStyle(.secondary); Spacer()
             case .finished:

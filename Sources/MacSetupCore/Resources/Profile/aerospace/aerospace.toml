@@ -1,7 +1,7 @@
 config-version = 2
 
 persistent-workspaces = [
-    "chatgpt",
+    "ai",
     "1",
     "2",
     "3",
@@ -85,7 +85,7 @@ alt-ctrl-right = 'move right'
 # Option + workspace key
 # ------------------------------------------------------------
 
-alt-backtick = 'workspace chatgpt'
+alt-backtick = 'workspace ai'
 
 alt-1 = 'workspace 1'
 alt-2 = 'workspace 2'
@@ -108,7 +108,7 @@ alt-equal = 'workspace timer'
 # Option + Shift + workspace key
 # ------------------------------------------------------------
 
-alt-shift-backtick = ['move-node-to-workspace chatgpt', 'exec-and-forget sketchybar --trigger aerospace_workspace_change']
+alt-shift-backtick = ['move-node-to-workspace ai', 'exec-and-forget sketchybar --trigger aerospace_workspace_change']
 
 alt-shift-1 = ['move-node-to-workspace 1', 'exec-and-forget sketchybar --trigger aerospace_workspace_change']
 alt-shift-2 = ['move-node-to-workspace 2', 'exec-and-forget sketchybar --trigger aerospace_workspace_change']
@@ -175,7 +175,7 @@ cmd-alt-h = []
 # APP ASSIGNMENTS
 # ============================================================
 
-# Preserve the public dotfiles behavior: these macOS windows are always tiled.
+# Keep known system dialogs tiled.
 [[on-window-detected]]
 if = 'test %{app-bundle-id} = com.apple.ScreenContinuity'
 run = 'layout tiling'
@@ -206,11 +206,11 @@ run = ['move-node-to-workspace timer', 'exec-and-forget sketchybar --trigger aer
 
 [[on-window-detected]]
 if = 'test %{app-bundle-id} = com.openai.chat'
-run = ['move-node-to-workspace chatgpt', 'exec-and-forget sketchybar --trigger aerospace_workspace_change']
+run = ['move-node-to-workspace ai', 'exec-and-forget sketchybar --trigger aerospace_workspace_change']
 
 [[on-window-detected]]
 if = 'test %{app-bundle-id} = com.openai.codex'
-run = ['move-node-to-workspace chatgpt', 'exec-and-forget sketchybar --trigger aerospace_workspace_change']
+run = ['move-node-to-workspace ai', 'exec-and-forget sketchybar --trigger aerospace_workspace_change']
 
 [[on-window-detected]]
 if = 'test %{app-bundle-id} = md.obsidian'

@@ -65,7 +65,7 @@ final class FontGlyphTests: XCTestCase {
         let start = try XCTUnwrap(output.range(of: "workspace_icon() {"))
         let end = try XCTUnwrap(output.range(of: "##### AeroSpace Workspaces #####", range: start.lowerBound..<output.endIndex))
         let functions = String(output[start.lowerBound..<end.lowerBound])
-        let result = try ProcessRunner().checked("/bin/bash", ["-c", functions + "\nworkspace_icon chatgpt\nworkspace_font chatgpt"])
+        let result = try ProcessRunner().checked("/bin/bash", ["-c", functions + "\nworkspace_icon ai\nworkspace_font ai"])
         XCTAssertEqual(result.text, "'\nSample's Font:Regular:14.5")
     }
 
@@ -83,7 +83,7 @@ final class FontGlyphTests: XCTestCase {
             shortcuts: .init(switchTo: .init(key: "r", modifiers: ["ctrl", "alt"])),
             icon: .init(font: font, symbol: "R"))
         config.workspaces.append(research)
-        config.moveWorkspace("research", to: "chatgpt", selectedTasks: ["aerospace-profile"])
+        config.moveWorkspace("research", to: "ai", selectedTasks: ["aerospace-profile"])
         XCTAssertEqual(config.workspaces.first, research)
         XCTAssertEqual(config.workspaces.last?.id, "timer")
         XCTAssertEqual(config.forSelectedTasks(["aerospace-profile"]).workspaces.last?.id, "timer")
