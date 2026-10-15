@@ -214,7 +214,10 @@ final class WorkspaceConfigurationTests: XCTestCase {
         let original = updated.workspaces.map(\.id)
         updated.insertWorkspace("notes", at: 2)
         try updated.save(to: paths)
-        let engine = try Engine(paths: paths, runner: FakeRunner(), tools: { _ in nil })
+        let helper = home.appendingPathComponent("mac-setup-display")
+        try Data("#!/bin/sh\\nexit 0\\n".utf8).write(to: helper)
+        let engine = try Engine(paths: paths, runner: FakeRunner(),
+                                displayHelper: helper, tools: { _ in nil })
         _ = try engine.apply(Catalog.task("aerospace-profile"))
         _ = try engine.apply(Catalog.task("sketchybar-profile"))
         let persisted = try WorkspaceConfiguration.load(from: paths).workspaces.map(\.id)
