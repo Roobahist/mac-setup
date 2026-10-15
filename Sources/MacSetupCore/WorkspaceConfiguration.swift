@@ -397,6 +397,9 @@ public struct WorkspaceConfiguration: Codable, Equatable {
     public mutating func insertWorkspace(_ sourceID: String, at destination: Int) {
         guard let source = workspaces.firstIndex(where: { $0.id == sourceID }),
               (0...workspaces.count).contains(destination) else { return }
+        // Dropping on either boundary of the same row is not a move and must
+        // not materialize inherited keys or create phantom unsaved changes.
+        guard destination != source && destination != source + 1 else { return }
         // Materialize inherited keys before moving a workspace. Reordering
         // must not unexpectedly assign it a different keyboard shortcut.
         for index in workspaces.indices where workspaces[index].shortcutKey == nil
