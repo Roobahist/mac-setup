@@ -5,6 +5,7 @@ import CoreFoundation
 public struct MacOSSetting {
     public let id: String
     public let title: String
+    public let category: String
     public let domain: String
     public let key: String
     public let enabled: Bool
@@ -71,7 +72,7 @@ public struct MacOSProfile {
                     throw SetupError("Invalid Finder list options for \(id).")
                 }
             }
-            parsed.append(MacOSSetting(id: id, title: title, domain: domain, key: key,
+            parsed.append(MacOSSetting(id: id, title: title, category: row["category"] as? String ?? "Other", domain: domain, key: key,
                                        enabled: active, value: value, tasks: tasks, restart: restart,
                                        minimumOS: minimum, operation: operation))
         }
@@ -99,6 +100,17 @@ public struct MacOSProfile {
             throw SetupError("This preference is missing from macos/preferences.json. Add it there before editing it in Mac Setup.")
         }
         rows[index]["value"] = value ?? NSNull(); rows[index]["enabled"] = true
+        var copy = document; copy["settings"] = rows
+        return try Self(data: JSONSerialization.data(withJSONObject: copy))
+    }
+
+    public func editing(_ edit: MacOSPreferenceEdit) throws -> MacOSProfile {
+        var rows = document["settings"] as! [[String: Any]]
+        guard let index = rows.firstIndex(where: { $0["id"] as? String == edit.id }) else {
+            throw SetupError("Unknown macOS setting: \(edit.id)")
+        }
+        rows[index]["enabled"] = edit.enabled
+        rows[index]["value"] = edit.value ?? NSNull()
         var copy = document; copy["settings"] = rows
         return try Self(data: JSONSerialization.data(withJSONObject: copy))
     }
@@ -147,7 +159,7 @@ private struct ManagedMacOSPreference: Codable {
     let key: String
     let tasks: [String]
     let restart: String?
-    let before: Data?
+    var before: Data?
     var after: Data?
 }
 
@@ -193,18 +205,18 @@ public final class MacOSPreferenceService {
         var notes: [String] = []
     }
 
-    private func plan(_ profile: MacOSProfile, taskID: String? = nil, settingID: String? = nil) throws -> Plan {
+    private func plan(_ profile: MacOSProfile, taskID: String? = nil, settingID: String? = nil, settingIDs: Set<String>? = nil) throws -> Plan {
         var plan = Plan(managed: try managed())
         var domains: [String: [String: Any]] = [:]
         func current(_ domain: String, _ key: String) throws -> Any? {
             if domains[domain] == nil { domains[domain] = try journal.preferences(domain) }
             return domains[domain]?[key]
         }
-        let selected: (MacOSSetting) -> Bool = { (taskID == nil || $0.tasks.contains(taskID!)) && (settingID == nil || $0.id == settingID) }
+        let selected: (MacOSSetting) -> Bool = { (taskID == nil || $0.tasks.contains(taskID!)) && (settingID == nil || $0.id == settingID) && (settingIDs == nil || settingIDs!.contains($0.id)) }
         let active = profile.settings.filter { selected($0) && profile.enabled && $0.enabled && $0.minimumOS <= osMajor }
         let activeIDs = Set(active.map(\.id))
         for old in plan.managed where !activeIDs.contains(old.id)
-            && (taskID == nil || old.tasks.contains(taskID!)) && (settingID == nil || old.id == settingID) {
+            && (taskID == nil || old.tasks.contains(taskID!)) && (settingID == nil || old.id == settingID) && (settingIDs == nil || settingIDs!.contains(old.id)) {
             let live = try current(old.domain, old.key)
             let last = try old.after.map(plistValue)
             let before = try old.before.map(plistValue)
@@ -224,6 +236,10 @@ public final class MacOSPreferenceService {
             if let index = plan.managed.firstIndex(where: { $0.id == setting.id }) {
                 guard plan.managed[index].domain == setting.domain, plan.managed[index].key == setting.key else {
                     throw SetupError("The target for \(setting.id) changed. Disable and apply it before changing its domain/key.")
+                }
+                if !equalPreference(live, try plan.managed[index].after.map(plistValue)) {
+                    // A later manual edit becomes the baseline for a new explicit change.
+                    plan.managed[index].before = try live.map(plistData)
                 }
                 plan.managed[index].after = try desired.map(plistData)
             } else {
@@ -281,6 +297,10 @@ public final class MacOSPreferenceService {
     /// Caller owns the setup lock and transaction; setup task restarts are coordinated by Engine.
     public func apply(_ profile: MacOSProfile, transaction: String, taskID: String? = nil, settingID: String? = nil) throws -> Set<String> {
         let planned = try plan(profile, taskID: taskID, settingID: settingID)
+        return try execute(profile, planned: planned, transaction: transaction)
+    }
+
+    private func execute(_ profile: MacOSProfile, planned: Plan, transaction: String) throws -> Set<String> {
         let destination = profileURL.resolvingSymlinksInPath()
         let data = try profile.encoded()
         if (try? Data(contentsOf: destination)) != data { try journal.write(destination, data: data, transaction: transaction) }
@@ -291,6 +311,122 @@ public final class MacOSPreferenceService {
         let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         try journal.write(stateURL, data: encoder.encode(planned.managed), transaction: transaction, permissions: 0o600)
         return Set(planned.changes.compactMap(\.restart))
+    }
+
+    public func snapshot() throws -> MacOSPreferenceSnapshot {
+        let profile = try profile()
+        var domains: [String: [String: Any]] = [:], live: [String: Data] = [:]
+        for setting in profile.settings {
+            if domains[setting.domain] == nil { domains[setting.domain] = try journal.preferences(setting.domain) }
+            if let value = domains[setting.domain]?[setting.key] { live[setting.id] = try plistData(value) }
+        }
+        return MacOSPreferenceSnapshot(profile: profile, live: live)
+    }
+
+    /// Reflect current values without capturing machine-specific Dock records in a portable file.
+    public func editingProfile(_ snapshot: MacOSPreferenceSnapshot) throws -> MacOSProfile {
+        guard snapshot.profile.enabled else { return snapshot.profile }
+        var result = snapshot.profile
+        for setting in snapshot.profile.settings where setting.minimumOS <= osMajor {
+            let live = try snapshot.value(for: setting.id)
+            if setting.operation == "finder-list", let prototype = setting.value as? [String: Any] {
+                let views = live as? [String: Any] ?? [:]
+                let list = views["ListViewSettings"] as? [String: Any]
+                    ?? views["ExtendedListViewSettingsV2"] as? [String: Any] ?? [:]
+                var options = prototype
+                for key in ["iconSize", "textSize", "sortColumn", "useRelativeDates", "calculateAllSizes", "showIconPreview"] {
+                    if let value = list[key] { options[key] = value }
+                }
+                if let columns = list["columns"] as? [String: [String: Any]] {
+                    options["visibleColumns"] = MacOSProfile.columnIDs.filter { $0 == "name" || columns[$0]?["visible"] as? Bool == true }
+                    if let sort = options["sortColumn"] as? String, let ascending = columns[sort]?["ascending"] { options["sortAscending"] = ascending }
+                } else if let columns = list["columns"] as? [[String: Any]] {
+                    options["visibleColumns"] = MacOSProfile.columnIDs.filter { id in
+                        id == "name" || columns.contains { $0["identifier"] as? String == id && $0["visible"] as? Bool == true }
+                    }
+                    if let sort = options["sortColumn"] as? String,
+                       let ascending = columns.first(where: { $0["identifier"] as? String == sort })?["ascending"] { options["sortAscending"] = ascending }
+                }
+                result = try result.editing(.init(id: setting.id, enabled: setting.enabled && !list.isEmpty, value: options))
+            } else if let items = live as? [Any], !items.isEmpty {
+                // Pinned Dock entries include paths/bookmarks. Keep them on this Mac;
+                // the card offers an explicit, portable clear-list action instead.
+                result = try result.editing(.init(id: setting.id, enabled: false, value: setting.value))
+            } else if live is [String: Any] || live is Data || live is Date {
+                result = try result.editing(.init(id: setting.id, enabled: false, value: setting.value))
+            } else {
+                result = try result.editing(.init(id: setting.id, enabled: setting.enabled, value: live))
+            }
+        }
+        return result
+    }
+
+    private func prepareEdits(_ edits: [MacOSPreferenceEdit], snapshot baseline: MacOSPreferenceSnapshot,
+                              enabled: Bool) throws -> (MacOSProfile, Plan) {
+        let fresh = try snapshot()
+        guard try fresh.profile.encoded() == baseline.profile.encoded() else {
+            throw SetupError("The preference file changed. Reload the cards before applying.")
+        }
+        let ids = Set(edits.map(\.id))
+        guard ids.count == edits.count else { throw SetupError("A preference was edited more than once.") }
+        let switching = enabled != baseline.profile.enabled
+        let checked = switching && enabled ? Set(fresh.profile.settings.filter(\.enabled).map(\.id)).union(ids) : ids
+        for id in checked {
+            guard fresh.live[id] == baseline.live[id] else {
+                throw SetupError("\(fresh.profile.settings.first { $0.id == id }?.title ?? id) changed on this Mac after the cards loaded. Reload before applying.")
+            }
+        }
+        var profile = try switching ? fresh.profile : editingProfile(fresh)
+        for edit in edits { profile = try profile.editing(edit) }
+        profile = try profile.settingEnabled(enabled)
+        var planned = try plan(profile, settingIDs: switching ? nil : ids)
+        if !switching {
+            planned.managed.removeAll { old in
+                !ids.contains(old.id) && fresh.live[old.id] != old.after
+            }
+        }
+        return (profile, planned)
+    }
+
+    public func previewEdits(_ edits: [MacOSPreferenceEdit], snapshot: MacOSPreferenceSnapshot,
+                             enabled: Bool) throws -> [String] {
+        let (_, planned) = try prepareEdits(edits, snapshot: snapshot, enabled: enabled)
+        return try planned.changes.map { "\($0.title) → \(try Self.describe($0.value))" }
+            + planned.notes + ["Save one preference file. Unedited settings keep this Mac’s current values."]
+    }
+
+    @discardableResult
+    public func applyEdits(_ edits: [MacOSPreferenceEdit], snapshot: MacOSPreferenceSnapshot,
+                           enabled: Bool) throws -> TweakChangeResult {
+        let lock = try SetupLock(paths: paths)
+        defer { withExtendedLifetime(lock) {} }
+        let (profile, planned) = try prepareEdits(edits, snapshot: snapshot, enabled: enabled)
+        let transaction = try journal.begin("macos-preferences.cards")
+        do {
+            let restarts = try execute(profile, planned: planned, transaction: transaction)
+            try journal.finish(transaction)
+            let warnings = restarts.sorted().compactMap { TweakService.refresh($0, runner: runner) }
+            NotificationCenter.default.post(name: Self.groupDidChange, object: nil)
+            return .init(transaction: transaction, refreshWarning: warnings.isEmpty ? nil : warnings.joined(separator: "\n"))
+        } catch {
+            do { try journal.restore(transaction) }
+            catch { throw SetupError("Recovery needs attention. Recovery record: \(transaction). \(error)") }
+            throw SetupError("Preferences were not applied; previous files and values were restored. \(error)")
+        }
+    }
+
+    public func restore(_ transaction: String) throws -> String? {
+        let lock = try SetupLock(paths: paths)
+        defer { withExtendedLifetime(lock) {} }
+        let settings = try profile().settings
+        let record = try Journal(paths: paths, runner: runner).transactions.first { $0.id == transaction }
+        try journal.restore(transaction)
+        let restarts = Set((record?.changes ?? []).filter { $0.kind == .preference }.compactMap { change in
+            settings.first { $0.domain == change.target && $0.key == change.key }?.restart
+        })
+        let warnings = restarts.sorted().compactMap { TweakService.refresh($0, runner: runner) }
+        NotificationCenter.default.post(name: Self.groupDidChange, object: nil)
+        return warnings.isEmpty ? nil : warnings.joined(separator: "\n")
     }
 
     @discardableResult

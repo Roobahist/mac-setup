@@ -1,6 +1,6 @@
 # Mac Setup
 
-Mac Setup is a native macOS customization dashboard and CLI. It can reproduce a portable desktop configuration through guided setup, but everyday changes can be made independently through searchable controls for the Dock, Finder, macOS clock, appearance, workspaces, shortcuts, and application features. Configuration changes have local recovery records.
+Mac Setup is a native macOS customization dashboard and CLI. It can reproduce a portable desktop configuration through guided setup, but everyday changes can be made independently through searchable controls for the Dock, Finder, appearance, workspaces, shortcuts, and application features. Configuration changes have local recovery records.
 
 The portable configurations come from [dot-files](https://github.com/Roobahist/dot-files), with offline snapshots bundled into builds.
 
@@ -41,7 +41,6 @@ Launching Mac Setup normally opens the **Overview** dashboard rather than the in
 
 - **Dock**: hide/show behavior, reveal delay and animation, icon size, and recent apps.
 - **Finder**: filename extensions, hidden files, path bar, and status bar.
-- **Menu Bar & Clock**: 24-hour time, seconds, and weekday for the native macOS clock. SketchyBar's separately scripted clock is not yet editable through these native clock controls.
 - **Appearance**: native accent color, SketchyBar wallpaper watcher on/off, and manual SketchyBar highlight color when the watcher is off.
 - **Workspaces and Keyboard Shortcuts**: open existing editors directly within the app and apply only their relevant provider profiles.
 - **Apps & Features**: inspect installed or configured tasks and review the dependency-aware operation for any individual feature.
@@ -246,4 +245,8 @@ mac-setup macos on
 
 Mutating commands review and confirm unless `--yes` is supplied. `--config` selects an explicit JSON path, and `--dry-run` previews without writing. The top-level `enabled` flag controls the group; each setting also has `enabled` and `value`. False is an actual preference value; null removes an override. Disabling, or removing a setting and applying the whole profile, restores its saved baseline while preserving later manual edits. macOS does not watch this file; reapply after edits or pulls. Some changes require logout or reopening apps.
 
-Appearance contains the group review/on/off control. Individual controls write the same file and journal their changes. Guided setup includes a Shared macOS preferences task; older task IDs still apply their respective subset from the same file. Group backups and recovery records are private, live outside the dotfiles repo, and retain values from before the first managed apply. On an already customized reference Mac, that baseline may already contain its customizations. Off does not reconstruct unknown factory values. Nothing automatically commits or pushes local customization.
+Appearance opens a searchable, categorized card editor for the shared macOS preferences. It reads this Mac’s current values, offers reference defaults, and reviews selected edits before applying. The group on/off control and per-card inclusion switches use the same single JSON file. Individual Dock, Finder and Appearance controls use the same reconciliation path. Unedited preferences adopt current values in that file and receive no preference commands; a later manual edit to an edited card requires reloading before apply. Re-enabling the whole group explicitly reapplies its selected saved values. Private Dock bookmarks and paths are kept out of the portable file. Undo restores both preferences and the configuration file. Guided setup includes a Shared macOS preferences task; older task IDs still apply their respective subset from the same file. Group backups and recovery records are private, live outside the dotfiles repo, and retain values from before the first managed apply. On an already customized reference Mac, that baseline may already contain its customizations. Off does not reconstruct unknown factory values. Nothing automatically commits or pushes local customization.
+
+Both workspace previews use the same draft layout, spacing, font sizes and native bar height. The preview keeps readable item sizes and shows only the strip behind the bar; the wallpaper’s width is condensed to fit. Workspaces shows all items occupied with no focus. Workspace Bar samples occupied and empty items with one focused item; Shuffle sample changes the sample without changing configuration. The backdrop uses the available current wallpaper image, placed with the display’s crop/fill settings and cropped to its top edge. Transparent bar and label colors are composited over it; blur is an approximation and live wallpapers may differ. Wallpaper images remain local.
+
+The native **Menu bar & clock** section has been removed from navigation, guided steps and setting search. Existing profile keys remain compatible. Apple’s documented menu-bar controls cover visibility, not a separate supported reveal-delay or animation-duration setting; the Dock timing controls do not set native menu-bar timing.

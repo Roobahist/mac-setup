@@ -3,7 +3,7 @@ import SwiftUI
 import MacSetupCore
 
 enum ControlDestination: String, CaseIterable, Identifiable {
-    case home, apps, workspaces, workspaceBar, shortcuts, appearance, dock, menuBar, finder, updates, guidedSetup
+    case home, apps, workspaces, workspaceBar, shortcuts, appearance, dock, finder, updates, guidedSetup
 
     var id: Self { self }
     var title: String {
@@ -15,7 +15,6 @@ enum ControlDestination: String, CaseIterable, Identifiable {
         case .shortcuts: return "Keyboard shortcuts"
         case .appearance: return "Appearance"
         case .dock: return "Dock"
-        case .menuBar: return "Menu bar & clock"
         case .finder: return "Finder"
         case .updates: return "Updates"
         case .guidedSetup: return "Guided setup"
@@ -30,7 +29,6 @@ enum ControlDestination: String, CaseIterable, Identifiable {
         case .shortcuts: return "keyboard"
         case .appearance: return "paintpalette"
         case .dock: return "dock.rectangle"
-        case .menuBar: return "menubar.rectangle"
         case .finder: return "folder"
         case .updates: return "arrow.triangle.2.circlepath"
         case .guidedSetup: return "checklist"
@@ -63,7 +61,7 @@ struct ControlCenterView: View {
 
     // Navigation order matches the guided walkthrough exactly after Overview.
     private let customization: [ControlDestination] = [
-        .home, .apps, .shortcuts, .workspaces, .workspaceBar, .appearance, .dock, .menuBar, .finder
+        .home, .apps, .shortcuts, .workspaces, .workspaceBar, .appearance, .dock, .finder
     ]
 
     var body: some View {
@@ -139,7 +137,6 @@ struct ControlCenterView: View {
             case .appearance:
                 scrollSettings("Appearance", category: "Appearance")
             case .dock: scrollSettings("Dock", category: "Dock")
-            case .menuBar: scrollSettings("Menu bar & clock", category: "Menu Bar")
             case .finder: scrollSettings("Finder", category: "Finder")
             case .updates: UpdateCenter()
             case .guidedSetup: overview // This destination starts a tour, not another editor.
@@ -380,7 +377,7 @@ struct ControlCenterView: View {
 
     private var searchResults: some View {
         let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        let matches = TweakRegistry.filtered(needle)
+        let matches = TweakRegistry.filtered(needle).filter { $0.category != "Menu Bar" }
         let tasks = Catalog.tasks.filter {
             [$0.title, $0.summary, $0.category, $0.id]
                 .contains { $0.localizedCaseInsensitiveContains(needle) }
@@ -414,7 +411,7 @@ struct ControlCenterView: View {
                     VStack(spacing: 8) {
                         Image(systemName: "magnifyingglass").font(.title2)
                         Text("No matching controls").font(SetupDesign.sectionTitle)
-                        Text("Try Dock, clock, accent, or workspaces.")
+                        Text("Try Dock, Finder, accent, or workspaces.")
                             .font(SetupDesign.body).foregroundStyle(.secondary)
                     }.frame(maxWidth: .infinity).padding(40)
                 }

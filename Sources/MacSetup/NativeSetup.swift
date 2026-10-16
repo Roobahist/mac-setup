@@ -6,6 +6,7 @@ enum SetupPage: Hashable { case features, shortcuts, workspaces, workspaceBar, r
 enum SetupScope { case full, workspaces, workspaceBar, shortcuts, feature }
 
 final class SetupModel: ObservableObject {
+    let previewWallpaper = PreviewWallpaper()
     @Published var page: SetupPage = .features
     @Published var picker = TaskPickerState(preset: .repair)
     @Published var states: [String: String] = [:]
@@ -776,37 +777,6 @@ struct SetupView: View {
         WorkspaceConfiguration.keys + Array("abcdefghijklmnopqrstuvwxyz").map(String.init)
     }
 
-    /// This is an editable SketchyBar mock, not a material app card.
-    /// The menu bar itself is drawn as the thin black strip users actually see.
-    private var menuBarPreview: some View {
-        let style = model.page == .workspaceBar ? model.layout.barStyle : model.appliedLayout.barStyle
-        let workspaces = model.page == .workspaceBar ? model.appliedLayout.workspaces : model.layout.workspaces
-        return VStack(alignment: .leading, spacing: 7) {
-            HStack {
-                Text("SKETCHYBAR PREVIEW")
-                    .font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
-                Spacer()
-                Text("Approximate preview. Apply to update the running bar.")
-                    .font(SetupDesign.caption).foregroundStyle(.secondary)
-            }
-            HStack(spacing: 2) {
-                ForEach(workspaces, id: \.id) { workspace in
-                    Text(workspace.resolvedIcon.symbol)
-                        .font(.custom(workspace.resolvedIcon.font.postScriptName, size: 15))
-                        .frame(width: CGFloat(style.itemWidth), height: 30)
-                        .help(workspace.name)
-                }
-                Spacer(minLength: 14)
-                Text(previewTime).font(.system(size: 13, weight: .semibold, design: .monospaced))
-            }
-            .foregroundStyle(WorkspaceColor.swiftUI(style.occupiedColor))
-            .padding(.horizontal, 16)
-            .frame(height: 33)
-            .background(WorkspaceColor.swiftUI(style.backgroundColor), in: Capsule())
-            .padding(.vertical, 5)
-        }
-    }
-
     private var workspaceColumns: some View {
         HStack(spacing: WorkspaceColumns.gap) {
             Color.clear.frame(width: WorkspaceColumns.grip)
@@ -825,7 +795,7 @@ struct SetupView: View {
     private var workspaces: some View {
         VStack(alignment: .leading, spacing: SetupDesign.pageSpacing) {
             SetupPageHeader("Workspaces", subtitle: "Name your workspaces, assign apps and choose their keys and displays. Drag the grip or use Move up / Move down to reorder; review before applying.")
-            menuBarPreview
+            WorkspaceBarPreview(layout: model.layout, mixed: false, time: previewTime, engine: model.engine, backdrop: model.previewWallpaper)
 
             Label(model.workspaceHasDraftChanges ? "Workspace changes need applying or verification" : "No local workspace edits",
                   systemImage: model.workspaceHasDraftChanges ? "square.and.pencil" : "checkmark.circle")
@@ -875,7 +845,7 @@ struct SetupView: View {
     private var workspaceBar: some View {
         VStack(alignment: .leading, spacing: SetupDesign.pageSpacing) {
             SetupPageHeader("Workspace bar", subtitle: "Adjust the bar’s colors, spacing and blur. Change workspace names, app routing, keys and displays in Workspaces.")
-            menuBarPreview
+            WorkspaceBarPreview(layout: model.layout, mixed: true, time: previewTime, engine: model.engine, backdrop: model.previewWallpaper)
             workspaceAppearance
             DesktopAccentControls(engine: model.engine)
             if let error = model.configurationError(for: .workspaceBar) {
