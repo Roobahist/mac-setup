@@ -159,7 +159,7 @@ public final class TweakService {
         tweak.id == "appearance.accent" && value.intValue == 4
     }
 
-    private func refreshed(_ tweak: TweakDescriptor) -> String? {
+    private func notifyAccent(_ tweak: TweakDescriptor) {
         if tweak.id == "appearance.accent" {
             // Notify running apps after changing global accent preferences.
             for name in ["AppleColorPreferencesChangedNotification", "AppleAquaColorVariantChanged"] {
@@ -167,6 +167,10 @@ public final class TweakService {
                     name: Notification.Name(name), object: nil)
             }
         }
+    }
+
+    private func refreshed(_ tweak: TweakDescriptor) -> String? {
+        notifyAccent(tweak)
         return Self.refresh(tweak.restart, runner: runner)
     }
 
@@ -217,39 +221,24 @@ public final class TweakService {
     @discardableResult
     public func apply(_ tweak: TweakDescriptor, value: NSNumber) throws -> TweakChangeResult {
         let prepared = try validate(tweak, value: value)
-        let lock = try SetupLock(paths: paths)
-        defer { withExtendedLifetime(lock) {} }
-        let transaction = try journal.begin(tweak.id)
-        let profileService = MacOSPreferenceService(paths: paths, journal: journal, runner: runner)
-        do {
-            let value: Any? = Self.usesSystemDefault(tweak, value: prepared) ? nil : prepared
-            let profile = try profileService.profile().updating(domain: tweak.domain, key: tweak.key, value: value)
-            let setting = profile.settings.first { $0.domain == tweak.domain && $0.key == tweak.key }!
-            _ = try profileService.apply(profile, transaction: transaction, settingID: setting.id)
-            try journal.finish(transaction)
-        } catch {
-            try journal.restore(transaction)
-            throw error
-        }
-        return TweakChangeResult(transaction: transaction, refreshWarning: refreshed(tweak))
+        return try applyValue(tweak, value: Self.usesSystemDefault(tweak, value: prepared) ? nil : prepared)
     }
 
     @discardableResult
     public func resetToSystemDefault(_ tweak: TweakDescriptor) throws -> TweakChangeResult {
-        let lock = try SetupLock(paths: paths)
-        defer { withExtendedLifetime(lock) {} }
-        let transaction = try journal.begin(tweak.id + ".reset")
-        let profileService = MacOSPreferenceService(paths: paths, journal: journal, runner: runner)
-        do {
-            let profile = try profileService.profile().updating(domain: tweak.domain, key: tweak.key, value: nil)
-            let setting = profile.settings.first { $0.domain == tweak.domain && $0.key == tweak.key }!
-            _ = try profileService.apply(profile, transaction: transaction, settingID: setting.id)
-            try journal.finish(transaction)
-        } catch {
-            try journal.restore(transaction)
-            throw error
+        try applyValue(tweak, value: nil)
+    }
+
+    private func applyValue(_ tweak: TweakDescriptor, value: Any?) throws -> TweakChangeResult {
+        let service = MacOSPreferenceService(paths: paths, journal: journal, runner: runner)
+        let snapshot = try service.snapshot()
+        guard snapshot.profile.enabled else { throw SetupError("The macOS preference profile is off. Enable it in Appearance before editing its settings.") }
+        guard let setting = snapshot.profile.settings.first(where: { $0.domain == tweak.domain && $0.key == tweak.key }) else {
+            throw SetupError("This preference is missing from the saved macOS profile.")
         }
-        return TweakChangeResult(transaction: transaction, refreshWarning: refreshed(tweak))
+        let outcome = try service.applyEdits([.init(id: setting.id, enabled: true, value: value)], snapshot: snapshot, enabled: true)
+        notifyAccent(tweak)
+        return outcome
     }
 
     @discardableResult
