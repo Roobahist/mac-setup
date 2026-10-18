@@ -82,8 +82,9 @@ public enum Catalog {
             "If macOS has not registered Vorssaint as a login item, approve it in System Settings > General > Login Items & Extensions. The launch-at-login preference was imported automatically."
         ])),
         SetupTask("raycast", "Apps", "Raycast", "Install Raycast. Account setup and personal extensions stay local.", dependencies: ["homebrew"], action: .install(packages: ["raycast"], cask: true, app: "Raycast")),
-        SetupTask("raycast-profile", "Apps", "Raycast launcher shortcut", "Apply the launcher shortcut chosen in Mac Setup. If it uses Command+Space, back up and disable the conflicting Spotlight shortcut.", dependencies: ["raycast"], action: .preferences([
-            Preference("com.raycast.macos", "raycastGlobalHotkey", "Option-15")
+        SetupTask("raycast-profile", "Apps", "Raycast shortcut and menu-bar visibility", "Hide Raycast’s menu-bar icon and apply the launcher shortcut chosen in Mac Setup. If it uses Command+Space, back up and disable the conflicting Spotlight shortcut.", dependencies: ["raycast"], action: .preferences([
+            Preference("com.raycast.macos", "raycastGlobalHotkey", "Option-15"),
+            Preference("com.raycast.macos", "NSStatusItem VisibleCC raycastIcon", false)
         ], restart: nil)),
         SetupTask("raycast-access", "Apps", "Raycast setup", "Check the configured Raycast launcher shortcut and authorize the extensions you use.", dependencies: ["raycast-profile"], action: .guide(url: "x-apple.systempreferences:com.apple.Keyboard-Settings.extension", app: "Raycast", instructions: [
             "If Raycast shows Welcome, continue with local setup. Skip account sign-in, AI, and extension suggestions if offered. Those are optional.",
@@ -156,7 +157,7 @@ public enum Catalog {
             "Only one watcher runs at a time. Permissions are never granted automatically."
         ])),
         SetupTask("startup-login", "Apps", "Start essential apps at login",
-                  "Register installed AeroSpace, Karabiner-Elements and Raycast in Open at Login without removing existing items. SketchyBar and the wallpaper accent watcher keep their own background services.",
+                  "Register AeroSpace and Raycast at login. Remove Karabiner Settings from login items and Dock pins; its remapping helpers run independently. Other login items stay unchanged.",
                   action: .loginItems(names: StartupLoginItems.appNames))
     ]
 

@@ -42,6 +42,7 @@ struct ControlCenterView: View {
     @LocalViewState private var destination: ControlDestination? = .home
     @LocalViewState private var previousDestination: ControlDestination = .home
     @LocalViewState private var query = ""
+    @LocalViewState private var showingWidgetEditor = false
     @LocalViewState private var activeFeature: String?
     @LocalViewState private var hoveredDestination: ControlDestination?
     @LocalViewState private var compactSidebar = false
@@ -101,6 +102,9 @@ struct ControlCenterView: View {
         }
         .font(SetupDesign.body)
         .frame(minWidth: 1040, minHeight: 740)
+        .sheet(isPresented: $showingWidgetEditor) {
+            MacOSPreferencesEditor(engine: model.engine, taskID: "desktop-widgets")
+        }
         .onChange(of: destination) { next in
             // A running installer owns its editor until its operation completes.
             if model.page == .running || model.page == .guide {
@@ -556,6 +560,11 @@ struct ControlCenterView: View {
     }
 
     private func openFeature(_ task: SetupTask) {
+        if task.id == "desktop-widgets", !task.guided {
+            // Matching widget preferences remain editable. Load this Mac's values.
+            showingWidgetEditor = true
+            return
+        }
         do {
             model.tasks = try Catalog.ordered([task.id], includingDependencies: true)
             model.scope = .feature

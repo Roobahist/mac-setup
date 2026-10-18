@@ -385,7 +385,7 @@
       "enabled": true,
       "domain": "com.apple.WindowManager",
       "key": "StandardHideWidgets",
-      "value": false,
+      "value": true,
       "tasks": [
         "desktop-widgets"
       ],

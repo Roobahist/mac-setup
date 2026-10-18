@@ -3,7 +3,7 @@ import Foundation
 /// Manages the user-facing "Open at Login" list without modifying other items.
 /// System Events may require macOS Automation consent on the first invocation.
 public enum StartupLoginItems {
-    public static let appNames = ["AeroSpace", "Karabiner-Elements", "Raycast"]
+    public static let appNames = ["AeroSpace", "Raycast"]
 
     /// Keep application startup distinct from background daemons. SketchyBar
     /// runs through its Homebrew service; the wallpaper accent watcher has a

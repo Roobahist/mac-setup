@@ -95,8 +95,8 @@ struct MacOSPreferenceCard: View {
         } else if let descriptor, case let .slider(minimum, maximum, step) = descriptor.kind {
             VStack(spacing: 4) {
                 Text(String(format: step < 1 ? "%.2f" : "%.0f", (edit.value as? NSNumber)?.doubleValue ?? descriptor.fallback.doubleValue)).monospacedDigit()
-                Slider(value: Binding(get: { (edit.value as? NSNumber)?.doubleValue ?? descriptor.fallback.doubleValue }, set: { edit.value = $0 }),
-                       in: minimum...maximum, step: step).accessibilityLabel(setting.title)
+                SetupValueSlider(value: Binding(get: { (edit.value as? NSNumber)?.doubleValue ?? descriptor.fallback.doubleValue }, set: { edit.value = $0 }),
+                       range: minimum...maximum, step: step, title: setting.title)
             }
         } else if setting.id.hasSuffix(".corner") {
             SetupDropdown(title: setting.title,
