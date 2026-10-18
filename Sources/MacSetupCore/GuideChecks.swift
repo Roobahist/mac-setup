@@ -30,9 +30,12 @@ public extension Engine {
             let spotlightConflict: Bool
             if settings.usesSpotlightKey { spotlightConflict = try spotlightSearchEnabled() }
             else { spotlightConflict = false }
-            let configured = actual == settings.raycastHotkey && !spotlightConflict
+            let legacyIcon = try journal.preference("com.raycast.macos", "statusBarIsVisible")
+            let statusItem = try journal.preference("com.raycast.macos", "NSStatusItem VisibleCC raycastIcon")
+            let configured = actual == settings.raycastHotkey && !spotlightConflict &&
+                equalPreference(legacyIcon, false) && equalPreference(statusItem, false)
             let combination = settings.entries.first(where: { $0.provider == .raycast })?.shortcut.display ?? "configured hotkey"
-            return GuideCheck(configured, "Expected: \(combination) opens Raycast. Enable Launch at login and test the configured shortcut in Raycast Settings.")
+            return GuideCheck(configured, "Expected: \(combination) opens Raycast. Verify Show Raycast in Menu Bar is off, enable Launch at login, and test the configured shortcut in Raycast Settings. The menu icon requires visual verification.")
         case "tomito":
             return GuideCheck(try state(task) == .done, "Install Tomito using the App Store, then return and check again.")
         default:
@@ -107,7 +110,7 @@ public enum GuideStepRouting {
             }
         }
         if task.id == "raycast-access" {
-            return (0...2).contains(index) ? .init(title: "Open Raycast", app: "Raycast") : nil
+            return (0...3).contains(index) ? .init(title: "Open Raycast", app: "Raycast") : nil
         }
         if task.id == "vorssaint-access" {
             switch index {

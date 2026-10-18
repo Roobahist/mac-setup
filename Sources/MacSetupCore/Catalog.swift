@@ -84,11 +84,13 @@ public enum Catalog {
         SetupTask("raycast", "Apps", "Raycast", "Install Raycast. Account setup and personal extensions stay local.", dependencies: ["homebrew"], action: .install(packages: ["raycast"], cask: true, app: "Raycast")),
         SetupTask("raycast-profile", "Apps", "Raycast shortcut and menu-bar visibility", "Hide Raycast’s menu-bar icon and apply the launcher shortcut chosen in Mac Setup. If it uses Command+Space, back up and disable the conflicting Spotlight shortcut.", dependencies: ["raycast"], action: .preferences([
             Preference("com.raycast.macos", "raycastGlobalHotkey", "Option-15"),
+            Preference("com.raycast.macos", "statusBarIsVisible", false),
             Preference("com.raycast.macos", "NSStatusItem VisibleCC raycastIcon", false)
         ], restart: nil)),
         SetupTask("raycast-access", "Apps", "Raycast setup", "Check the configured Raycast launcher shortcut and authorize the extensions you use.", dependencies: ["raycast-profile"], action: .guide(url: "x-apple.systempreferences:com.apple.Keyboard-Settings.extension", app: "Raycast", instructions: [
             "If Raycast shows Welcome, continue with local setup. Skip account sign-in, AI, and extension suggestions if offered. Those are optional.",
             "Open Raycast Settings > General. Verify that the launcher shortcut matches the key combination selected in Mac Setup. Setup handles the Spotlight conflict when Command+Space was chosen.",
+            "In Raycast Settings > General, turn off Show Raycast in Menu Bar and verify that its icon disappears. Newer Raycast versions keep their own setting after migration; a saved macOS preference alone does not verify it. Keep any extension menu-bar commands you use.",
             "In Raycast Settings > General, enable Launch Raycast at login. Press the chosen launcher shortcut and confirm that Raycast opens."
         ])),
         SetupTask("karabiner", "Apps", "Karabiner-Elements", "Install the keyboard remapping tool.", dependencies: ["homebrew"], action: .install(packages: ["karabiner-elements"], cask: true, app: "Karabiner-Elements")),

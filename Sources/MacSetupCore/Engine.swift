@@ -89,8 +89,9 @@ public final class Engine {
                     if try spotlightSearchEnabled() { return .ready }
                 }
                 let hotkeyMatches = equalPlist(try journal.preference("com.raycast.macos", "raycastGlobalHotkey"), shortcuts.raycastHotkey)
-                let iconHidden = equalPreference(try journal.preference("com.raycast.macos", "NSStatusItem VisibleCC raycastIcon"), false)
-                return hotkeyMatches && iconHidden ? .done : .ready
+                let iconHidden = equalPreference(try journal.preference("com.raycast.macos", "statusBarIsVisible"), false)
+                let itemHidden = equalPreference(try journal.preference("com.raycast.macos", "NSStatusItem VisibleCC raycastIcon"), false)
+                return hotkeyMatches && iconHidden && itemHidden ? .done : .ready
             }
             if preferences.isEmpty { return try macOSPreferences.matches(taskID: task.id == "macos-preferences" ? nil : task.id) ? .done : .ready }
             return try preferences.allSatisfy { equalPlist(try journal.preference($0.domain, $0.key), $0.value) } ? .done : .ready
@@ -310,6 +311,10 @@ public final class Engine {
                     if shortcuts.usesSpotlightKey { try releaseSpotlightShortcut(transaction: id) }
                     try journal.setPreference("com.raycast.macos", "raycastGlobalHotkey",
                                               shortcuts.raycastHotkey, transaction: id)
+                    // Raycast's legacy setting is also imported by its newer
+                    // settings migration. Its named AppKit item has a separate
+                    // saved visibility value. Verify the visible result in General.
+                    try journal.setPreference("com.raycast.macos", "statusBarIsVisible", false, transaction: id)
                     try journal.setPreference("com.raycast.macos", "NSStatusItem VisibleCC raycastIcon", false, transaction: id)
                     if reopen { try runner.checked("/usr/bin/open", ["-g", "-a", "Raycast"]) }
                 } else if preferences.isEmpty {

@@ -217,11 +217,12 @@ final class EngineTests: XCTestCase {
 
     func testRaycastProfileHidesOnlyMainMenuIconAndRestoresIt() throws {
         let key = "NSStatusItem VisibleCC raycastIcon"
-        runner.preferences["com.raycast.macos"] = [key: true, "extension-menu-bar": true]
+        runner.preferences["com.raycast.macos"] = [key: true, "statusBarIsVisible": true, "extension-menu-bar": true]
         let task = try Catalog.task("raycast-profile")
         XCTAssertEqual(try engine.state(task), .ready)
         let record = try engine.apply(task)
         XCTAssertEqual(runner.preferences["com.raycast.macos"]?[key] as? Bool, false)
+        XCTAssertEqual(runner.preferences["com.raycast.macos"]?["statusBarIsVisible"] as? Bool, false)
         XCTAssertEqual(runner.preferences["com.raycast.macos"]?["extension-menu-bar"] as? Bool, true)
         XCTAssertEqual(try engine.state(task), .done)
         runner.preferences["com.raycast.macos"]?[key] = true
@@ -229,6 +230,7 @@ final class EngineTests: XCTestCase {
         runner.preferences["com.raycast.macos"]?[key] = false
         try engine.journal.restore(record)
         XCTAssertEqual(runner.preferences["com.raycast.macos"]?[key] as? Bool, true)
+        XCTAssertEqual(runner.preferences["com.raycast.macos"]?["statusBarIsVisible"] as? Bool, true)
     }
 
     func testStartupScriptCompilesOnMacOS() throws {
