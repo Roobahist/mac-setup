@@ -174,6 +174,12 @@ final class EngineTests: XCTestCase {
         let remove: [String: Any] = ["tile-data": ["bundle-identifier": "org.pqrs.Karabiner-Elements.Settings"]]
         runner.preferences["com.apple.dock"] = ["persistent-apps": [keep, remove], "unrelated": true]
         let task = try Catalog.task("startup-login")
+        let old = try engine.journal.begin(task.id)
+        try engine.journal.registerLoginItem(gui, transaction: old)
+        try engine.journal.registerLoginItem(home.appendingPathComponent("Applications/Raycast.app").path, transaction: old)
+        try engine.journal.finish(old)
+        // A completed older setup must still offer the GUI-startup migration.
+        XCTAssertEqual(try engine.state(task), .ready)
         let record = try engine.apply(task)
         XCTAssertFalse(StartupLoginItems.appNames.contains("Karabiner-Elements"))
         XCTAssertFalse(runner.loginItemPaths.contains(gui))

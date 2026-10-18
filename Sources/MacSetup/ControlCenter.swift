@@ -102,7 +102,7 @@ struct ControlCenterView: View {
         }
         .font(SetupDesign.body)
         .frame(minWidth: 1040, minHeight: 740)
-        .sheet(isPresented: $showingWidgetEditor) {
+        .sheet(isPresented: $showingWidgetEditor, onDismiss: { model.refreshInventory() }) {
             MacOSPreferencesEditor(engine: model.engine, taskID: "desktop-widgets")
         }
         .onChange(of: destination) { next in
@@ -542,6 +542,9 @@ struct ControlCenterView: View {
                         .toggleStyle(.checkbox)
                         .disabled(model.busy)
                         Spacer(minLength: 8)
+                        if task.id == "desktop-widgets", !task.guided {
+                            Button("Edit widgets") { openFeature(task) }.disabled(model.busy)
+                        }
                         Text(task.guided ? "Approval" : "Automatic")
                             .font(SetupDesign.caption).foregroundStyle(.secondary)
                     }
