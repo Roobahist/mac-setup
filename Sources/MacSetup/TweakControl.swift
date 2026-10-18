@@ -32,7 +32,7 @@ struct TweakControl: View {
                     VStack(alignment: .trailing, spacing: 4) {
                         Text(String(format: step >= 1 ? "%.0f" : "%.2f", draft))
                             .font(.system(.callout, design: .monospaced))
-                        Slider(value: $draft, in: minimum...maximum, step: step)
+                        SetupValueSlider(value: $draft, range: minimum...maximum, step: step, title: tweak.title)
                             .frame(width: 210).disabled(working)
                     }
                 case let .selection(choices):
@@ -65,6 +65,9 @@ struct TweakControl: View {
         }
         .setupCard()
         .onAppear(perform: load)
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            if !working && !changed { load() }
+        }
         .onReceive(NotificationCenter.default.publisher(for: MacOSPreferenceService.groupDidChange).receive(on: RunLoop.main)) { _ in load() }
     }
 

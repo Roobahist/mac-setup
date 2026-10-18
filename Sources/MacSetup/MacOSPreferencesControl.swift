@@ -18,8 +18,9 @@ struct MacOSPreferencesControl: View {
     }
 }
 
-private struct MacOSPreferencesEditor: View {
+struct MacOSPreferencesEditor: View {
     let engine: Engine
+    var taskID: String? = nil
     @Environment(\.dismiss) private var dismiss
     @LocalViewState private var snapshot: MacOSPreferenceSnapshot?
     @LocalViewState private var observed: MacOSPreferenceSnapshot?
@@ -43,7 +44,7 @@ private struct MacOSPreferencesEditor: View {
         }
     }
     private var changed: Bool { !edits.isEmpty || enabled != snapshot?.profile.enabled || needsSync }
-    private var settings: [MacOSSetting] { snapshot?.profile.settings.filter { $0.category != "Menu Bar" } ?? [] }
+    private var settings: [MacOSSetting] { snapshot?.profile.settings.filter { $0.category != "Menu Bar" && (taskID == nil || $0.tasks.contains(taskID!)) } ?? [] }
     private var categories: [String] { ["All"] + Array(Set(settings.map(\.category))).sorted() }
     private var visible: [MacOSSetting] {
         settings.filter { (category == "All" || $0.category == category) &&
@@ -53,12 +54,17 @@ private struct MacOSPreferencesEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: SetupDesign.pageSpacing) {
             VStack(alignment: .leading, spacing: 8) {
-                Text("macOS preferences").font(SetupDesign.sheetTitle).accessibilityAddTraits(.isHeader)
+                Text(taskID == "desktop-widgets" ? "Desktop widgets" : "macOS preferences").font(SetupDesign.sheetTitle).accessibilityAddTraits(.isHeader)
                 Text("Current values come from this Mac. Select the cards you want to manage; unedited settings keep their current values.")
                     .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             HStack {
-                Toggle("Use preference profile", isOn: $enabled).disabled(busy)
+                if taskID == nil {
+                    Toggle("Use preference profile", isOn: $enabled).disabled(busy)
+                } else if !enabled {
+                    Text("The preference profile is off. Enable it in Appearance before changing this setting.")
+                        .foregroundStyle(.secondary)
+                }
                 Spacer()
                 Button("Reload current values", action: load).disabled(busy)
             }

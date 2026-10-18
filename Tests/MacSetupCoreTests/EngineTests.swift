@@ -166,6 +166,73 @@ final class EngineTests: XCTestCase {
         XCTAssertEqual(runner.loginItemPaths, [aero, additional])
     }
 
+    func testKarabinerStartupGUIAndOnlyItsDockPinAreRemovedAndRestorable() throws {
+        let gui = try write("Applications/Karabiner-Elements.app/Contents/Info.plist", "app").deletingLastPathComponent().deletingLastPathComponent().path
+        _ = try write("Applications/Raycast.app/Contents/Info.plist", "app")
+        runner.loginItemPaths = [gui, "/Applications/Other Utility.app"]
+        let keep: [String: Any] = ["tile-data": ["bundle-identifier": "com.apple.finder"]]
+        let remove: [String: Any] = ["tile-data": ["bundle-identifier": "org.pqrs.Karabiner-Elements.Settings"]]
+        runner.preferences["com.apple.dock"] = ["persistent-apps": [keep, remove], "unrelated": true]
+        let task = try Catalog.task("startup-login")
+        let old = try engine.journal.begin(task.id)
+        try engine.journal.registerLoginItem(gui, transaction: old)
+        try engine.journal.registerLoginItem(home.appendingPathComponent("Applications/Raycast.app").path, transaction: old)
+        try engine.journal.finish(old)
+        // A completed older setup must still offer the GUI-startup migration.
+        XCTAssertEqual(try engine.state(task), .ready)
+        let record = try engine.apply(task)
+        XCTAssertFalse(StartupLoginItems.appNames.contains("Karabiner-Elements"))
+        XCTAssertFalse(runner.loginItemPaths.contains(gui))
+        XCTAssertTrue(runner.loginItemPaths.contains("/Applications/Other Utility.app"))
+        let pins = runner.preferences["com.apple.dock"]?["persistent-apps"] as? [[String: Any]]
+        XCTAssertEqual(pins?.count, 1)
+        XCTAssertTrue(equalPreference(pins?.first, keep))
+        XCTAssertEqual(runner.preferences["com.apple.dock"]?["unrelated"] as? Bool, true)
+        XCTAssertEqual(try engine.state(task), .done)
+        XCTAssertFalse(runner.calls.contains { $0.contains("bootout") || $0.contains("killall") && $0.contains("karabiner_grabber") })
+        try engine.journal.restore(record)
+        XCTAssertTrue(runner.loginItemPaths.contains(gui))
+        XCTAssertEqual((runner.preferences["com.apple.dock"]?["persistent-apps"] as? [Any])?.count, 2)
+    }
+
+    func testWidgetHideDefaultAndLiveToggleDoNotChangeStageManager() throws {
+        let task = try Catalog.task("desktop-widgets")
+        guard !task.guided else { return }
+        runner.preferences["com.apple.WindowManager"] = ["StandardHideWidgets": false, "StageManagerHideWidgets": false]
+        XCTAssertEqual(try engine.state(task), .ready)
+        _ = try engine.apply(task)
+        XCTAssertEqual(runner.preferences["com.apple.WindowManager"]?["StandardHideWidgets"] as? Bool, true)
+        XCTAssertEqual(try engine.state(task), .done)
+        runner.preferences["com.apple.WindowManager"]?["StandardHideWidgets"] = false
+        XCTAssertEqual(try engine.state(task), .ready)
+        let descriptor = try XCTUnwrap(TweakRegistry.all.first { $0.id == "desktop.widgets" })
+        let service = TweakService(journal: engine.journal, runner: runner, paths: paths)
+        XCTAssertFalse(try service.value(for: descriptor).boolValue)
+        _ = try service.apply(descriptor, value: true)
+        XCTAssertTrue(try service.value(for: descriptor).boolValue)
+        _ = try service.apply(descriptor, value: false)
+        XCTAssertFalse(try service.value(for: descriptor).boolValue)
+        XCTAssertEqual(runner.preferences["com.apple.WindowManager"]?["StageManagerHideWidgets"] as? Bool, false)
+    }
+
+    func testRaycastProfileHidesOnlyMainMenuIconAndRestoresIt() throws {
+        let key = "NSStatusItem VisibleCC raycastIcon"
+        runner.preferences["com.raycast.macos"] = [key: true, "statusBarIsVisible": true, "extension-menu-bar": true]
+        let task = try Catalog.task("raycast-profile")
+        XCTAssertEqual(try engine.state(task), .ready)
+        let record = try engine.apply(task)
+        XCTAssertEqual(runner.preferences["com.raycast.macos"]?[key] as? Bool, false)
+        XCTAssertEqual(runner.preferences["com.raycast.macos"]?["statusBarIsVisible"] as? Bool, false)
+        XCTAssertEqual(runner.preferences["com.raycast.macos"]?["extension-menu-bar"] as? Bool, true)
+        XCTAssertEqual(try engine.state(task), .done)
+        runner.preferences["com.raycast.macos"]?[key] = true
+        XCTAssertEqual(try engine.state(task), .ready)
+        runner.preferences["com.raycast.macos"]?[key] = false
+        try engine.journal.restore(record)
+        XCTAssertEqual(runner.preferences["com.raycast.macos"]?[key] as? Bool, true)
+        XCTAssertEqual(runner.preferences["com.raycast.macos"]?["statusBarIsVisible"] as? Bool, true)
+    }
+
     func testStartupScriptCompilesOnMacOS() throws {
         let output = home.appendingPathComponent("startup-login.scpt")
         let result = try ProcessRunner().run("/usr/bin/osacompile",

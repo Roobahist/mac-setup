@@ -309,6 +309,13 @@ final class SetupModel: ObservableObject {
                                 self.appliedShortcuts = updatedShortcuts
                             }
                         }
+                        if self.tasks.contains(where: { $0.id == "karabiner-access" }) {
+                            do { try self.engine.closeKarabinerSettings() }
+                            catch {
+                                self.message = "Karabiner Settings is still open. Close it to remove its running Dock icon. \(error)"
+                                self.log(self.message)
+                            }
+                        }
                         self.busy = false
                         self.page = .finished
                         self.setupLock = nil
@@ -875,10 +882,10 @@ struct SetupView: View {
                         Text("\(style.itemWidth) pt").monospacedDigit()
                             .foregroundStyle(.secondary)
                     }
-                    Slider(value: Binding(
+                    SetupValueSlider(value: Binding(
                         get: { Double(model.layout.barStyle.itemWidth) },
                         set: { model.layout.barStyle.itemWidth = Int($0) }),
-                        in: 16...52, step: 1)
+                        range: 16...52, step: 1, title: "Workspace spacing")
                     Text("Controls the width of each workspace item.")
                         .font(SetupDesign.caption).foregroundStyle(.secondary)
                 }
@@ -889,10 +896,10 @@ struct SetupView: View {
                         Text("\(style.blurRadius)").monospacedDigit()
                             .foregroundStyle(.secondary)
                     }
-                    Slider(value: Binding(
+                    SetupValueSlider(value: Binding(
                         get: { Double(model.layout.barStyle.blurRadius) },
                         set: { model.layout.barStyle.blurRadius = Int($0) }),
-                        in: 0...100, step: 1)
+                        range: 0...100, step: 1, title: "Background blur")
                     Text("0 removes blur. Use a translucent background to see the effect.")
                         .font(SetupDesign.caption).foregroundStyle(.secondary)
                 }
@@ -1204,8 +1211,18 @@ struct SetupView: View {
                  : (model.runtimeIssues.isEmpty ? "Setup tasks finished" : "Files updated; live checks need attention"))
                 .font(SetupDesign.pageTitle)
             Button { copyLog() } label: { Label("Copy apply log", systemImage: "doc.on.doc") }
-            Text("Move the pointer to the bottom edge: the Dock should reveal promptly. The macOS menu bar should hide when the pointer leaves the top. Its reveal timing is controlled by macOS. If it still stays visible, set Automatically hide and show the menu bar to Always in System Settings, then log out and back in.")
-            Text("Check the workspace highlight with your chosen modifiers and destination key, then use the move-window shortcut to send a window to another workspace.")
+            if !model.message.isEmpty {
+                Text(model.message).foregroundStyle(.orange)
+            }
+            if model.tasks.contains(where: { $0.id == "dock-hide" || $0.id == "menu-bar" }) {
+                Text("Move the pointer to the bottom edge: the Dock should reveal promptly. The macOS menu bar should hide when the pointer leaves the top. Its reveal timing is controlled by macOS. If it still stays visible, set Automatically hide and show the menu bar to Always in System Settings, then log out and back in.")
+            }
+            if model.tasks.contains(where: { ["aerospace-profile", "sketchybar-profile"].contains($0.id) }) {
+                Text("Check the workspace highlight with your chosen modifiers and destination key, then use the move-window shortcut to send a window to another workspace.")
+            }
+            if model.tasks.contains(where: { $0.id == "desktop-widgets" }) {
+                Text("Check desktop widget visibility on the desktop. Reopen the widget control to read or change the current setting; log out if macOS has not refreshed the display.")
+            }
             if !model.runtimeIssues.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     Label("Live workspace verification needs attention", systemImage: "exclamationmark.triangle")

@@ -88,8 +88,10 @@ public final class Engine {
                 if shortcuts.usesSpotlightKey {
                     if try spotlightSearchEnabled() { return .ready }
                 }
-                return equalPlist(try journal.preference("com.raycast.macos", "raycastGlobalHotkey"),
-                                  shortcuts.raycastHotkey) ? .done : .ready
+                let hotkeyMatches = equalPlist(try journal.preference("com.raycast.macos", "raycastGlobalHotkey"), shortcuts.raycastHotkey)
+                let iconHidden = equalPreference(try journal.preference("com.raycast.macos", "statusBarIsVisible"), false)
+                let itemHidden = equalPreference(try journal.preference("com.raycast.macos", "NSStatusItem VisibleCC raycastIcon"), false)
+                return hotkeyMatches && iconHidden && itemHidden ? .done : .ready
             }
             if preferences.isEmpty { return try macOSPreferences.matches(taskID: task.id == "macos-preferences" ? nil : task.id) ? .done : .ready }
             return try preferences.allSatisfy { equalPlist(try journal.preference($0.domain, $0.key), $0.value) } ? .done : .ready
@@ -122,6 +124,9 @@ public final class Engine {
             guard !apps.isEmpty else { return .ready }
             return journal.transactions.contains { record in
                 record.task == task.id && record.complete &&
+                (appResolver("Karabiner-Elements", paths.home).map { path in
+                    record.changes.contains { $0.kind == .loginItem && $0.target == path && !$0.restored && ($0.after.flatMap { try? plistValue($0) }) as? Bool == false }
+                } ?? true) &&
                 apps.allSatisfy { app in
                     record.changes.contains { $0.kind == .loginItem && $0.target == app && !$0.restored }
                 }
@@ -169,6 +174,7 @@ public final class Engine {
         case let .preferences(preferences, restart):
             if task.id == "raycast-profile" {
                 lines.append("com.raycast.macos / raycastGlobalHotkey: \(try shortcutSettings().raycastHotkey)")
+                lines.append("Hide Raycast’s own menu-bar icon; extension menu-bar commands are unchanged.")
             } else if preferences.isEmpty {
                 lines += try macOSPreferences.preview(taskID: task.id == "macos-preferences" ? nil : task.id)
             } else {
@@ -189,6 +195,7 @@ public final class Engine {
             let installed = StartupLoginItems.installedPaths(names: names, home: paths.home, resolve: appResolver)
             lines.append("Register installed apps in System Settings > General > Login Items & Extensions > Open at Login, preserving other items.")
             lines += installed.map { "Add at login if missing: \($0)" }
+            lines.append("Remove Karabiner Settings from login items and Dock pins, then close its settings window. Its remapping helpers keep their own background services. Restore brings back removed entries.")
             lines.append("System Events may request macOS Automation approval. SketchyBar starts through Homebrew and the shared wallpaper watcher through its LaunchAgent; no duplicate entries are created for those background jobs.")
         case .wallpaperWatcher:
             lines.append("Use the shared watcher helper packaged with Mac Setup on every Mac.")
@@ -298,10 +305,18 @@ public final class Engine {
             case let .preferences(preferences, restart):
                 if task.id == "raycast-profile" {
                     let shortcuts = try shortcutSettings()
+                    let reopen = paths.home == FileManager.default.homeDirectoryForCurrentUser &&
+                        !NSRunningApplication.runningApplications(withBundleIdentifier: "com.raycast.macos").isEmpty
                     try quitForPreferences("com.raycast.macos")
                     if shortcuts.usesSpotlightKey { try releaseSpotlightShortcut(transaction: id) }
                     try journal.setPreference("com.raycast.macos", "raycastGlobalHotkey",
                                               shortcuts.raycastHotkey, transaction: id)
+                    // Raycast's legacy setting is also imported by its newer
+                    // settings migration. Its named AppKit item has a separate
+                    // saved visibility value. Verify the visible result in General.
+                    try journal.setPreference("com.raycast.macos", "statusBarIsVisible", false, transaction: id)
+                    try journal.setPreference("com.raycast.macos", "NSStatusItem VisibleCC raycastIcon", false, transaction: id)
+                    if reopen { try runner.checked("/usr/bin/open", ["-g", "-a", "Raycast"]) }
                 } else if preferences.isEmpty {
                     for process in try macOSPreferences.apply(macOSPreferences.profile(), transaction: id, taskID: task.id == "macos-preferences" ? nil : task.id) {
                         try self.restart(process)
@@ -321,6 +336,23 @@ public final class Engine {
             case .accent: try applyAccent(transaction: id, image: image)
             case .wallpaperWatcher: try installWallpaperWatcher(transaction: id, image: image)
             case let .loginItems(names):
+                if let path = appResolver("Karabiner-Elements", paths.home) {
+                    try journal.unregisterLoginItem(path, transaction: id)
+                    if let pins = try journal.preference("com.apple.dock", "persistent-apps") as? [[String: Any]] {
+                        let retained = pins.filter { pin in
+                            let tile = pin["tile-data"] as? [String: Any] ?? [:]
+                            let bundle = tile["bundle-identifier"] as? String ?? ""
+                            let file = (tile["file-data"] as? [String: Any])?["_CFURLString"] as? String ?? ""
+                            return !["org.pqrs.Karabiner-Elements.Settings", "org.pqrs.Karabiner-Elements.Preferences"].contains(bundle)
+                                && URL(string: file)?.standardizedFileURL.path != URL(fileURLWithPath: path).standardizedFileURL.path
+                        }
+                        if retained.count != pins.count {
+                            try journal.setPreference("com.apple.dock", "persistent-apps", retained, transaction: id)
+                            try restart("Dock")
+                        }
+                    }
+                    try closeKarabinerSettings()
+                }
                 for path in StartupLoginItems.installedPaths(names: names, home: paths.home, resolve: appResolver) {
                     try journal.registerLoginItem(path, transaction: id)
                 }
@@ -530,6 +562,11 @@ public final class Engine {
                 try runner.checked("/usr/bin/open", ["-a", "System Settings"])
             } else if result.status != 0 { throw SetupError("Could not open \(url).") }
         }
+    }
+
+    /// Closing the settings GUI leaves Karabiner's launchd remapping helpers running.
+    public func closeKarabinerSettings() throws {
+        try quitForPreferences("org.pqrs.Karabiner-Elements.Settings")
     }
 
     private func quitForPreferences(_ bundleID: String) throws {

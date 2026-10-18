@@ -226,6 +226,14 @@ public final class Journal {
         try StartupLoginItems.update(path, enabled: true, runner: runner)
     }
 
+    public func unregisterLoginItem(_ path: String, transaction: String) throws {
+        let old = try loginItemRegistered(path)
+        try add(SavedChange(kind: .loginItem, target: path, key: nil, backup: nil,
+                            before: try plistData(old), after: try plistData(false),
+                            restored: false), to: transaction)
+        if old { try StartupLoginItems.update(path, enabled: false, runner: runner) }
+    }
+
     public func launchAgentLoaded(_ label: String) throws -> Bool {
         try runner.run("/bin/launchctl", ["print", "gui/\(getuid())/\(label)"]).status == 0
     }

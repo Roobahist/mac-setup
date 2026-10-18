@@ -35,9 +35,9 @@ struct WorkspaceColorControl: View {
                 Text("\(Int((color.opacity * 100).rounded()))%")
                     .monospacedDigit().foregroundStyle(.secondary)
             }
-            Slider(value: Binding(get: { color.opacity * 100 },
+            SetupValueSlider(value: Binding(get: { color.opacity * 100 },
                                   set: { hex = color.replacingOpacity($0 / 100).hex }),
-                   in: 0...100, step: 1)
+                   range: 0...100, step: 1, title: title + " opacity")
                 .accessibilityLabel(title + " opacity")
             if invalid {
                 Text("Enter six hexadecimal digits, for example #000000.")
