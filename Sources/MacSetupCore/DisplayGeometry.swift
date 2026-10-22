@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 
 public struct DisplayMetrics: Codable, Equatable {
     public let name: String
@@ -180,9 +181,31 @@ public enum AppResources {
     }
 
     public static var displayHelperURL: URL? {
-        let app = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/mac-setup-display")
-        let cli = URL(fileURLWithPath: CommandLine.arguments[0]).resolvingSymlinksInPath()
-            .deletingLastPathComponent().appendingPathComponent("mac-setup-display")
-        return [app, cli].first { FileManager.default.isExecutableFile(atPath: $0.path) }
+        helperURL(named: "mac-setup-display", bundleURL: Bundle.main.bundleURL,
+                  executableURL: runningExecutableURL())
+    }
+
+    // argv[0] can be just "mac-setup" when launched from PATH. Ask dyld for
+    // the running executable instead of resolving that name in the working directory.
+    private static func runningExecutableURL() -> URL? {
+        var length: UInt32 = 0
+        _ = _NSGetExecutablePath(nil, &length)
+        guard length > 0 else { return Bundle.main.executableURL }
+        var buffer = [CChar](repeating: 0, count: Int(length))
+        guard _NSGetExecutablePath(&buffer, &length) == 0 else {
+            return Bundle.main.executableURL
+        }
+        return buffer.withUnsafeBufferPointer { bytes in
+            bytes.baseAddress.map { URL(fileURLWithPath: String(cString: $0)) }
+        }
+    }
+
+    static func helperURL(named name: String, bundleURL: URL, executableURL: URL?,
+                          fileManager: FileManager = .default) -> URL? {
+        let bundled = bundleURL.appendingPathComponent("Contents/Helpers").appendingPathComponent(name)
+        let adjacent = executableURL?.resolvingSymlinksInPath()
+            .deletingLastPathComponent().appendingPathComponent(name)
+        return [bundled, adjacent].compactMap { $0 }
+            .first { fileManager.isExecutableFile(atPath: $0.path) }
     }
 }
