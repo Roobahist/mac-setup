@@ -75,8 +75,10 @@ public struct DisplayGeometry: Codable, Equatable {
     /// Enforce the whole bar even when AeroSpace's gap already matches.
     public func refresh(config: URL, runner: CommandRunning, sketchybar: String, aerospace: String?) throws {
         guard !displays.isEmpty else { throw SetupError("No display measurements are available; bar height was preserved.") }
+        // The generated sketchybarrc sets topmost=window at startup. Reasserting it
+        // on every wake/display event unconditionally recreates all SketchyBar windows.
         try runner.checked(sketchybar, ["--bar", "height=\(baseHeight)", "notch_display_height=\(notchHeight)",
-                                       "topmost=window", "y_offset=0", "notch_offset=0", "margin=0"])
+                                       "y_offset=0", "notch_offset=0", "margin=0"])
         var item = config
         while item.path != "/" {
             if (try? FileManager.default.attributesOfItem(atPath: item.path)[.type] as? FileAttributeType) == .typeSymbolicLink {
