@@ -2,6 +2,49 @@ import XCTest
 @testable import MacSetupCore
 
 final class DisplayAndGuideTests: XCTestCase {
+    func testDisplayHelperDiscoveryFollowsInstalledCLISymlink() throws {
+        let fileManager = FileManager.default
+        let root = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? fileManager.removeItem(at: root) }
+
+        let installation = root.appendingPathComponent("versions/current")
+        let bin = root.appendingPathComponent("bin")
+        try fileManager.createDirectory(at: installation, withIntermediateDirectories: true)
+        try fileManager.createDirectory(at: bin, withIntermediateDirectories: true)
+
+        let executable = installation.appendingPathComponent("mac-setup")
+        let helper = installation.appendingPathComponent("mac-setup-display")
+        try "#!/bin/sh\nexit 0\n".write(to: executable, atomically: true, encoding: .utf8)
+        try "#!/bin/sh\nexit 0\n".write(to: helper, atomically: true, encoding: .utf8)
+        try fileManager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: helper.path)
+
+        let command = bin.appendingPathComponent("mac-setup")
+        try fileManager.createSymbolicLink(at: command, withDestinationURL: executable)
+
+        // The current directory is unrelated to the installed CLI binary.
+        let unrelated = root.appendingPathComponent("unrelated")
+        XCTAssertEqual(AppResources.helperURL(named: "mac-setup-display", bundleURL: unrelated,
+                                               executableURL: command), helper)
+        XCTAssertNil(AppResources.helperURL(named: "mac-setup-display", bundleURL: unrelated,
+                                           executableURL: nil))
+    }
+
+    func testDisplayHelperDiscoverySupportsApplicationBundle() throws {
+        let fileManager = FileManager.default
+        let root = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? fileManager.removeItem(at: root) }
+
+        let bundle = root.appendingPathComponent("Mac Setup.app")
+        let helpers = bundle.appendingPathComponent("Contents/Helpers")
+        try fileManager.createDirectory(at: helpers, withIntermediateDirectories: true)
+        let helper = helpers.appendingPathComponent("mac-setup-display")
+        try "#!/bin/sh\nexit 0\n".write(to: helper, atomically: true, encoding: .utf8)
+        try fileManager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: helper.path)
+
+        XCTAssertEqual(AppResources.helperURL(named: "mac-setup-display", bundleURL: bundle,
+                                               executableURL: nil), helper)
+    }
+
     func testGuidedPermissionActionsRouteToCorrespondingSettings() throws {
         let task = try Catalog.task("karabiner-access")
         let services = GuideStepRouting.destination(task: task, index: 0)
