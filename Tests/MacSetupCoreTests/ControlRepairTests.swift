@@ -50,6 +50,7 @@ final class ControlRepairTests: XCTestCase {
         let runner = FakeRunner()
         try geometry.refresh(config: config, runner: runner, sketchybar: "/fake/sketchybar", aerospace: "/fake/aerospace")
         XCTAssertTrue(runner.calls.contains { $0.contains("height=30") && $0.contains("--bar") })
+        XCTAssertFalse(runner.calls.contains { $0.contains("--bar") && $0.contains("topmost=window") })
         XCTAssertFalse(runner.calls.contains { $0.contains("reload-config") })
         XCTAssertEqual(try String(contentsOf: config), text)
         runner.calls = []
