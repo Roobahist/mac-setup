@@ -180,9 +180,19 @@ public enum AppResources {
     }
 
     public static var displayHelperURL: URL? {
-        let app = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/mac-setup-display")
-        let cli = URL(fileURLWithPath: CommandLine.arguments[0]).resolvingSymlinksInPath()
-            .deletingLastPathComponent().appendingPathComponent("mac-setup-display")
-        return [app, cli].first { FileManager.default.isExecutableFile(atPath: $0.path) }
+        helperURL(named: "mac-setup-display",
+                  bundleURL: Bundle.main.bundleURL,
+                  executableURL: Bundle.main.executableURL)
+    }
+
+    static func helperURL(named name: String, bundleURL: URL, executableURL: URL?) -> URL? {
+        let bundled = bundleURL.appendingPathComponent("Contents/Helpers").appendingPathComponent(name)
+        // argv[0] can be just "mac-setup" when invoked through PATH, making
+        // relative lookup depend on the shell's working directory.
+        // Bundle.main.executableURL identifies the running binary instead.
+        let sibling = executableURL?.resolvingSymlinksInPath()
+            .deletingLastPathComponent().appendingPathComponent(name)
+        return ([bundled] + [sibling].compactMap { $0 })
+            .first { FileManager.default.isExecutableFile(atPath: $0.path) }
     }
 }
