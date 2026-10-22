@@ -14,7 +14,7 @@ final class DisplayAndGuideTests: XCTestCase {
         let actualExecutable = version.appendingPathComponent("mac-setup")
         try Data().write(to: actualExecutable)
         let helper = version.appendingPathComponent("mac-setup-display")
-        try "#!/bin/sh\\nexit 0\\n".write(to: helper, atomically: true, encoding: .utf8)
+        try "#!/bin/sh\nexit 0\n".write(to: helper, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: helper.path)
 
         try FileManager.default.createSymbolicLink(
@@ -37,7 +37,7 @@ final class DisplayAndGuideTests: XCTestCase {
         let helper = bundle.appendingPathComponent("Contents/Helpers/mac-setup-display")
         try FileManager.default.createDirectory(
             at: helper.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try "#!/bin/sh\\nexit 0\\n".write(to: helper, atomically: true, encoding: .utf8)
+        try "#!/bin/sh\nexit 0\n".write(to: helper, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: helper.path)
 
         XCTAssertEqual(
