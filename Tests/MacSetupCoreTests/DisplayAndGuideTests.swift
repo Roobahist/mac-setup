@@ -2,6 +2,50 @@ import XCTest
 @testable import MacSetupCore
 
 final class DisplayAndGuideTests: XCTestCase {
+    func testDisplayHelperResolutionFollowsInstalledCLISymlinks() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let version = root.appendingPathComponent("versions/installed")
+        let bin = root.appendingPathComponent("bin")
+        try FileManager.default.createDirectory(at: version, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+
+        let actualExecutable = version.appendingPathComponent("mac-setup")
+        try Data().write(to: actualExecutable)
+        let helper = version.appendingPathComponent("mac-setup-display")
+        try "#!/bin/sh\nexit 0\n".write(to: helper, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: helper.path)
+
+        try FileManager.default.createSymbolicLink(
+            at: root.appendingPathComponent("current"), withDestinationURL: version)
+        let invokedExecutable = bin.appendingPathComponent("mac-setup")
+        try FileManager.default.createSymbolicLink(
+            at: invokedExecutable, withDestinationURL: root.appendingPathComponent("current/mac-setup"))
+
+        let resolved = AppResources.helperURL(
+            named: "mac-setup-display",
+            bundleURL: root.appendingPathComponent("Not An App"),
+            executableURL: invokedExecutable)
+        XCTAssertEqual(resolved?.resolvingSymlinksInPath(), helper)
+    }
+
+    func testDisplayHelperResolutionPrefersAppBundleHelper() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let bundle = root.appendingPathComponent("Mac Setup.app")
+        let helper = bundle.appendingPathComponent("Contents/Helpers/mac-setup-display")
+        try FileManager.default.createDirectory(
+            at: helper.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try "#!/bin/sh\nexit 0\n".write(to: helper, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: helper.path)
+
+        XCTAssertEqual(
+            AppResources.helperURL(named: "mac-setup-display",
+                                   bundleURL: bundle, executableURL: nil),
+            helper)
+    }
+
     func testGuidedPermissionActionsRouteToCorrespondingSettings() throws {
         let task = try Catalog.task("karabiner-access")
         let services = GuideStepRouting.destination(task: task, index: 0)
