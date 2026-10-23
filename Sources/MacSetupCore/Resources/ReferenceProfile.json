@@ -19,7 +19,7 @@
     "sketchybar/plugins/icons.sh": "d64d12decd11894522f7843da24e4185f7f279876f40189a11ec238e65331f9e",
     "sketchybar/plugins/space.sh": "5d651ff60c6ed3cf02c9aaf822f7f7932aee10d6af2b664e44dddf22db87a90a",
     "sketchybar/plugins/volume.sh": "6c7152562097f2d748c720103e322bdcf4d747acc277016359f9515bf6c77757",
-    "sketchybar/sketchybarrc": "0370dfaaea3e1de096dfae877c0725322b039a75ce33b4a40a503dec471b6622",
+    "sketchybar/sketchybarrc": "fcd4d22881e43201dbb17d2b43963cfc39f5af2a070244f0b9fc85c6aace6d1e",
     "unsplash/get_wallpaper_accent.py": "1dfea9285010eefb3d1fa2da389f6c67881f30c381d2dc6320a89d2b90b1bc27"
   },
   "karabinerShortcuts": [
@@ -326,5 +326,5 @@
     ]
   },
   "repository": "https://github.com/Roobahist/dot-files.git",
-  "revision": "70d2ef105bcfd881a92812d02220e737ad1a09af"
+  "revision": "596f8e63f6338447ca0c0282332eaf7406c1a8c0"
 }
