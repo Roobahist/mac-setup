@@ -254,3 +254,18 @@ if [ -n "$INITIAL_FOCUSED_WORKSPACE" ]; then
   sketchybar --trigger aerospace_workspace_change \
     FOCUSED="$INITIAL_FOCUSED_WORKSPACE"
 fi
+
+##### Host Display Geometry #####
+
+# The portable bar works without Mac Setup. When Mac Setup supplies its
+# host-specific display helper and adapter, this same source configuration
+# handles display changes and wakes without a second generated event block.
+# Geometry updates must not reassert topmost: SketchyBar rebuilds all bar
+# windows even when that value has not changed.
+if [ -x "$PLUGIN_DIR/mac-setup-display" ] && [ -f "$PLUGIN_DIR/geometry.sh" ]; then
+  sketchybar --add item display_geometry left \
+    --set display_geometry drawing=off updates=on update_freq=0 \
+      script="/bin/bash '$PLUGIN_DIR/geometry.sh'" \
+    --subscribe display_geometry display_change system_woke
+  /bin/bash "$PLUGIN_DIR/geometry.sh"
+fi
