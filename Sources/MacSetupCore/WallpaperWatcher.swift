@@ -90,6 +90,7 @@ public enum WallpaperWatcher {
     public static func monitor(
         once: Bool = false,
         maxPolls: Int? = nil,
+        ignoreSystemFallback: Bool = true,
         observe: () throws -> Observation,
         apply: (URL) throws -> Void,
         wait: (TimeInterval) -> Void,
@@ -107,11 +108,21 @@ public enum WallpaperWatcher {
             pollNumber += 1
             do {
                 let candidate = try observe()
+                // Fullscreen Spaces can report this system alias for minutes even
+                // when the desktop image is unchanged. Debouncing cannot distinguish
+                // it from a real selection. Keep the last applied accent until an
+                // actual wallpaper is available; explicit image overrides opt out.
+                let isFallback = ignoreSystemFallback && candidate.url.standardizedFileURL.path ==
+                    "/System/Library/CoreServices/DefaultDesktop.heic"
                 if candidate.stamp != lastObserved {
-                    report("Detected wallpaper: \(candidate.url.lastPathComponent) (size=\(candidate.stamp.size), modified=\(candidate.stamp.modified.timeIntervalSince1970))")
+                    if isFallback {
+                        report("Ignoring system desktop fallback; preserving the current accent")
+                    } else {
+                        report("Detected wallpaper: \(candidate.url.lastPathComponent) (size=\(candidate.stamp.size), modified=\(candidate.stamp.modified.timeIntervalSince1970))")
+                    }
                     lastObserved = candidate.stamp
                 }
-                if candidate.stamp != lastApplied &&
+                if !isFallback && candidate.stamp != lastApplied &&
                    (candidate.stamp != failedStamp || now() >= retryAt) {
                     if !once {
                         wait(2)
@@ -166,6 +177,7 @@ public enum WallpaperWatcher {
         }
         try monitor(
             once: once,
+            ignoreSystemFallback: image == nil,
             observe: {
                 let wallpaper = try image ?? currentWallpaper()
                 return Observation(url: wallpaper, stamp: try WallpaperStamp.read(wallpaper))
