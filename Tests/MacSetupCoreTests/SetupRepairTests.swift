@@ -39,7 +39,10 @@ final class SetupRepairTests: XCTestCase {
         XCTAssertTrue(calls.contains("front_app_switched system_woke"))
         XCTAssertTrue(calls.contains("topmost=window"))
         XCTAssertTrue(calls.contains("notch_display_height="))
-        XCTAssertTrue(calls.contains("display_change system_woke"))
+        // The bare portable profile has no host display helper or adapter.
+        // Its optional subscription must remain guarded until setup adds them.
+        XCTAssertTrue(bar.contains("--subscribe display_geometry display_change system_woke"))
+        XCTAssertFalse(calls.contains("--subscribe display_geometry"))
     }
 
     func testKarabinerMustHavePermissionsDriverAndProfile() throws {

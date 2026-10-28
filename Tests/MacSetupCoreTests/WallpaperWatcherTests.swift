@@ -117,6 +117,86 @@ final class WallpaperWatcherTests: XCTestCase {
         ))
     }
 
+    func testFullscreenFallbackDoesNotChangeAccentOrForgetWallpaper() throws {
+        let wallpaper = image("A")
+        let fallbackURL = URL(fileURLWithPath: "/System/Library/CoreServices/DefaultDesktop.heic")
+        let fallback = Observation(url: fallbackURL, stamp: .init(
+            path: fallbackURL.path, size: 54, modified: Date(timeIntervalSince1970: 1)))
+        // Replay the logged sequence, including a fallback lasting many polls.
+        let values = [wallpaper, wallpaper] + Array(repeating: fallback, count: 8)
+            + [wallpaper, wallpaper]
+        var index = 0
+        var applied: [URL] = []
+        try WallpaperWatcher.monitor(
+            maxPolls: 10,
+            observe: {
+                defer { index += 1 }
+                let value = values[min(index, values.count - 1)]
+                let resolved = try DesktopWallpaperSource.resolve(reported: value.url, configured: wallpaper.url)
+                return resolved == wallpaper.url ? wallpaper : value
+            },
+            apply: { applied.append($0) },
+            wait: { _ in },
+            report: { _ in }
+        )
+        XCTAssertEqual(applied, [wallpaper.url],
+            "Fullscreen system fallback must preserve the real wallpaper accent")
+    }
+
+    func testStartupFallbackPreservesExistingAccentThenAppliesRealChanges() throws {
+        let fallback = Observation(
+            url: URL(fileURLWithPath: "/System/Library/CoreServices/DefaultDesktop.heic"),
+            stamp: .init(path: "/System/Library/CoreServices/DefaultDesktop.heic",
+                         size: 54, modified: Date(timeIntervalSince1970: 1)))
+        let a = image("A"), b = image("B")
+        let values = [fallback, fallback, a, a, fallback, b, b]
+        var index = 0
+        var applied: [URL] = []
+        try WallpaperWatcher.monitor(
+            maxPolls: 5,
+            observe: {
+                defer { index += 1 }
+                let value = values[index]
+                if value == fallback {
+                    _ = try DesktopWallpaperSource.resolve(reported: value.url, configured: nil)
+                }
+                return value
+            },
+            apply: { applied.append($0) },
+            wait: { _ in },
+            report: { _ in }
+        )
+        XCTAssertEqual(applied, [a.url, b.url])
+    }
+
+    func testExplicitImageOverrideCanUseSystemDefault() throws {
+        let url = URL(fileURLWithPath: "/System/Library/CoreServices/DefaultDesktop.heic")
+        let value = Observation(url: url, stamp: .init(
+            path: url.path, size: 54, modified: Date(timeIntervalSince1970: 1)))
+        var applied: [URL] = []
+        try WallpaperWatcher.monitor(
+            once: true,
+            observe: { value },
+            apply: { applied.append($0) },
+            wait: { _ in XCTFail("One-shot should not wait") },
+            report: { _ in }
+        )
+        XCTAssertEqual(applied, [url])
+    }
+
+    func testUserImageNamedDefaultDesktopStillApplies() throws {
+        let value = image("DefaultDesktop")
+        var applied: [URL] = []
+        try WallpaperWatcher.monitor(
+            once: true,
+            observe: { value },
+            apply: { applied.append($0) },
+            wait: { _ in },
+            report: { _ in }
+        )
+        XCTAssertEqual(applied, [value.url])
+    }
+
     func testEventWaitPumpsRunLoopInsteadOfSleepingThread() {
         var fired = false
         let timer = Timer(timeInterval: 0.025, repeats: false) { _ in fired = true }

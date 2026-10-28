@@ -167,7 +167,7 @@ public enum WallpaperWatcher {
         try monitor(
             once: once,
             observe: {
-                let wallpaper = try image ?? currentWallpaper()
+                let wallpaper = try image ?? DesktopWallpaperSource.current(home: engine.paths.home)
                 return Observation(url: wallpaper, stamp: try WallpaperStamp.read(wallpaper))
             },
             apply: { wallpaper in
@@ -178,14 +178,6 @@ public enum WallpaperWatcher {
             wait: waitForDesktopEvents,
             report: log
         )
-    }
-
-    private static func currentWallpaper() throws -> URL {
-        guard let screen = NSScreen.main,
-              let url = NSWorkspace.shared.desktopImageURL(for: screen) else {
-            throw SetupError("No accessible wallpaper image was returned for the current display.")
-        }
-        return url
     }
 
     public struct WallpaperStamp: Equatable {
