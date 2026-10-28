@@ -131,7 +131,9 @@ final class WallpaperWatcherTests: XCTestCase {
             maxPolls: 10,
             observe: {
                 defer { index += 1 }
-                return values[min(index, values.count - 1)]
+                let value = values[min(index, values.count - 1)]
+                let resolved = try DesktopWallpaperSource.resolve(reported: value.url, configured: wallpaper.url)
+                return resolved == wallpaper.url ? wallpaper : value
             },
             apply: { applied.append($0) },
             wait: { _ in },
@@ -154,7 +156,11 @@ final class WallpaperWatcherTests: XCTestCase {
             maxPolls: 5,
             observe: {
                 defer { index += 1 }
-                return values[index]
+                let value = values[index]
+                if value == fallback {
+                    _ = try DesktopWallpaperSource.resolve(reported: value.url, configured: nil)
+                }
+                return value
             },
             apply: { applied.append($0) },
             wait: { _ in },
@@ -170,7 +176,6 @@ final class WallpaperWatcherTests: XCTestCase {
         var applied: [URL] = []
         try WallpaperWatcher.monitor(
             once: true,
-            ignoreSystemFallback: false,
             observe: { value },
             apply: { applied.append($0) },
             wait: { _ in XCTFail("One-shot should not wait") },
