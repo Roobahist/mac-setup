@@ -115,7 +115,7 @@ public enum FontGlyphCatalog {
         let charset = CTFontCopyCharacterSet(resolved)
         var result: [FontGlyph] = []
         // Only offer characters actually covered by the resolved symbol font.
-        for value: UInt32 in 0xF0000...0xFFFFD where CFCharacterSetIsLongCharacterMember(charset, value) {
+        for value in UInt32(0xF0000)...UInt32(0xFFFFD) where CFCharacterSetIsLongCharacterMember(charset, value) {
             if let scalar = Unicode.Scalar(value),
                let glyph = entry(scalar, font: resolved, face: systemSymbols) {
                 result.append(glyph)
