@@ -9987,6 +9987,51 @@
             ]
           },
           {
+            "description": "Fn + F1/F2 to adjust keyboard backlight",
+            "manipulators": [
+              {
+                "type": "basic",
+                "from": {
+                  "key_code": "f1",
+                  "modifiers": {
+                    "mandatory": [
+                      "fn"
+                    ],
+                    "optional": [
+                      "any"
+                    ]
+                  }
+                },
+                "to": [
+                  {
+                    "key_code": "illumination_decrement",
+                    "repeat": true
+                  }
+                ]
+              },
+              {
+                "type": "basic",
+                "from": {
+                  "key_code": "f2",
+                  "modifiers": {
+                    "mandatory": [
+                      "fn"
+                    ],
+                    "optional": [
+                      "any"
+                    ]
+                  }
+                },
+                "to": [
+                  {
+                    "key_code": "illumination_increment",
+                    "repeat": true
+                  }
+                ]
+              }
+            ]
+          },
+          {
             "description": "Example (disabled): right Command sends 5 then Z",
             "enabled": false,
             "manipulators": [

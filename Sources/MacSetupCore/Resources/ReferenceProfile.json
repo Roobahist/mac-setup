@@ -4,7 +4,7 @@
     "alacritty/alacritty.toml": "47bdf434fc1c3264db3eef866e5ccc782e8dcf59195f881673303d944b8d2a07",
     "alacritty/themes/themes/github_dark.toml": "a5ef98ad83693ba63158e1620890e58a803e2d23ef08f881f22f50bf70dae5d6",
     "atuin/config.toml": "6ee13f0e129d934f0f96e852e417edd59c880e774c2ec81cda7b82bf9bfd8aed",
-    "karabiner/karabiner.json": "d6d05dba5332ea05d4a80d59dc3013f86aba8c9471e4929832c8b23e5d10b82a",
+    "karabiner/karabiner.json": "559530eedf079e7e0aa62f57eba46782fffd9e36a40a445991741c4798a326c4",
     "karabiner/scripts/alacritty/open_new_window.sh": "7ce760fbbf8679781e45a838503b7cb4cdbbef12398f2347bbc7d76c45b6f48d",
     "karabiner/scripts/chrome/open_incognito.sh": "73baa0f5101b0920976c716d0eeed83eaddb612d201bb7979c0bd99aae3f2ef1",
     "karabiner/scripts/chrome/open_profile.sh": "cf576bf41ec27aa272925354a3a2f96558a31080df0aae4cf06358227c948263",
@@ -326,5 +326,5 @@
     ]
   },
   "repository": "https://github.com/Roobahist/dot-files.git",
-  "revision": "596f8e63f6338447ca0c0282332eaf7406c1a8c0"
+  "revision": "888f24f3a02dd9aa78ccc5f094dcf8f3f719590a"
 }
