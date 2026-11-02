@@ -95,21 +95,56 @@ fileprivate struct GlyphSearch {
 /// Reads installed faces, Unicode coverage and glyph names through Core Text.
 /// No curated icon aliases or assumed font versions are used in the picker.
 public enum FontGlyphCatalog {
+
+    // System private-use symbols are supplied by macOS font fallback.
+    public static let systemSymbols = GlyphFont(postScriptName: "SFPro-Regular", family: "SF Pro", style: "Regular")
+
+    public static func isSystemSymbols(_ face: GlyphFont) -> Bool { face == systemSymbols }
+
+    private static func systemSymbolGlyphs() throws -> [FontGlyph] {
+        let base = CTFontCreateWithName("SF Pro" as CFString, 14.5, nil)
+        let sample = "􀑬" as NSString
+        let resolved = CTFontCreateForString(base, sample, CFRange(location: 0, length: sample.length))
+        let units = Array((sample as String).utf16)
+        var sampleGlyphs = [CGGlyph](repeating: 0, count: units.count)
+        guard CTFontGetGlyphsForCharacters(resolved, units, &sampleGlyphs, units.count),
+              sampleGlyphs.contains(where: { $0 != 0 }) else {
+            throw SetupError("macOS did not expose system symbol glyphs.")
+        }
+
+        let charset = CTFontCopyCharacterSet(resolved)
+        var result: [FontGlyph] = []
+        // Only offer characters actually covered by the resolved symbol font.
+        for value: UInt32 in 0xF0000...0xFFFFD where CFCharacterSetIsLongCharacterMember(charset, value) {
+            if let scalar = Unicode.Scalar(value),
+               let glyph = entry(scalar, font: resolved, face: systemSymbols) {
+                result.append(glyph)
+            }
+        }
+        return result
+    }
     public static func matching(_ glyphs: [FontGlyph], query: String, iconsOnly: Bool = false) -> [FontGlyph] {
         let search = GlyphSearch(query)
         return glyphs.filter { (!iconsOnly || $0.isIcon) && $0.matches(search) }
     }
     public static func fonts() -> [GlyphFont] {
         let names = CTFontManagerCopyAvailablePostScriptNames() as! [String]
-        return names.compactMap { name in
+        let installed = names.compactMap { name in
             let font = GlyphFont(CTFontCreateWithName(name as CFString, 14.5, nil))
             return (try? font.validate()) == nil ? nil : font
         }.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+        return [systemSymbols] + installed.filter { $0 != systemSymbols }
     }
 
     public static func metadata(_ selection: FontGlyphSelection) -> FontGlyph? {
-        guard let scalar = selection.symbol.unicodeScalars.first,
-              let font = resolvedFont(selection.font) else { return nil }
+        guard let scalar = selection.symbol.unicodeScalars.first else { return nil }
+        if isSystemSymbols(selection.font) {
+            let base = CTFontCreateWithName("SF Pro" as CFString, 14.5, nil)
+            let string = selection.symbol as NSString
+            let font = CTFontCreateForString(base, string, CFRange(location: 0, length: string.length))
+            return entry(scalar, font: font, face: selection.font)
+        }
+        guard let font = resolvedFont(selection.font) else { return nil }
         return entry(scalar, font: font, face: selection.font)
     }
 
@@ -133,6 +168,7 @@ public enum FontGlyphCatalog {
     }
 
     public static func glyphs(in face: GlyphFont) throws -> [FontGlyph] {
+        if isSystemSymbols(face) { return try systemSymbolGlyphs() }
         guard let font = resolvedFont(face) else { throw SetupError("\(face.title) is not installed. Choose an installed font.") }
         let characters = CTFontCopyCharacterSet(font)
         var result: [FontGlyph] = []
