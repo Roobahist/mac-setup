@@ -37,7 +37,7 @@ private final class GlyphPickerModel: ObservableObject {
 
     var matchingFonts: [GlyphFont] {
         let words = fontSearch.split(whereSeparator: \.isWhitespace)
-        return fonts.filter { font in words.allSatisfy { font.title.localizedCaseInsensitiveContains($0) || font.id.localizedCaseInsensitiveContains($0) || (FontGlyphCatalog.isSystemSymbols(font) && "apple system sf symbols icons".localizedCaseInsensitiveContains($0)) } }
+        return fonts.filter { font in words.allSatisfy { font.title.localizedCaseInsensitiveContains($0) || font.id.localizedCaseInsensitiveContains($0) } }
     }
 
     var matches: [FontGlyph] { FontGlyphCatalog.matching(glyphs, query: search, iconsOnly: iconsOnly) }
@@ -80,7 +80,7 @@ struct GlyphPicker: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Glyph for \(workspaceName)").font(SetupDesign.sheetTitle)
-            Text("Browse installed fonts and Apple system symbols. Search glyph names or code points, or paste a character.").foregroundStyle(.secondary)
+            Text("Browse installed fonts. Search the font's glyph names, Unicode names or code points, or paste a character.").foregroundStyle(.secondary)
             HStack(alignment: .top, spacing: 20) {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Font").fontWeight(.medium)
@@ -88,8 +88,8 @@ struct GlyphPicker: View {
                     List(model.matchingFonts) { font in
                         Button { model.chooseFont(font) } label: {
                             VStack(alignment: .leading, spacing: 3) {
-                                Text(FontGlyphCatalog.isSystemSymbols(font) ? "Apple system symbols" : font.family).lineLimit(1)
-                                Text(FontGlyphCatalog.isSystemSymbols(font) ? "SF Pro · SketchyBar compatible" : font.style).font(.system(size: 12)).foregroundStyle(.secondary)
+                                Text(font.family).lineLimit(1)
+                                Text(font.style).font(.system(size: 12)).foregroundStyle(.secondary)
                             }.frame(maxWidth: .infinity, alignment: .leading).padding(6).contentShape(Rectangle())
                              .background(model.font?.id == font.id ? Color.accentColor.opacity(0.18) : .clear, in: RoundedRectangle(cornerRadius: 6))
                         }.buttonStyle(.plain).accessibilityLabel("Font: \(font.title)")
@@ -110,7 +110,7 @@ struct GlyphPicker: View {
                                 ForEach(model.matches) { glyph in
                                     Button { model.selected = glyph } label: {
                                         VStack(spacing: 6) {
-                                            Text(glyph.symbol).font(FontGlyphCatalog.isSystemSymbols(glyph.selection.font) ? .system(size: 28) : .custom(glyph.selection.font.postScriptName, size: 28)).frame(height: 38)
+                                            Text(glyph.symbol).font(.custom(glyph.selection.font.postScriptName, size: 28)).frame(height: 38)
                                             Text(glyph.name).font(.system(size: 12)).lineLimit(1)
                                             Text(glyph.id).font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
                                         }.frame(maxWidth: .infinity).padding(8).contentShape(Rectangle())
@@ -131,7 +131,7 @@ struct GlyphPicker: View {
             Divider()
             HStack {
                 if let glyph = model.selected {
-                    Text(glyph.symbol).font(FontGlyphCatalog.isSystemSymbols(glyph.selection.font) ? .system(size: 36) : .custom(glyph.selection.font.postScriptName, size: 36)).frame(width: 50)
+                    Text(glyph.symbol).font(.custom(glyph.selection.font.postScriptName, size: 36)).frame(width: 50)
                     VStack(alignment: .leading, spacing: 3) {
                         Text(glyph.name).lineLimit(1)
                         Text("\(glyph.id) · \(glyph.selection.font.title)").font(.system(size: 12)).foregroundStyle(.secondary)
