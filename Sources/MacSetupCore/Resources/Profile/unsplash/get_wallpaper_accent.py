@@ -328,7 +328,9 @@ def select_swatch(
 
     def preview_separation(swatch: Swatch) -> float:
         preview = light_variant(swatch)
-        return regional_separation(preview, bar_backdrops)
+        # A dark source can already read clearly on a light bar. Do not score
+        # it only after a brightening that tune() would never apply to it.
+        return max(source_separation(swatch), regional_separation(preview, bar_backdrops))
 
     def source_separation(swatch: Swatch) -> float:
         source = (swatch.red, swatch.green, swatch.blue)
@@ -385,13 +387,15 @@ def select_swatch(
             * polarity_bonus
         )
 
-    selection_pool = families
-    if bar_lightness >= 0.60:
-        # On a light bar, do not let a tiny dark object win solely through
-        # contrast; require the darker family to occupy a real image region.
-        supported = [family for family in families if family.fraction >= 0.030]
-        if supported:
-            selection_pool = supported
+    # Readability comes before area: a dominant sky must not exclude a narrow
+    # contrasting subject such as road markings. Hue families aggregate nearby
+    # pixels; 0.1% support retains real details while excluding isolated noise.
+    # Fall back to the ordinary pool only when no supported family reads well.
+    readable = [
+        family for family in families
+        if family.fraction >= 0.001 and preview_separation(family) >= 0.46
+    ]
+    selection_pool = readable or families
     selected = max(selection_pool, key=score)
     detail_families = colour_families(detail_swatches or [])
 
@@ -446,17 +450,16 @@ def select_swatch(
     ]
     if refinements:
         if bar_lightness >= 0.60:
-            # Keep the chosen hue, but on a light/translucent bar prefer a
-            # naturally darker member of that same image family.  This avoids
-            # taking a perfectly good orange/brown, selecting its pale edge,
-            # and then trying to manufacture contrast by further editing it.
-            # Real objects can span a modest warm/cool gradient (for example,
-            # sunlit tan rock into burnt-orange shadow), so this darker search
-            # gets a slightly wider hue window than ordinary refinement.
+            # Use an actual, supported pixel from the lit interior of the
+            # subject. Family representatives maximize saturation and can
+            # turn yellow paint into its brown shadow. Once contrast is good
+            # enough, preserve the brightest readable source tone instead of
+            # rewarding progressively darker, more saturated family edges.
             darker_readable = [
-                family for family in detail_families
-                if family.fraction >= 0.001
+                family for family in (detail_swatches or [])
+                if family.fraction >= max(0.00002, selected.fraction * 0.002)
                 and hue_distance(family.hue, selected.hue) <= 16 / 360
+                and family.saturation >= 0.30
                 if oklab(family.red, family.green, family.blue)[0] <= bar_lightness - 0.08
                 # Do not solve contrast by choosing a near-shadow swatch; it
                 # reads as mud at workspace-label size even when its contrast
@@ -467,11 +470,7 @@ def select_swatch(
             if darker_readable:
                 selected = max(
                     darker_readable,
-                    key=lambda family: (
-                        min(family.fraction, 0.03) ** 0.15
-                        * family.saturation
-                        * contrast_ratio(family.luminance, bar_luminance)
-                    ),
+                    key=lambda family: oklab(family.red, family.green, family.blue)[0],
                 )
             else:
                 selected = max(refinements, key=lambda family: family.saturation * family.value)
@@ -496,6 +495,10 @@ def select_swatch(
                     * min(family.fraction, 0.005) ** 0.12
                 ),
             )
+    # Focal detection and detail refinement must uphold the same readability
+    # gate; neither may replace a readable family with a poorly separated edge.
+    if readable and preview_separation(selected) < 0.46:
+        selected = max(readable, key=score)
     return selected
 
 
@@ -506,8 +509,8 @@ def tune(
 ) -> str:
     source = (swatch.red, swatch.green, swatch.blue)
     source_separation = regional_separation(source, bar_backdrops)
-    # A naturally readable source colour is emitted unchanged. Only colours
-    # below the readability target receive the bounded correction above.
+    # Start from a readable source tone when possible. Readability alone is
+    # not enough: the final vividness pass below also boosts muted paint.
     red, green, blue = source if source_separation >= 0.46 else light_variant(swatch)
     _, saturation, _ = colorsys.rgb_to_hsv(red, green, blue)
     bar_lightness = oklab(*bar_rgb)[0]
@@ -555,6 +558,13 @@ def tune(
     if accent_lightness >= 0.73 and saturation < 0.58:
         saturation = min(0.62, max(0.58, saturation + 0.12))
         red, green, blue = colorsys.hsv_to_rgb(hue, saturation, value)
+
+    # The sampled colour identifies the hue, not a ceiling on vividness.
+    # Boost both saturation and brightness: saturating a dim ochre alone still
+    # looks brown. Keep already-vivid colours, and preserve the subject's hue.
+    # Genuinely monochrome images use neutral_accent() instead of this path.
+    hue, saturation, value = colorsys.rgb_to_hsv(red, green, blue)
+    red, green, blue = colorsys.hsv_to_rgb(hue, max(saturation, 0.92), max(value, 0.96))
 
     return "#{:02X}{:02X}{:02X}".format(round(red * 255), round(green * 255), round(blue * 255))
 
